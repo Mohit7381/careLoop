@@ -14,6 +14,14 @@ export type FindingOrigin = 'warehouse' | 'voc';
 export type GapClass = 'logic_flaw' | 'missing_retention_hook' | 'ux_gap';
 export type RunStatus = 'queued' | 'extracting' | 'analyzing' | 'reporting' | 'completed' | 'failed';
 
+/** Rev 3 (2026-09-03) — Code Scout's output shape. Replaces CodeGap, kept
+ *  below for reference only (contracts.py keeps it too, marked SUPERSEDED).
+ *  "business"/"process" carry no code evidence at all — this is generative
+ *  ("what could we build/change here") not diagnostic ("find the one bug"),
+ *  so a Finding can produce zero to several Suggestions. */
+export type SuggestionType = 'tech' | 'business' | 'process';
+export type VerificationStatus = 'exists' | 'absent' | 'partial' | 'not_applicable';
+
 /** Routing category — NOT a funnel-stage id. Exact-match key into the Code
  *  Scout routing table (bintan/consultation, timor/oms, ...). A finding's
  *  funnel-stage name lives in its own hypothesis/evidence text instead. */
@@ -61,7 +69,12 @@ export interface DrilldownStep {
   note?: string | null;
 }
 
-/** Output of Agent 3 (Code Scout). Consumed by Reporter + PRD Generator.
+/** SUPERSEDED (Rev 3) — see Suggestion below. Kept for reference only;
+ *  Code Scout no longer produces this shape as of the explore-and-suggest
+ *  flow, but contracts.py keeps the class (and this mirror does too) for
+ *  git-history / comparison, same as the Python side.
+ *
+ *  Output of Agent 3 (Code Scout). Consumed by Reporter + PRD Generator.
  *  mechanism_found=false is a first-class outcome, not an error — gap_class
  *  is null and no_match_reason is required in that case (contracts.py
  *  enforces this with model_post_init; mirror the same either/or on read). */
@@ -83,6 +96,38 @@ export interface CodeGap {
   search_terms_used?: string[];
   searches_run?: number;
   no_match_reason?: NoMatchReason | null;
+}
+
+/** PROVISIONAL (Rev 3) — Code Scout's actual output as of 2026-09-03,
+ *  replacing CodeGap. A Finding can produce zero to several Suggestions
+ *  (generative: propose improvements/new features, not diagnostic: find the
+ *  one bug). suggestion_type is not limited to code — "business" and
+ *  "process" are equally valid and carry no code evidence.
+ *
+ *  verification_status only applies to suggestion_type="tech" — mirrors
+ *  contracts.py's Suggestion.model_post_init:
+ *    - non-"tech" types must be "not_applicable"
+ *    - "exists"/"partial" require evidence_file
+ *  "absent" means "we checked this file and didn't find it," not "unknown"
+ *  — evidence_file is still set in that case, evidence_line is not. */
+export interface Suggestion {
+  finding_rank: number;
+  origin: FindingOrigin;
+  stage: RoutingStage;
+  service: string;
+  repo: string;
+
+  suggestion_type: SuggestionType;
+  title: string;
+  description: string;
+  rationale: string;
+
+  verification_status: VerificationStatus;
+  evidence_file?: string | null;
+  evidence_line?: number | null;
+
+  search_terms_used?: string[];
+  searches_run?: number;
 }
 
 export interface StageDelta {
@@ -170,7 +215,8 @@ export interface RunState {
   snapshot: Snapshot;
   findings: Finding[];
   drilldown_trail: DrilldownStep[];
-  code_gaps: CodeGap[];
+  code_gaps: CodeGap[]; // SUPERSEDED (Rev 3) — see suggestions
+  suggestions: Suggestion[]; // PROVISIONAL (Rev 3)
   trend_report: TrendReport;
   voc: Voc;
   prd_draft: string | null;

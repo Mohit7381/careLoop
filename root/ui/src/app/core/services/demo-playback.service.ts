@@ -94,7 +94,7 @@ export class DemoPlaybackService {
       case 'analyze':
         return `${run.findings.length} findings, 1 critical`;
       case 'code':
-        return `${run.code_gaps.filter((g) => g.mechanism_found).length} code gap(s) found`;
+        return `${run.suggestions.length} suggestion(s)`;
       case 'prd':
         return 'PRD draft ready';
     }

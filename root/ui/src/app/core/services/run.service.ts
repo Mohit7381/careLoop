@@ -173,7 +173,7 @@ export class RunService {
   }
 
   private failedStatuses(run: RunState): StageStatus[] {
-    const reached = run.code_gaps.length ? 3 : run.findings.length ? 2 : run.snapshot.stages.length ? 1 : 0;
+    const reached = run.suggestions.length ? 3 : run.findings.length ? 2 : run.snapshot.stages.length ? 1 : 0;
     const statuses: StageStatus[] = ['done', 'done', 'done', 'done'];
     for (let i = reached; i < 4; i++) statuses[i] = i === reached ? 'failed' : 'pending';
     return statuses;
@@ -189,8 +189,11 @@ export class RunService {
         return status === 'running'
           ? `drilling down… (query ${run.drilldown_trail.length}/10)`
           : `${run.findings.length} findings, ${run.findings.filter((f) => f.rank === 1).length ? 1 : 0} critical`;
-      case 'code':
-        return `${run.code_gaps.filter((g) => g.mechanism_found).length} code gap(s) found`;
+      case 'code': {
+        const n = run.suggestions.length;
+        const findings = new Set(run.suggestions.map((sg) => sg.finding_rank)).size;
+        return n ? `${n} suggestion(s) across ${findings} finding(s)` : 'no suggestions yet';
+      }
       case 'prd':
         return run.prd_draft ? 'PRD draft ready' : 'PRD draft ready (built from findings)';
     }
