@@ -81,6 +81,14 @@ class Finding(BaseModel):
     confidence: Confidence
     confirm_via: str
 
+    # Real analytics event names bounding this drop-off, from the journey
+    # config and intersected with the events actually present in the
+    # snapshot. Product vocabulary, NOT code identifiers — Code Scout seeds
+    # its search with these instead of words split out of hypothesis prose.
+    # Additive and backward-compatible: empty for VoC findings, which carry
+    # theme_search_terms instead.
+    journey_events: list[str] = Field(default_factory=list)
+
     # warehouse-origin fields
     segments: list[SegmentFilter] = Field(default_factory=list)
     evidence: list[EvidenceItem] = Field(default_factory=list)
@@ -120,6 +128,17 @@ class Remedy(BaseModel):
     evidence_snippet: Optional[str] = None     # cap ~10 lines
     searched_terms: list[str] = Field(default_factory=list)  # audit trail
     iterations: int = 0
+
+    def model_post_init(self, __context: Any) -> None:
+        # A verdict of exists/partial is a claim about specific source. If we
+        # cannot name the file, we have not earned the claim — the honest
+        # states are "absent" (searched, not found) or None (unverified).
+        # Adopted from Harshit's Suggestion model (PR #3); the Remedy Loop's
+        # verify path was hardened to satisfy it rather than the reverse.
+        if self.status in ("exists", "partial") and not self.evidence_file:
+            raise ValueError(
+                f"evidence_file is required when status is {self.status!r}"
+            )
 
 
 class CodeGap(BaseModel):

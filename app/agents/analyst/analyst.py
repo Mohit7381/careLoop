@@ -54,8 +54,13 @@ def run_analyst(state: RunState,
     # ---- evidence gate (accepts every number the model was shown) ----
     shown = collect_numbers(summary) | collect_numbers(gap or {})
     kept, rejected = filter_findings(findings, state.snapshot, trail, shown)
+    gap_events = phase1.events_for_gap(
+        gap, cfg.get("journey_events") or {}, state.snapshot.ct_events)
     for f in kept:
         validate_routing_stage(f.stage, routing_keys)
+        # Warehouse findings all describe the same funnel gap, so they share
+        # its bounding events. VoC findings carry theme_search_terms instead.
+        f.journey_events = list(gap_events)
 
     # ---- phase 3: VoC ----
     voc_findings: list = []
