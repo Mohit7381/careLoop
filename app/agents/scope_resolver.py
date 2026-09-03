@@ -41,6 +41,22 @@ def _label_tokens(label: str) -> set[str]:
     return {w for w in re.split(r"[._\s-]+", label.lower()) if len(w) >= _MIN_TOKEN}
 
 
+def _shares_stem(a: str, b: str) -> bool:
+    """Same prefix rule journey_events_for uses.
+
+    Exact token equality cannot match "payments" against the event token
+    "payment", which is how a perfectly ordinary request — "why are users
+    dropping off during the payments" — resolved to nothing at all. A shared
+    4-character prefix handles plurals and simple inflection without pulling in
+    a stemmer, and is short enough that "page" and "paginate" stay distinct.
+    """
+    return a[:_MIN_TOKEN] == b[:_MIN_TOKEN]
+
+
+def _overlaps(label_tokens: set[str], words: set[str]) -> bool:
+    return any(_shares_stem(lt, w) for lt in label_tokens for w in words)
+
+
 def _review_days(prompt: str) -> Optional[int]:
     """"past 10-15 days" -> 15. A range resolves to its upper bound: the user is
     describing roughly how far back to look, and fetching the wider window and
@@ -80,12 +96,13 @@ def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
     lowered = (prompt or "").lower()
     for dim in available_dimensions:
         hit = None
-        if _label_tokens(dim) & words:
+        if _overlaps(_label_tokens(dim), words):
             hit = dim
         else:
             for alias in aliases.get(dim, []):
                 # multi-word aliases ("out of stock") need a substring test
-                if (" " in alias and alias in lowered) or alias in words:
+                if (" " in alias and alias in lowered) or \
+                   (" " not in alias and any(_shares_stem(alias, w) for w in words)):
                     hit = alias
                     break
         if hit:
@@ -94,12 +111,12 @@ def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
 
     # --- which funnel transition ---
     stages: list[str] = list(journey_cfg.get("stages") or [])
-    hit_stages = [st for st in stages if _label_tokens(st) & words]
+    hit_stages = [st for st in stages if _overlaps(_label_tokens(st), words)]
 
     # Events are the richer vocabulary: "adding items to cart" matches
     # pharmacy.click.add_to_cart_button long before it matches any stage name.
     event_stage = journey_cfg.get("event_stage") or {}
-    hit_events = [e for e in ct_event_names if _label_tokens(e) & words]
+    hit_events = [e for e in ct_event_names if _overlaps(_label_tokens(e), words)]
     for ev in hit_events:
         scope.matched_on.append(f"event:{ev}")
 

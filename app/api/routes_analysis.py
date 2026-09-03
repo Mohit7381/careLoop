@@ -144,6 +144,7 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
         status=run.status,
         failed_stage=run.failed_stage,
         config=run.config,
+        scope=(run.config or {}).get("scope"),
         snapshots=[
             {
                 "stage": s.stage,
