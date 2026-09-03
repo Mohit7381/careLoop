@@ -41,4 +41,6 @@ The one step in the pipeline with no manual precedent — it connects a funnel f
 Computes period-over-period deltas (funnel, feature adoption, VoC theme trends), turns them into a short business narrative, then fills an 8-section PRD template from findings + code gaps + trends + VoC quotes (≤2 quotes, always labeled anecdotal). Stamped `DRAFT — needs human review`. Delivered to the UI and a GChat channel via Garuda; a human clicking Approve is what makes it real.
 
 ### UI
-A Claude Design prototype wired to `GET /v1/analysis/runs/{id}`, showing the pipeline stages lighting up in sequence, the drill-down trail playing live, the code-location "money moment," and the VoC "human moment."
+An Angular app that renders the pipeline stages lighting up in sequence, the drill-down trail playing live, the code-location "money moment," and the VoC "human moment," plus a PRD drawer with a client-side `.docx` export.
+
+**Status: implemented against `contracts.py` v2**, running on a frozen fixture (`run #47`, pharmacy delivery) built from the plan's hand-verified numbers plus Code Scout's real `gap1_consultation.json` / `gap2_pharmacy_checkout.json`. Lives at [`root/ui`](root/ui) — see [`root/ui/README.md`](root/ui/README.md) for how to run it, what's real vs. fixture, and the open contract gaps (`VocQuote.gloss`, live per-stage status, the `/deliver` endpoint).

@@ -1,0 +1,60 @@
+@if (primary(); as gap) {
+  <div class="scout" [class.nomatch]="!gap.mechanism_found">
+    <div class="scout-head">
+      <div class="crumb mono">
+        <b>{{ gap.repo }}</b>
+        <span class="sep">›</span>
+        @if (gap.mechanism_found) {
+          {{ gap.file }}<b>:{{ gap.line }}</b>
+        } @else {
+          searched, no mechanism isolated
+        }
+      </div>
+      <span class="gapclass" [class]="gapClassTone(gap)">{{ gapClassLabel(gap) }}</span>
+    </div>
+
+    @if (!gap.mechanism_found) {
+      <div class="gapstmt nomatch">
+        <div class="lbl">Why no gap was reported</div>
+        <p>{{ noMatchCopy(gap) }}</p>
+      </div>
+    } @else {
+      @if (gap.snippet) {
+        <div class="codewrap"><pre class="code"><span class="code-inner">@for (tok of tokenize(gap.snippet); track $index) {<span [class]="'tok-' + tok.cls">{{ tok.text }}</span>}</span></pre></div>
+      }
+      <div class="gapstmt">
+        <div class="lbl">Gap statement</div>
+        <p>{{ gap.gap_statement }}</p>
+        @if (gap.proposed_change_location) {
+          <div class="ploc">Proposed change location: {{ gap.proposed_change_location }}</div>
+        }
+      </div>
+    }
+
+    <div class="scout-foot">
+      <span>read-only analysis · agent never modifies code</span>
+      @if (gap.search_terms_used?.length) {
+        <span>search terms: {{ gap.search_terms_used!.join(' · ') }}</span>
+      }
+      @if (gap.searches_run != null) {
+        <span>searches run: {{ gap.searches_run }} / ~5</span>
+      }
+      <div class="states">
+        <span>other classes:</span>
+        <span class="gapclass logic">LOGIC FLAW</span>
+        <span class="gapclass ux">UX GAP</span>
+      </div>
+    </div>
+  </div>
+
+  @if (gaps().length > 1) {
+    <div class="more-note">
+      +{{ gaps().length - 1 }} more code gap(s) on this run — see finding #{{ gaps()[1].finding_rank }}
+      ({{ gaps()[1].repo }}). Not the primary demo panel; check the PRD's Open Questions for the caveat on it.
+    </div>
+  }
+} @else {
+  <div class="scout nomatch">
+    <div class="scout-head"><div class="crumb mono">no code_gaps on this run yet</div></div>
+  </div>
+}

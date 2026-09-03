@@ -1,0 +1,30 @@
+<div class="findings">
+  @for (f of sorted(); track f.rank) {
+    <div class="fcard" [class]="tone(f)">
+      <div class="fc-in">
+        <div class="fc-top">
+          <div class="rank num">#{{ f.rank }}</div>
+          <span class="sev" [class]="tone(f) === 'vocc' ? 'voc' : tone(f)">{{ sevLabel(f) }}</span>
+          <span class="route mono">routes to {{ f.stage }}</span>
+          <span class="origin" [class.voc]="f.origin === 'voc'">{{ f.origin === 'voc' ? 'USER-REPORTED' : 'WAREHOUSE' }}</span>
+        </div>
+        <div class="fc-title">{{ f.hypothesis }}</div>
+        <div class="fc-mag mono">{{ magnitude(f) }}</div>
+        <div class="chips">
+          @for (c of chips(f); track c) {
+            <span class="chip">{{ c }}</span>
+          }
+        </div>
+        <div class="fc-bot">
+          <div class="conf" [class.med]="confLabel(f) === 'MEDIUM'">CONFIDENCE {{ confLabel(f) }}</div>
+          <div class="confirm"><b>Confirm via</b>{{ f.confirm_via }}</div>
+        </div>
+      </div>
+    </div>
+
+    @if (f.rank === 1) {
+      <app-drilldown-trail [rows]="drilldownTrail()" [visibleCount]="trailVisibleCount()" />
+      <app-voc-panel [voc]="voc()" [findingRank]="1" />
+    }
+  }
+</div>

@@ -1,0 +1,37 @@
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>CareLoop</h1>
+      <p class="sub">funnel drop-off analysis · runs dashboard</p>
+    </div>
+    <div class="chip-env">data: prod snapshot · 26 Aug – 2 Sep 2026</div>
+    <button class="btn btn-primary" type="button" (click)="newAnalysis()">New analysis</button>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Window</th>
+          <th>Status</th>
+          <th>Top finding</th>
+          <th class="num-col">Findings</th>
+          <th>Triggered</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows; track row.id) {
+          <tr class="row" (click)="open(row.id)">
+            <td class="mono">#{{ row.id }}</td>
+            <td class="mono">{{ row.window }}</td>
+            <td><span class="pill" [class]="row.status">{{ row.status }}</span></td>
+            <td class="finding">{{ row.topFinding }}</td>
+            <td class="num-col mono">{{ row.findingsCount }}</td>
+            <td class="mono ink3">{{ row.timestamp }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

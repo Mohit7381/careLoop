@@ -1,0 +1,28 @@
+<div class="funnel">
+  @for (group of groups(); track group.unit) {
+    <div class="unitlbl">{{ group.unit }}</div>
+    @for (row of group.rows; track row.label) {
+      <div class="frow" [class.terminal]="row.terminal">
+        <div class="flabel">{{ row.label }}</div>
+        <div class="fbar-track">
+          <div class="fbar" [class.g2]="group.unit.includes('orders')" [style.width.%]="barWidth(row, group)"></div>
+        </div>
+        <div class="fval num">
+          {{ row.value.toLocaleString('en-US') }}
+          <small>{{ row.pct.toFixed(1) }}%{{ row.terminal ? ' end-to-end' : '' }}</small>
+        </div>
+      </div>
+    }
+  }
+
+  @for (note of notes(); track note.tag) {
+    <div class="leak">
+      <div class="leak-in">
+        <span class="leak-tag">{{ note.tag }}</span>
+        <span class="leak-txt">{{ note.text }}</span>
+      </div>
+    </div>
+  }
+
+  <div class="foot">Top rows = unique users (app events); bottom = orders (backend) — the two groups are scaled independently</div>
+</div>

@@ -1,0 +1,67 @@
+<div class="scrim" [class.open]="open()" (click)="close()"></div>
+
+<aside class="drawer" [class.open]="open()" aria-label="PRD draft">
+  <div class="dbanner">{{ prd().banner }}</div>
+  <div class="dhead">
+    <div>
+      <h2>{{ prd().title }}</h2>
+      <div class="sub mono">{{ prd().subtitle }}</div>
+    </div>
+    <button class="btn dclose" type="button" (click)="close()">Close</button>
+  </div>
+
+  <div class="dbody">
+    <div class="dsec">
+      <h3>Overview</h3>
+      <p>{{ prd().overview }}</p>
+    </div>
+
+    <div class="dsec">
+      <h3>Goals</h3>
+      <div class="tblwrap">
+        <table>
+          <thead><tr><th>Goal</th><th>Target</th></tr></thead>
+          <tbody>
+            @for (g of prd().goals; track g[0]) {
+              <tr><td class="name">{{ g[0] }}</td><td>{{ g[1] }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="dsec">
+      <h3>Functional requirements</h3>
+      <div class="frlist">
+        @for (f of prd().requirements; track f[0]) {
+          <div class="fr"><span class="id mono">{{ f[0] }}</span><span>{{ f[1] }}</span></div>
+        }
+      </div>
+    </div>
+
+    <div class="dsec">
+      <h3>Open questions</h3>
+      <div class="tblwrap">
+        <table>
+          <thead><tr><th>Question</th><th>Owner</th></tr></thead>
+          <tbody>
+            @for (q of prd().openQuestions; track q[0]) {
+              <tr><td class="name">{{ q[0] }}</td><td class="mono owner">{{ q[1] }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="dfoot">
+    <button class="btn btn-primary" type="button" (click)="approve()">Approve &amp; send to GChat</button>
+    <button class="btn" type="button" (click)="requestChanges()">Request changes</button>
+    <button class="btn" type="button" (click)="downloadDocx()">Download .docx</button>
+    <span class="note mono">delivers to {{ prd().channel }}</span>
+  </div>
+</aside>
+
+@if (toastMessage(); as msg) {
+  <div class="toast show">{{ msg }}</div>
+}

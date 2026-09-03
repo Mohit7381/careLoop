@@ -1,0 +1,11 @@
+<div class="pipe">
+  @for (stage of stages(); track stage.key) {
+    <div class="stage" [class]="stage.status">
+      <div class="st-top">
+        <span class="dot"></span>
+        <span class="st-name">{{ stage.label }}</span>
+      </div>
+      <div class="st-sum">{{ stage.summary }}</div>
+    </div>
+  }
+</div>

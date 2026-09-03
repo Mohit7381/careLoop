@@ -1,0 +1,67 @@
+<div class="topbar-sub">
+  <div class="topbar-sub-in">
+    <div class="chip-env">data: prod snapshot · 26 Aug – 2 Sep 2026</div>
+    <div class="src-chip" [class.live]="source() === 'live'" [class.err]="source() === 'live-unreachable'">
+      source:
+      {{ source() === 'live' ? 'live' : source() === 'live-unreachable' ? 'live unreachable — showing fixture' : 'fixture' }}
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="runhead">
+    <div>
+      <div class="eyebrow"><a routerLink="/runs">Runs</a> / run detail</div>
+      <h1>Run #{{ run().run_id }} · pharmacy delivery order journey</h1>
+    </div>
+    <div class="meta mono">run #{{ run().run_id }} · {{ run().window_start }} → {{ run().window_end }}</div>
+    <div class="status-pill" [class]="statusPill()">{{ statusPill() }}</div>
+  </div>
+
+  <app-pipeline-tracker [stages]="stages()" />
+
+  @if (reveal().funnel) {
+    <section class="reveal">
+      <div class="sec-head">
+        <h2>The funnel</h2>
+        <div class="hint">7 days of production · k≥25 suppression applied at fetch</div>
+      </div>
+      <app-funnel [snapshot]="run().snapshot" [findings]="run().findings" />
+    </section>
+  }
+
+  @if (reveal().findings) {
+    <section class="reveal">
+      <div class="sec-head">
+        <h2>Findings</h2>
+        <div class="hint">ranked by magnitude · origin badged</div>
+      </div>
+      <app-findings-list
+        [findings]="run().findings"
+        [drilldownTrail]="run().drilldown_trail"
+        [trailVisibleCount]="trailVisibleCount()"
+        [voc]="run().voc"
+      />
+    </section>
+  }
+
+  @if (reveal().code) {
+    <section class="reveal">
+      <div class="sec-head">
+        <h2>Code scout</h2>
+        <div class="hint">read-only · names lines, never writes diffs</div>
+      </div>
+      <app-code-scout-panel [gaps]="run().code_gaps" />
+    </section>
+  }
+</div>
+
+<div class="demobar">
+  <span class="lbl">Demo</span>
+  <button class="btn" type="button" (click)="replay()">Replay run <span class="kbd">R</span></button>
+  <button class="btn btn-primary" type="button" [disabled]="!prdReady()" (click)="openPrd()">
+    View PRD draft <span class="kbd">P</span>
+  </button>
+</div>
+
+<app-prd-drawer [run]="run()" [open]="prdOpen()" (closed)="closePrd()" />
