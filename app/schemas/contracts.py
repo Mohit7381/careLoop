@@ -22,6 +22,12 @@ recorded in the TCD, Appendix A ("State-contract alignment", 2026-09-03):
   8. StageDelta gains `maturing` — `delivered` is right-censored (94.5% vs
      69.2% delivered-of-confirmed across the two frozen windows); a naive
      WoW delta reports a phantom "delivery collapse" every week.
+  9. CodeGap gains `remedies[]` — the Remedy Loop (2026-09-03): after the
+     mechanism is located, a proposer LLM turn suggests <=3 code-verifiable
+     remedies; a verifier turn checks each against the source (search) and
+     returns exists | absent | partial, iterating once on partial/ambiguous
+     results. A remedy verified ABSENT is the strongest PRD input there is;
+     one that EXISTS kills a fix-proposal before it embarrasses anyone.
 
 Do not change field names here without syncing with Nakul (Analyst) and
 Harshit (Code Scout) — the pipeline validates against these models at each
@@ -39,6 +45,7 @@ RunStatus = Literal[
     "reporting", "drafting_prd", "completed", "failed",
 ]
 NoMatchReason = Literal["no_results", "budget_exhausted", "ambiguous"]
+RemedyStatus = Literal["exists", "absent", "partial"]
 
 _GAP_CLASSES = {"logic_flaw", "missing_retention_hook", "ux_gap"}
 
@@ -98,6 +105,23 @@ class DrilldownStep(BaseModel):
     note: Optional[str] = None
 
 
+class Remedy(BaseModel):
+    """One candidate improvement, proposed from the located mechanism and
+    then VERIFIED against the source. `signature` is the code-verifiable
+    description the verifier searches for (e.g. "a notification/Garuda call
+    inside the abandon batch path")."""
+
+    proposal: str
+    signature: str
+    search_terms: list[str] = Field(default_factory=list)
+    status: Optional[RemedyStatus] = None      # None = not yet verified
+    evidence_file: Optional[str] = None        # set when exists/partial
+    evidence_line: Optional[int] = None
+    evidence_snippet: Optional[str] = None     # cap ~10 lines
+    searched_terms: list[str] = Field(default_factory=list)  # audit trail
+    iterations: int = 0
+
+
 class CodeGap(BaseModel):
     finding_rank: int
     origin: FindingOrigin
@@ -116,6 +140,9 @@ class CodeGap(BaseModel):
     search_terms_used: list[str] = Field(default_factory=list)
     searches_run: int = 0
     no_match_reason: Optional[NoMatchReason] = None
+
+    # Remedy Loop output (decision #9). Only populated when mechanism_found.
+    remedies: list[Remedy] = Field(default_factory=list)
 
     def model_post_init(self, __context: Any) -> None:
         if self.mechanism_found and self.gap_class is None:
