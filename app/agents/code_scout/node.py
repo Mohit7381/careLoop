@@ -7,13 +7,25 @@ dict of state updates, matching the orchestrator's convention. search_client
 and assessor are injected so tests (and Day 1 vs Day 2) can swap
 FixtureSearchClient/StubCodeGapAssessor for the live implementations without
 touching this file.
+
+Rev 2 (PR #3 review): find_gap() failing for one repo (a GitLab outage, a
+malformed response) used to propagate straight out of this function and
+crash code_scout_node's whole run. Now caught per-repo - a bad repo is
+logged and skipped, and the finding still gets a real (not fabricated)
+mechanism_found=False verdict from whatever repos DID resolve, instead of
+the entire run dying on one flaky call.
 """
 from __future__ import annotations
 
+import logging
+
 from app.agents.code_scout.assessor import CodeGapAssessor
+from app.agents.code_scout.errors import CodeScoutExternalError
 from app.agents.code_scout.routing import repos_for_stage
 from app.agents.code_scout.search_client import SearchClient
 from app.schemas.contracts import CodeGap, Finding, RunState
+
+logger = logging.getLogger(__name__)
 
 SEARCH_BUDGET_PER_FINDING = 5
 
@@ -30,15 +42,30 @@ def code_scout_node(
 def _process_finding(
     finding: Finding, search_client: SearchClient, assessor: CodeGapAssessor, journey: str
 ) -> list[CodeGap]:
-    search_terms = assessor.propose_search_terms(finding)
+    try:
+        search_terms = assessor.propose_search_terms(finding)
+    except CodeScoutExternalError as exc:
+        # Without search terms there's nothing to search with - skip this
+        # finding rather than let one bad assessor call kill the whole run.
+        logger.warning("propose_search_terms failed for finding #%s: %s", finding.rank, exc)
+        return []
+
     total_searches = 0
 
     for repo_info in repos_for_stage(finding.stage, journey):
         if total_searches >= SEARCH_BUDGET_PER_FINDING:
             break
-        location, searches_run = search_client.find_gap(
-            finding.rank, repo_info["repo"], search_terms
-        )
+        try:
+            location, searches_run = search_client.find_gap(
+                finding.rank, repo_info["repo"], search_terms
+            )
+        except CodeScoutExternalError as exc:
+            # A failed repo lookup shouldn't stop other routing-matched
+            # repos (or other findings) from being processed.
+            logger.warning(
+                "find_gap() failed for finding #%s in %r: %s", finding.rank, repo_info["repo"], exc
+            )
+            continue
         total_searches += searches_run
         if location is not None:
             assessment = assessor.assess(finding, location.file, location.snippet)

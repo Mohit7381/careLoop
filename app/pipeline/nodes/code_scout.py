@@ -9,20 +9,36 @@ runs the Remedy Loop (contracts v3 decision #9) on every gap where a
 mechanism was actually found — the LLM+search logic lives in
 app.agents.code_scout.remedy_loop, this just supplies the two callables
 it needs.
+
+Rev 2 (PR #3 review): _live_search_fn's requests call had nothing catching
+it, and search_fn(repo, term) is called from inside remedy_loop.py's
+verify_remedy() loop for every remedy on every gap - one flaky GitLab
+response during verification used to crash code_scout_node's entire run,
+taking down every OTHER gap's (already-located, already-assessed) remedies
+with it. Now wrapped and isolated per-gap in _run_remedies(); a failed gap
+keeps its located mechanism but ships with remedies=[] (the same "not yet
+verified" shape mechanism_found=False gaps already use) instead of losing
+the whole run. Also applies the same docs/test path filter as
+search_client.py's find_gap() (review D1) - _live_search_fn used to take
+the top 3 raw hits unfiltered.
 """
+import logging
 from pathlib import Path
 from typing import Any
 
 import requests
 
 from app.agents.code_scout.assessor import StubCodeGapAssessor
+from app.agents.code_scout.errors import CodeScoutExternalError
 from app.agents.code_scout.node import code_scout_node as _code_scout_node
 from app.agents.code_scout.remedy_loop import run_remedy_loop
 from app.agents.code_scout.routing import repos_for_stage
-from app.agents.code_scout.search_client import FixtureSearchClient, LiveGitlabSearchClient
+from app.agents.code_scout.search_client import FixtureSearchClient, LiveGitlabSearchClient, is_source_path
 from app.config import get_settings
 from app.pipeline.state import GraphState
 from app.schemas.contracts import CodeGap, RunState
+
+logger = logging.getLogger(__name__)
 
 FIXTURES_DIR = Path("fixtures/code_scout")
 
@@ -74,14 +90,24 @@ def _demo_search_fn():
 
 def _live_search_fn(settings) -> Any:
     def search_fn(repo: str, term: str) -> list[dict]:
-        resp = requests.get(
-            f"{settings.gitlab_base_url}/api/v4/projects/{repo.replace('/', '%2F')}/search",
-            headers={"PRIVATE-TOKEN": settings.gitlab_read_token},
-            params={"scope": "blobs", "search": term},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return [{"path": h["path"], "line": h.get("startline"), "snippet": h.get("data", "")[:400]} for h in resp.json()[:3]]
+        try:
+            resp = requests.get(
+                f"{settings.gitlab_base_url}/api/v4/projects/{repo.replace('/', '%2F')}/search",
+                headers={"PRIVATE-TOKEN": settings.gitlab_read_token},
+                params={"scope": "blobs", "search": term},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            hits = resp.json()
+        except requests.RequestException as exc:
+            raise CodeScoutExternalError(f"GitLab search failed for {repo!r}/{term!r}: {exc}") from exc
+        except ValueError as exc:
+            raise CodeScoutExternalError(f"GitLab search returned invalid JSON for {repo!r}/{term!r}: {exc}") from exc
+        source_hits = [h for h in hits if isinstance(h, dict) and "path" in h and is_source_path(h["path"])]
+        return [
+            {"path": h["path"], "line": h.get("startline"), "snippet": h.get("data", "")[:400]}
+            for h in source_hits[:3]
+        ]
 
     return search_fn
 
@@ -124,7 +150,18 @@ def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
         finding = findings_by_rank.get(gap.finding_rank)
         summary = finding.hypothesis if finding else gap.gap_statement
         repos = [r["repo"] for r in repos_for_stage(gap.stage, run_state.journey)]
-        out.append(run_remedy_loop(llm, search_fn, gap, summary, repos))
+        try:
+            out.append(run_remedy_loop(llm, search_fn, gap, summary, repos))
+        except CodeScoutExternalError as exc:
+            # A GitLab outage mid-verification used to crash the entire
+            # code_scout_node run, taking down every other gap's remedies
+            # with it. Ship this gap with its located mechanism intact but
+            # remedies=[] (same "not yet verified" shape mechanism_found=False
+            # gaps already use) rather than lose the whole run over one gap.
+            logger.warning(
+                "run_remedy_loop failed for finding #%s (%s): %s", gap.finding_rank, gap.repo, exc
+            )
+            out.append(gap)
     return out
 
 

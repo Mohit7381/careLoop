@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.agents.code_scout.assessor import StubCodeGapAssessor
+from app.agents.code_scout.errors import CodeScoutExternalError
 from app.agents.code_scout.node import code_scout_node
 from app.agents.code_scout.search_client import FixtureSearchClient
 from app.schemas.contracts import EvidenceItem, Finding, RunState
@@ -131,3 +132,98 @@ def test_existing_code_gaps_are_preserved_not_overwritten(search_client, assesso
 
     result = code_scout_node(state, search_client=search_client, assessor=assessor)
     assert len(result["code_gaps"]) == 1
+
+
+class _FlakySearchClient:
+    """find_gap() raises for one repo, succeeds for another - proves node.py
+    isolates a single external failure to that repo instead of crashing the
+    whole finding (or run) (PR #3 review)."""
+
+    def __init__(self, fail_repo: str, ok_repo: str, ok_location):
+        self._fail_repo = fail_repo
+        self._ok_repo = ok_repo
+        self._ok_location = ok_location
+
+    def find_gap(self, finding_rank, repo, search_terms):
+        if repo == self._fail_repo:
+            raise CodeScoutExternalError("simulated GitLab outage")
+        if repo == self._ok_repo:
+            return self._ok_location, 1
+        return None, 0
+
+
+def test_a_failing_repo_lookup_does_not_abort_other_repos_for_the_same_finding(assessor):
+    """pharmacy_checkout routes to two repos (timor/oms, timor/fulfilment).
+    If find_gap() blows up for the first, the second must still be tried."""
+    from app.agents.code_scout.search_client import GapLocation
+
+    ok_location = GapLocation(file="AbandonOrderService.java", line=10, snippet="...")
+    search_client = _FlakySearchClient(
+        fail_repo="timor/oms", ok_repo="timor/fulfilment", ok_location=ok_location
+    )
+    finding = Finding(
+        rank=9,
+        origin="warehouse",
+        stage="pharmacy_checkout",
+        hypothesis="checkout drop-off",
+        confidence="medium",
+        confirm_via="manual review",
+    )
+    state = _run_state(finding)
+
+    result = code_scout_node(state, search_client=search_client, assessor=assessor)
+    gaps = result["code_gaps"]
+
+    assert len(gaps) == 1
+    assert gaps[0].mechanism_found is True
+    assert gaps[0].repo == "timor/fulfilment"
+
+
+class _AssessorThatFailsForOneFinding:
+    """Wraps the real stub, but simulates an LLM outage for one finding_rank
+    - proves a bad propose_search_terms() call skips only that finding."""
+
+    def __init__(self, failing_rank: int):
+        self._failing_rank = failing_rank
+        self._real = StubCodeGapAssessor()
+
+    def propose_search_terms(self, finding):
+        if finding.rank == self._failing_rank:
+            raise CodeScoutExternalError("simulated Sphere outage")
+        return self._real.propose_search_terms(finding)
+
+    def assess(self, finding, file, snippet):
+        return self._real.assess(finding, file, snippet)
+
+
+def test_a_failing_finding_does_not_abort_processing_of_other_findings(search_client):
+    assessor = _AssessorThatFailsForOneFinding(failing_rank=1)
+
+    finding1 = Finding(
+        rank=1,
+        origin="warehouse",
+        stage="consultation",
+        hypothesis="51,321/wk consultations killed by silent payment-timeout abandon script",
+        confidence="high",
+        confirm_via="check re-engagement CT events post-cancel",
+    )
+    finding2 = Finding(
+        rank=2,
+        origin="voc",
+        stage="pharmacy_checkout",
+        hypothesis="41 reviews mention payment/refund issues during pharmacy checkout",
+        confidence="medium",
+        confirm_via="cross-check against warehouse abandonment reasons",
+        theme="payment_refund",
+        theme_search_terms=["abandon"],
+        review_count=41,
+    )
+    state = _run_state(finding1, finding2)
+
+    result = code_scout_node(state, search_client=search_client, assessor=assessor)
+    gaps = result["code_gaps"]
+
+    # finding #1's LLM call failed -> zero gaps for it, but finding #2 still
+    # resolved its real gap - the failure didn't propagate.
+    assert gaps
+    assert all(g.finding_rank == 2 for g in gaps)
