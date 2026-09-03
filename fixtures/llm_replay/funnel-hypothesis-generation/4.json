@@ -2,62 +2,67 @@
  "done": true,
  "findings": [
   {
-   "stage": "created -> confirmed (top gap)",
+   "stage": "created\u2192confirmed",
    "evidence": [
-    "The top gap (created -> confirmed) is large: lost 417,569 (share_of_prev 0.6452)",
-    "user_total: 199,417",
-    "artifact_total: 42,107",
-    "leaving ~176,045 losses unallocated"
+    "top_gap lost: 417569",
+    "phase1 funnel: created count: 647191, confirmed count: 229622, conversion_from_previous: 0.3548",
+    "consultation_required result_rows: rx_gated entered: 255293 converted: 76641 rate: 0.3002",
+    "consultation_required result_rows: non_rx entered: 391898 converted: 152981 rate: 0.3904"
    ],
    "segments": [
-    "all orders"
-   ],
-   "confidence": "medium",
-   "hypothesis": "A sizable portion of the created -> confirmed gap is not captured by existing reason clusters (about ~176,045 orders remain unallocated), so measurement/labeling gaps (unrecorded abandon reasons or missing instrumentation) are a major contributor to our inability to explain the gap. If this is true, improving capture of abandonment reason data will re-allocate much of the 417,569 loss into labeled buckets.",
-   "confirm_via": "For a randomized sample of users, enable mandatory lightweight exit reason capture (or server-side event logging that records final page/action + context) and measure how many of the ~176,045 previously-unallocated losses are reclassified into explicit reasons versus remaining unknown. Compare conversion and reason distribution between the instrumented and control groups."
-  },
-  {
-   "stage": "created -> confirmed (user-exit patterns)",
-   "evidence": [
-    "user_total: 199,417",
-    "user abandon the cart: 111,993",
-    "user clicked back: 83,517",
-    "address changed: 35,111",
-    "add items: 6,996",
-    "items unavailable: 3,907",
-    "artifact_total: 42,107"
-   ],
-   "segments": [
-    "user abandon the cart",
-    "user clicked back",
-    "address changed",
-    "add items",
-    "items unavailable"
-   ],
-   "confidence": "medium",
-   "hypothesis": "Among the labeled reasons, most of the user-side loss is concentrated in 'user abandon the cart' (111,993) and 'user clicked back' (83,517), suggesting UX, perceived price/value, or interruption flows are correlated with abandonment. If true, targeted UX interventions or pricing messaging should reduce these labeled abandon counts.",
-   "confirm_via": "Run an A/B test where users in the treatment get targeted interventions when they show abandonment signals: e.g., context-sensitive cart messaging, persistent price/benefit callouts, or an exit intent prompt for those who 'click back'. Randomize at user-session level and measure reductions in 'user abandon the cart' and overall conversion uplift vs control."
-  },
-  {
-   "stage": "created -> confirmed (price & consultation signal)",
-   "evidence": [
-    "price_band: 75k_200k: 90,851",
-    "price_band: gte_200k: 66,220",
-    "price_band: 25k_75k: 62,875",
-    "price_band: lt_25k: 24,769",
-    "consultation_required: rx_gated entered: 255,293 converted: 76,641 rate: 0.3002",
-    "consultation_required: non_rx entered: 391,898 converted: 152,981 rate: 0.3904",
-    "funnel: confirmed count: 229,622 conversion_from_previous: 0.3548"
-   ],
-   "segments": [
-    "75k_200k",
-    "gte_200k",
     "rx_gated",
     "non_rx"
    ],
+   "confidence": "high",
+   "hypothesis": "The bulk of the created\u2192confirmed gap is concentrated in the rx_gated (consultation_required) segment: rx_gated has a lower confirmation rate (0.3002) versus non_rx (0.3904) and the consultation_required partition (entered total 255293 + 391898 = 647191) exactly spans the created population, so the rx_gated shortfall numerically accounts for most of the lost 417569 orders.",
+   "confirm_via": "Run an A/B test for rx_gated orders: randomly assign rx_gated orders to a streamlined consultation flow (faster/clearer instructions, pre-filled info, prioritized reviewer) vs control; measure created\u2192confirmed conversion by arm. A significant lift in the treatment arm would confirm the causal role of the consultation flow."
+  },
+  {
+   "stage": "created\u2192confirmed (inventory-related subsegment)",
+   "evidence": [
+    "stock_status result_rows: has_unfulfilled_item entered: 19728 converted: 1831 rate: 0.0928",
+    "stock_status result_rows: has_partially_fulfilled_item entered: 2191 converted: 16 rate: 0.0073",
+    "phase1 reason_clusters artifact_total: 42107 artifact_share: 0.1743, user_reasons: items unavailable: 3907"
+   ],
+   "segments": [
+    "has_unfulfilled_item",
+    "has_partially_fulfilled_item"
+   ],
    "confidence": "medium",
-   "hypothesis": "Loss from created -> confirmed is concentrated in higher price bands (75k_200k and gte_200k total 157,071 entered) and the rx_gated (consultation-required) segment converts materially worse (rate 0.3002) than non_rx (rate 0.3904), so price sensitivity and consultation friction are correlated with the top gap.",
-   "confirm_via": "Run two randomized experiments: (A) For a sample of high price-band users (e.g., 75k_200k and gte_200k), offer a targeted incentive (discount or financing messaging) and measure incremental confirmed conversion vs control; (B) For rx_gated orders, randomize a streamlined/expedited consultation flow (faster approvals, clearer status messaging) and measure whether rx_gated conversion approaches non_rx levels. Improvements in confirmed conversion in these treatments would support causality."
+   "hypothesis": "Orders containing unfulfilled or partially fulfilled items have dramatically lower confirmation rates (~0.0928 and ~0.0073) and likely contribute to cancellations, consistent with artifact-level reason counts (artifact_total: 42107 and items unavailable: 3907).",
+   "confirm_via": "Perform an experiment that reserves inventory or hides out-of-stock items for a random subset of sessions (or proactively notifies customers and offers substitutes) and compare created\u2192confirmed conversion against control for orders that would otherwise have unfulfilled/partially fulfilled items."
+  },
+  {
+   "stage": "created\u2192confirmed (cart size effect)",
+   "evidence": [
+    "item_count result_rows: 1_item entered: 315934 converted: 139707 rate: 0.4422",
+    "item_count result_rows: 2_items entered: 138446 converted: 41433 rate: 0.2993",
+    "item_count result_rows: 3_to_5_items entered: 176399 converted: 43996 rate: 0.2494"
+   ],
+   "segments": [
+    "1_item",
+    "2_items",
+    "3_to_5_items"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Larger carts (2+ items, especially 3\u20135 items) have materially lower confirmation rates than single-item carts (0.2993 and 0.2494 vs 0.4422), so cart size correlates with the created\u2192confirmed drop.",
+   "confirm_via": "Test targeted interventions for multi-item carts (e.g., clearer fulfillment expectations, bundled inventory checks, pre-check of item availability) versus control and measure conversion lift for 2+ item cohorts."
+  },
+  {
+   "stage": "created\u2192confirmed (attribution ambiguity)",
+   "evidence": [
+    "consultation_required result_rows: rx_gated entered: 255293 converted: 76641 rate: 0.3002",
+    "stock_status result_rows: has_unfulfilled_item entered: 19728 converted: 1831 rate: 0.0928",
+    "item_count result_rows: 3_to_5_items entered: 176399 converted: 43996 rate: 0.2494"
+   ],
+   "segments": [
+    "rx_gated",
+    "has_unfulfilled_item",
+    "3_to_5_items"
+   ],
+   "confidence": "low",
+   "hypothesis": "The data show multiple correlated low-rate segments (rx_gated, unfulfilled items, larger carts), but the current cuts cannot distinguish whether, for example, multi-item carts are low because they overlap with rx_gated or stock-problem orders, or whether each factor independently lowers confirmation.",
+   "confirm_via": "Cross-cutting measurement (e.g., randomized experiments or a factorial A/B design) is required to disentangle effects: either 1) run an experiment randomizing a remediation for rx_gated independently of an inventory remediation and measure interactions, or 2) request a cross-tabbed aggregation (item_count \u00d7 consultation_required and item_count \u00d7 stock_status) to observationally partition overlaps before running interventions. Without such cross-cuts or randomized tests we cannot attribute responsibility among these correlated segments."
   }
  ],
  "next_question": null

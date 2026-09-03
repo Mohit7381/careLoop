@@ -25,8 +25,20 @@ def test_golden_run(cohort_cuts, reviews):
             "evidence": ["255293", "76641", "391898", "152981"],
             "confirm_via": "A/B a prescription-cart resume flow; watch rx confirm rate"}]},
     ])
-    out = run_analyst(state, llm=lambda ctx: next(llm_script),
-                      cohort_cuts=cohort_cuts, reviews=reviews)
+    # The exploration floor keeps asking after this script says done, so hold
+    # the last response rather than raising StopIteration — the run must still
+    # visit every rate-bearing cut before it is allowed to conclude.
+    held = {}
+
+    def llm(ctx):
+        nonlocal held
+        try:
+            held = next(llm_script)
+        except StopIteration:
+            pass
+        return held
+
+    out = run_analyst(state, llm=llm, cohort_cuts=cohort_cuts, reviews=reviews)
 
     # warehouse finding survived the evidence gate
     wh = [f for f in out.findings if f.origin == "warehouse"]

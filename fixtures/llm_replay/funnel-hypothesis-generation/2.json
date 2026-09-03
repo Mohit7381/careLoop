@@ -1,8 +1,43 @@
 {
  "done": false,
- "findings": null,
+ "findings": [
+  {
+   "stage": "created->confirmed (top gap)",
+   "evidence": [
+    "top_gap.lost: 417569",
+    "top_gap.share_of_prev: 0.6452",
+    "phase1.funnel stage=created count=647191",
+    "phase1.funnel stage=confirmed count=229622",
+    "phase1.funnel stage=confirmed conversion_from_previous=0.3548",
+    "phase1.reason_clusters user_total: 199417",
+    "phase1.reason_clusters artifact_total: 42107",
+    "phase1.reason_clusters artifact_share: 0.1743"
+   ],
+   "segments": [
+    "orders without recorded user_reasons or artifact_reasons"
+   ],
+   "confidence": "medium",
+   "hypothesis": "A large portion of the top gap (lost: 417569) is unexplained by the recorded reason clusters (user_total: 199417 + artifact_total: 42107). The unexplained remainder appears concentrated in orders that did not surface a close-loop reason in the current artifacts/reason buckets; likely contributors include inventory/stock signals, item-count or price friction, or other upstream UX/validation delays.",
+   "confirm_via": "Drill a rate-bearing dimension that plausibly maps to missing signals (stock_status or item_count). If stock_status shows much lower confirmation rates for out-of-stock/backordered items, that would partition this unexplained loss. Alternatively run an experiment that surfaces inventory status earlier and measure confirmed rate lift."
+  },
+  {
+   "stage": "created->confirmed (consultation split)",
+   "evidence": [
+    "consultation_required rx_gated entered: 255293 converted: 76641 rate: 0.3002",
+    "consultation_required non_rx entered: 391898 converted: 152981 rate: 0.3904",
+    "phase1.funnel stage=confirmed count=229622"
+   ],
+   "segments": [
+    "rx_gated",
+    "non_rx"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Orders flagged rx_gated have materially lower confirmation (rate: 0.3002) than non_rx (rate: 0.3904). That ~9 percentage-point gap means rx_gated contributes disproportionately to the top gap and could explain a non-trivial share of the 417569 lost orders.",
+   "confirm_via": "Run a targeted experiment to reduce rx-gated friction (e.g., pre-validate Rx or asynchronous clinic confirmation) and measure confirmed-rate change for rx_gated; or drill further (stock_status / item_count) within rx_gated vs non_rx to see if other covariates explain the gap."
+  }
+ ],
  "next_question": {
-  "dimension": "pd_category",
-  "rationale": "We still have a large unexplained chunk of the top gap: total lost from created->confirmed is 417,569 (share_of_prev 0.6452) but known reason clusters only sum to 199,417 (user_total) + 42,107 (artifact_total) = 241,524 \u2014 leaving ~176,045 unallocated. The price_band cut shows loss concentrated in higher bands (75k_200k: 90,851; gte_200k: 66,220; 25k_75k: 62,875; lt_25k: 24,769), suggesting price / category may matter. Cut by pd_category next to see whether the remaining/unallocated loss (and the bulk of the price-band losses) concentrates in specific product categories (which would point toward category-specific issues like pricing, stock, or messaging) versus being spread across categories (which would point more to UX/flow or funnel-level problems). This will tell us whether to pursue category-targeted fixes (e.g., pricing/inventory experiments) or platform-level experiments."
+  "dimension": "stock_status",
+  "rationale": "stock_status is a rate-bearing dimension not yet tried (listed in rate_bearing_not_yet_tried) and plausibly maps to the unexplained loss: 'items unavailable' appears in user_reasons (3907) and artifact-level issues exist (artifact_total: 42107). Drilling stock_status can partition confirmation rates for in-stock vs backordered/out-of-stock items and either attribute unexplained losses to inventory problems or rule that out before spending budget on other cuts."
  }
 }
