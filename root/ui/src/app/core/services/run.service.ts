@@ -3,8 +3,9 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { EMPTY, Subscription, firstValueFrom, timer } from 'rxjs';
 import { catchError, switchMap, tap, timeout } from 'rxjs/operators';
 
-import { RUN_47 } from '../fixtures/run-47.fixture';
+import { RUN_47_RESPONSE } from '../fixtures/run-47.fixture';
 import { RunDetailResponse, RunState, RunStatus, SnapshotRow } from '../models/run-state';
+import { environment } from '../../../environments/environment';
 
 export type StageKey = 'fetch' | 'analyze' | 'code' | 'prd';
 export type StageStatus = 'pending' | 'running' | 'done' | 'failed';
@@ -59,9 +60,10 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const DELIVER_TIMEOUT_MS = 8_000;
 const MAX_RETRIES = 2;
 const API_BASE = '/v1/analysis/runs';
-// POST routes require Bearer auth (.env.example -> APP_TOKEN). Dev-only value;
-// a real deployment injects this at build/serve time, never hardcoded.
-const APP_TOKEN = 'dev-local-token';
+// POST routes require Bearer auth (backend .env -> APP_TOKEN). Read from the
+// Angular environment so there is no path where a real token is committed
+// alongside the source.
+const APP_TOKEN = environment.appToken;
 
 /**
  * Runtime shape check on the polled payload.
@@ -148,7 +150,7 @@ function describeError(err: unknown): string {
 export class RunService {
   private readonly http = inject(HttpClient);
 
-  private readonly _run = signal<RunState>(RUN_47);
+  private readonly _run = signal<RunState>(toRunState(RUN_47_RESPONSE));
   private readonly _source = signal<Source>('fixture');
   private readonly _liveError = signal<string | null>(null);
   private readonly _polling = signal(false);
@@ -208,7 +210,7 @@ export class RunService {
     this.stopPolling();
     this._source.set('fixture');
     this._liveError.set(null);
-    this._run.set(RUN_47);
+    this._run.set(toRunState(RUN_47_RESPONSE));
     this._demoOverride.set(null);
     this._revealOverride.set(null);
     this._trailProgress.set(null);
@@ -319,7 +321,7 @@ export class RunService {
   private failLive(reason: string): void {
     this._source.set('live-failed');
     this._liveError.set(reason);
-    this._run.set(RUN_47);
+    this._run.set(toRunState(RUN_47_RESPONSE));
     this.stopPolling();
   }
 

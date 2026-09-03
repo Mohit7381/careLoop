@@ -1,6 +1,6 @@
 /**
- * TypeScript mirror of app/schemas/contracts.py ("CareLoop — Shared State
- * Contract v2"). Field names and shapes here MUST match that file exactly —
+ * TypeScript mirror of `app/schemas/contracts.py` on `main` (contracts v3).
+ * Field names and shapes here MUST match that file exactly —
  * it is the single source of truth shared across all four agents. Do not
  * rename anything here without syncing with Nakul/Harshit, same as the
  * Python side.
@@ -19,21 +19,22 @@ export type RunStatus =
 /** Was a float in v2; the backend now sends a literal. */
 export type Confidence = 'high' | 'medium' | 'low';
 
-/** Remedy Loop verdict (rev 2.1). Same three values the demo's beat 6 shows. */
+/** Remedy Loop verdict. `null` on the wire means NOT YET VERIFIED, which is
+ *  a different claim from "absent" — see Remedy.status. */
 export type RemedyStatus = 'exists' | 'absent' | 'partial';
-
-/** Rev 3 (2026-09-03) — Code Scout's output shape. Replaces CodeGap, kept
- *  below for reference only (contracts.py keeps it too, marked SUPERSEDED).
- *  "business"/"process" carry no code evidence at all — this is generative
- *  ("what could we build/change here") not diagnostic ("find the one bug"),
- *  so a Finding can produce zero to several Suggestions. */
-export type SuggestionType = 'tech' | 'business' | 'process';
-export type VerificationStatus = 'exists' | 'absent' | 'partial' | 'not_applicable';
 
 /** Routing category — NOT a funnel-stage id. Exact-match key into the Code
  *  Scout routing table (bintan/consultation, timor/oms, ...). A finding's
  *  funnel-stage name lives in its own hypothesis/evidence text instead. */
-export type RoutingStage = 'consultation' | 'pharmacy_checkout' | 'payments' | 're_engagement';
+/** Routing category — NOT a funnel-stage id. These are the keys under
+ *  `routing:` in `config/journeys/pd_checkout.yaml`, and the VoC lexicon in
+ *  that same file routes themes to `delivery` and `stock` too, so a data
+ *  refresh can produce them. Kept as a widened string so an unknown category
+ *  from a future journey renders rather than failing to type-check. */
+export type RoutingStage =
+  | 'consultation' | 'pharmacy_checkout' | 'payments'
+  | 'delivery' | 'stock' | 're_engagement'
+  | (string & {});
 export type NoMatchReason = 'no_results' | 'budget_exhausted' | 'ambiguous';
 
 export interface SegmentFilter {
@@ -77,12 +78,7 @@ export interface DrilldownStep {
   note?: string | null;
 }
 
-/** SUPERSEDED (Rev 3) — see Suggestion below. Kept for reference only;
- *  Code Scout no longer produces this shape as of the explore-and-suggest
- *  flow, but contracts.py keeps the class (and this mirror does too) for
- *  git-history / comparison, same as the Python side.
- *
- *  Output of Agent 3 (Code Scout). Consumed by Reporter + PRD Generator.
+/** Output of Agent 3 (Code Scout). Consumed by Reporter + PRD Generator.
  *  mechanism_found=false is a first-class outcome, not an error — gap_class
  *  is null and no_match_reason is required in that case (contracts.py
  *  enforces this with model_post_init; mirror the same either/or on read). */
@@ -108,46 +104,21 @@ export interface CodeGap {
   remedies?: Remedy[];
 }
 
-/** PROVISIONAL (Rev 3) — Code Scout's actual output as of 2026-09-03,
- *  replacing CodeGap. A Finding can produce zero to several Suggestions
- *  (generative: propose improvements/new features, not diagnostic: find the
- *  one bug). suggestion_type is not limited to code — "business" and
- *  "process" are equally valid and carry no code evidence.
- *
- *  verification_status only applies to suggestion_type="tech" — mirrors
- *  contracts.py's Suggestion.model_post_init:
- *    - non-"tech" types must be "not_applicable"
- *    - "exists"/"partial" require evidence_file
- *  "absent" means "we checked this file and didn't find it," not "unknown"
- *  — evidence_file is still set in that case, evidence_line is not. */
-export interface Suggestion {
-  finding_rank: number;
-  origin: FindingOrigin;
-  stage: RoutingStage;
-  service: string;
-  repo: string;
-
-  suggestion_type: SuggestionType;
-  title: string;
-  description: string;
-  rationale: string;
-
-  verification_status: VerificationStatus;
-  evidence_file?: string | null;
-  evidence_line?: number | null;
-
-  search_terms_used?: string[];
-  searches_run?: number;
-}
-
 /** One proposed, code-verified fix inside a CodeGap (Remedy Loop, rev 2.1).
  *  `signature` is what the loop searched for to decide `status`. */
 export interface Remedy {
   proposal: string;
   signature: string;
-  status: RemedyStatus;
+  /** null/undefined = the loop did not get to verify this one. Distinct from
+   *  'absent' ("we searched and it is not there") — rendering them alike was
+   *  PR #5 B3. */
+  status?: RemedyStatus | null;
   evidence_file?: string | null;
   evidence_line?: number | null;
+  evidence_snippet?: string | null;
+  search_terms?: string[];
+  /** Audit trail of what was actually searched — used to say how many
+   *  searches backed an 'absent'. */
   searched_terms?: string[];
   iterations?: number;
 }

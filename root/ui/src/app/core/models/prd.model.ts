@@ -1,4 +1,4 @@
-import { CodeGap, Finding, RunState } from './run-state';
+import { CodeGap, Finding, Remedy, RunState } from './run-state';
 
 /**
  * The backend now returns the generated PRD as markdown (`prd_markdown` on
@@ -64,17 +64,27 @@ function buildOverview(top: Finding | undefined, gap: CodeGap | undefined): stri
 }
 
 /** FR rows come from the Remedy Loop's own proposals, so the PRD mirrors what
- *  Code Scout actually verified rather than a hand-written list. Confirmed-
- *  missing remedies lead; partial ones follow, flagged as needing a look. */
+ *  Code Scout actually searched for rather than a hand-written list.
+ *
+ *  Each row states the strength of its own evidence — an unverified remedy is
+ *  a candidate to check, not a confirmed gap to build (PR #5, B3), and a
+ *  not-found one says how many searches back that claim (B2). */
 function buildRequirements(run: RunState): [string, string][] {
   const rows: [string, string][] = [];
   let n = 1;
-  const rank = (s: string) => (s === 'absent' ? 0 : s === 'partial' ? 1 : 2);
+  const order = (s: Remedy['status']) => (s === 'absent' ? 0 : s === 'partial' ? 1 : s === 'exists' ? 3 : 2);
 
   for (const gap of run.code_gaps.filter((g) => g.mechanism_found)) {
-    for (const r of [...(gap.remedies ?? [])].sort((a, b) => rank(a.status) - rank(b.status))) {
+    for (const r of [...(gap.remedies ?? [])].sort((a, b) => order(a.status) - order(b.status))) {
+      const searches = r.searched_terms?.length ?? 0;
       const prefix =
-        r.status === 'absent' ? '' : r.status === 'partial' ? 'Needs a closer look — partial match. ' : 'Already present — verify before building. ';
+        r.status === 'absent'
+          ? `Not found in ${gap.repo} across ${searches} search${searches === 1 ? '' : 'es'}. `
+          : r.status === 'partial'
+            ? 'Partial match — related code exists, confirm before building. '
+            : r.status === 'exists'
+              ? 'Already present — verify before building. '
+              : 'Not verified by the loop — check this one first. ';
       rows.push([`FR-${n++}`, `${prefix}${r.proposal}`]);
     }
   }

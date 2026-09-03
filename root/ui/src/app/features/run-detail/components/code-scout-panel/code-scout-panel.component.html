@@ -38,10 +38,10 @@
           @for (r of entry.gap.remedies!; track r.proposal) {
             <div class="remedy">
               <div class="remedy-head">
-                <span class="verify" [class]="remedyTone(r.status)">{{ r.status }}</span>
+                <span class="verify" [class]="remedyTone(r.status)">{{ remedyLabel(r.status) }}</span>
                 <span class="remedy-title">{{ r.proposal }}</span>
               </div>
-              <p class="remedy-copy">{{ remedyCopy(r) }}</p>
+              <p class="remedy-copy">{{ remedyCopy(r, entry.gap.repo) }}</p>
               <div class="remedy-foot mono">
                 <span>looked for: {{ r.signature }}</span>
                 @if (r.evidence_file) {

@@ -1,6 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 
-import { CodeGap, Remedy, RemedyStatus } from '../../../../core/models/run-state';
+import { CodeGap, Remedy } from '../../../../core/models/run-state';
 
 const NO_MATCH_COPY: Record<string, string> = {
   no_results: 'No candidate mechanism matched the search terms.',
@@ -8,12 +8,29 @@ const NO_MATCH_COPY: Record<string, string> = {
   ambiguous: 'Several candidate mechanisms matched; none conclusive.',
 };
 
-/** What each Remedy Loop verdict actually means, in the reviewer's terms. */
-const REMEDY_COPY: Record<RemedyStatus, string> = {
-  exists: 'Already built — found wired into this mechanism.',
-  absent: 'Confirmed missing — checked this file, not there.',
-  partial: 'Half-built — present in the codebase, not wired into this path.',
-};
+/**
+ * What each verdict may claim, and no more.
+ *
+ * `absent` deliberately does NOT say "confirmed missing" or "checked this
+ * file" (PR #5, B2). The Remedy Loop searches the WHOLE REPO via
+ * search_fn(repo, term) — there is no within-file check on main — so the
+ * honest claim is "not found across N searches". A null status means the
+ * loop never got to it, which is a different statement again (B3).
+ */
+function remedyCopy(r: Remedy, repo: string): string {
+  const n = r.searched_terms?.length ?? 0;
+  const searches = n ? `${n} search${n === 1 ? '' : 'es'}` : 'no searches recorded';
+  switch (r.status) {
+    case 'exists':
+      return `Found in ${repo} — already present.`;
+    case 'partial':
+      return `Partial match in ${repo} — related code exists, not this exactly.`;
+    case 'absent':
+      return `Not found — ${searches} across ${repo}.`;
+    default:
+      return 'Not verified — the loop did not check this one.';
+  }
+}
 
 interface CodeToken {
   text: string;
@@ -75,14 +92,21 @@ export class CodeScoutPanelComponent {
     return (gap.no_match_reason && NO_MATCH_COPY[gap.no_match_reason]) || 'Not determined.';
   }
 
-  remedyCopy(r: Remedy): string {
-    return REMEDY_COPY[r.status] ?? '';
+  remedyCopy(r: Remedy, repo: string): string {
+    return remedyCopy(r, repo);
   }
 
-  remedyTone(status: RemedyStatus): string {
+  /** null status gets its own neutral tone — rendering "not verified" in the
+   *  same red as "absent" was B3. */
+  remedyTone(status: Remedy['status']): string {
     if (status === 'exists') return 'good';
     if (status === 'partial') return 'warn';
-    return 'gap';
+    if (status === 'absent') return 'gap';
+    return 'unverified';
+  }
+
+  remedyLabel(status: Remedy['status']): string {
+    return status ?? 'unverified';
   }
 
   tokenize(snippet: string | null | undefined): CodeToken[] {
