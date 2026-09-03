@@ -1,0 +1,113 @@
+{
+ "stages": [
+  {
+   "stage": "created",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 647191,
+   "converted": 229622
+  },
+  {
+   "stage": "confirmed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 229622,
+   "converted": 158976
+  },
+  {
+   "stage": "delivered",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 158976,
+   "converted": 158976
+  }
+ ],
+ "previous_stages": [
+  {
+   "stage": "created",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 614252,
+   "converted": 213273
+  },
+  {
+   "stage": "confirmed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 213273,
+   "converted": 201617
+  },
+  {
+   "stage": "delivered",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 201617,
+   "converted": 201617
+  }
+ ],
+ "segments": [
+  "all"
+ ],
+ "reasons": [
+  {
+   "cancellation_reason": "User abandon the cart",
+   "count": 79515
+  },
+  {
+   "cancellation_reason": "User abandon the cart",
+   "cancellation_reason_group": "rx_gated",
+   "count": 32478
+  },
+  {
+   "cancellation_reason": "USER CLICKED BACK",
+   "count": 61393
+  },
+  {
+   "cancellation_reason": "USER CLICKED BACK",
+   "cancellation_reason_group": "rx_gated",
+   "count": 22124
+  },
+  {
+   "cancellation_reason": "ADDRESS CHANGED",
+   "count": 33898
+  },
+  {
+   "cancellation_reason": "Address changed",
+   "count": 1213
+  },
+  {
+   "cancellation_reason": "ADD ITEMS",
+   "count": 6996
+  },
+  {
+   "cancellation_reason": "Items unavailable",
+   "count": 2474
+  },
+  {
+   "cancellation_reason": "ITEMS UNAVAILABLE",
+   "count": 1433
+  }
+ ],
+ "ct_events": [
+  {
+   "event_name": "product_view",
+   "count": 658599
+  },
+  {
+   "event_name": "cart_add",
+   "count": 627831
+  },
+  {
+   "event_name": "cart_view",
+   "count": 802025
+  },
+  {
+   "event_name": "order_placed",
+   "count": 90377
+  },
+  {
+   "event_name": "order_abandoned",
+   "count": 242415
+  }
+ ]
+}

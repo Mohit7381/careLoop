@@ -1,0 +1,138 @@
+{
+ "journey": "pd_checkout",
+ "window": "2026-08-27..2026-09-03 (trailing 7d at query time)",
+ "source": "monetization.modeled_fact_pharmacy_transaction_product / _delivery + modeled_fact_halodoc_consumer_event via de-central (read-only)",
+ "note": "STARTER fixture from Nakul's verified queries \u2014 Alief's Day-1 freeze (two proper windows, blessed) supersedes this",
+ "orders": {
+  "created": 643626,
+  "confirmed": 228214,
+  "abandoned": 413973
+ },
+ "delivery_status": {
+  "abandoned": 413803,
+  "confirmed": 232029,
+  "delivered": 158120,
+  "cancelled": 8431
+ },
+ "ui_events_pd_7d": {
+  "product_view": {
+   "events": 658599,
+   "users": 167197
+  },
+  "cart_add": {
+   "events": 627831,
+   "users": 99003
+  },
+  "cart_view": {
+   "events": 802025,
+   "users": 153960
+  },
+  "order_placed": {
+   "events": 90377,
+   "users": 77482
+  },
+  "order_abandoned": {
+   "events": 242415,
+   "users": 101491
+  }
+ },
+ "abandon_reasons_7d": {
+  "User abandon the cart": {
+   "rx_gated_false": 79515,
+   "rx_gated_true": 32478
+  },
+  "USER CLICKED BACK": {
+   "rx_gated_false": 61393,
+   "rx_gated_true": 22124
+  },
+  "ADDRESS CHANGED (artifact)": {
+   "rx_gated_false": 23086,
+   "rx_gated_true": 12025
+  },
+  "ADD ITEMS (artifact)": {
+   "rx_gated_false": 4708,
+   "rx_gated_true": 2288
+  },
+  "Items unavailable": {
+   "total": 3907
+  }
+ },
+ "rx_gated_share_of_abandons": 0.285,
+ "ba_l12m_context": {
+  "erx_share_of_pd_orders": 0.706,
+  "erx_share_of_pd_gmv": 0.792,
+  "pd_gmv_idr": 818175441148,
+  "cd_gmv_converting_to_pd": 0.166,
+  "source": "Alief L12M chart 2026-09-03, MECE via customer_consultation_id"
+ },
+ "code_mechanism": {
+  "repo": "timor/oms",
+  "project_id": 61,
+  "classes": [
+   "OrderAbandonConfiguration.timeToAbandonOrderInMinutes",
+   "CartAbandonAdapterService",
+   "InternalAbandonOrderResource"
+  ],
+  "file_line": "to be pinned by Code Scout"
+ },
+ "two_window_baseline": {
+  "queried_at": "2026-09-03 (UTC timestamps; boundaries: created_time >= start AND < end)",
+  "current_0827_0902": {
+   "created": 647191,
+   "confirmed": 229622,
+   "abandoned": 417569,
+   "delivered": 158976,
+   "confirmed_rate": 0.3548,
+   "delivered_of_confirmed": 0.692
+  },
+  "previous_0820_0826": {
+   "created": 614252,
+   "confirmed": 213273,
+   "abandoned": 400979,
+   "delivered": 201617,
+   "confirmed_rate": 0.3472,
+   "delivered_of_confirmed": 0.945
+  },
+  "CAUTION_right_censoring": "delivered is NOT comparable across windows at equal face value: the current window's orders are only 1-7 days old and many haven't delivered yet (69.2% of confirmed vs 94.5% in the matured previous window). Reporter's delivered-delta must either lag the comparison by a maturation period or compare equally-aged windows. created/confirmed settle fast and ARE comparable.",
+  "wow_deltas_safe": {
+   "created": "+5.4%",
+   "confirmed": "+7.7%",
+   "confirmed_rate_pp": "+0.8pp"
+  }
+ },
+ "cohort_cuts_current_window": {
+  "rx_vs_nonrx_confirmation (product fact, erx_quantity>0)": {
+   "non_rx": {
+    "created": 391898,
+    "confirmed": 152981,
+    "confirm_rate": 0.39
+   },
+   "rx": {
+    "created": 255293,
+    "confirmed": 76641,
+    "confirm_rate": 0.3
+   },
+   "finding": "rx-gated orders confirm at 30.0% vs 39.0% non-rx \u2014 9.0pp lower (non-confirm ratio 1.15x); 178,652 rx orders/wk unconfirmed",
+   "definition_note": "rx here = erx_quantity>0 (39.4% of orders); CT events' consultation_required=true gave 28.5% of ABANDONS \u2014 different definitions, both kept"
+  },
+  "price_band_abandons (CT events)": {
+   "75k_200k": {
+    "false": 64078,
+    "true": 26773
+   },
+   "gte_200k": {
+    "false": 47659,
+    "true": 18561
+   },
+   "25k_75k": {
+    "false": 39088,
+    "true": 23787
+   },
+   "lt_25k": {
+    "false": 23916,
+    "true": 853
+   }
+  },
+  "category_cut_caveat": "order_placed CT events carry NULL pd_category \u2192 category cut is DISTRIBUTION AMONG ABANDONS ONLY (no rate comparison). Raw values are multi-tag strings with trailing ';' \u2014 normalize to FIRST tag. Top abandon categories/wk (normalized): Contraceptions & Hormone ~8700, Antibiotics ~4200, Digital Clinic ~3900, Cough and Flu ~2965, Skin ~2900, Halofit ~1730, Pain Killer ~1385, Mental Health ~1075"
+ }
+}
