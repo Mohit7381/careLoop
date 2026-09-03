@@ -1,0 +1,30 @@
+{
+ "project_id": 7121,
+ "use_cases": [
+  {
+   "name": "funnel-hypothesis-generation",
+   "use_case_id": 12812,
+   "template_id": 21687
+  },
+  {
+   "name": "voc-theme-classification",
+   "use_case_id": 12813,
+   "template_id": 21688
+  },
+  {
+   "name": "code-gap-assessment",
+   "use_case_id": 12814,
+   "template_id": 21689
+  },
+  {
+   "name": "trend-narrative",
+   "use_case_id": 12815,
+   "template_id": 21690
+  },
+  {
+   "name": "prd-generation",
+   "use_case_id": 12816,
+   "template_id": 21691
+  }
+ ]
+}
