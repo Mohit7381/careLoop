@@ -5,8 +5,14 @@
       <p class="sub">funnel drop-off analysis · runs dashboard</p>
     </div>
     <div class="chip-env">data: prod snapshot · 26 Aug – 2 Sep 2026</div>
-    <button class="btn btn-primary" type="button" (click)="newAnalysis()">New analysis</button>
+    <button class="btn btn-primary" type="button" [disabled]="creating()" (click)="newAnalysis()">
+      {{ creating() ? 'Starting…' : 'New analysis' }}
+    </button>
   </div>
+
+  @if (createError(); as err) {
+    <div class="create-error">{{ err }}</div>
+  }
 
   <div class="tablewrap">
     <table>

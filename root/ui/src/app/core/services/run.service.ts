@@ -282,6 +282,39 @@ export class RunService {
       .subscribe();
   }
 
+  /**
+   * POST /v1/analysis/runs — kicks off a real pipeline run.
+   *
+   * Requires the app token (GET does not). A 409 means a run for this window
+   * is already in progress and carries that run's id in `detail.run_id`, so
+   * the caller can attach to it instead of dead-ending — which is what
+   * happens if someone clicks "New analysis" twice.
+   */
+  async createRun(journey = 'pd_checkout'): Promise<{ runId: number; existing: boolean } | { error: string }> {
+    try {
+      const res = await firstValueFrom(
+        this.http
+          .post<{ run_id: number; status: RunStatus }>(
+            API_BASE,
+            { journey },
+            { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
+          )
+          .pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      return { runId: res.run_id, existing: false };
+    } catch (err) {
+      if (err instanceof HttpErrorResponse) {
+        const detail = err.error?.detail;
+        if (err.status === 409 && typeof detail?.run_id === 'number') {
+          return { runId: detail.run_id, existing: true };
+        }
+        if (err.status === 401) return { error: 'not authorised — check APP_TOKEN' };
+        return { error: describeError(err) };
+      }
+      return { error: 'request timed out' };
+    }
+  }
+
   /** Abandon the live source, say why, and show the fixture — never a mix. */
   private failLive(reason: string): void {
     this._source.set('live-failed');

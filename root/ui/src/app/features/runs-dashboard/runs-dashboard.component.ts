@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { RunService } from '../../core/services/run.service';
@@ -42,11 +42,33 @@ export class RunsDashboardComponent {
     this.router.navigate(['/runs', id]);
   }
 
-  newAnalysis(): void {
-    // POST /v1/analysis/runs is async, 409-on-duplicate-window per the plan.
-    // Not implemented yet on the backend — see README "Known gaps". Route
-    // straight to the fixture run so the demo path always works.
-    this.runService.loadFixture();
-    this.router.navigate(['/runs', 47]);
+  readonly creating = signal(false);
+  readonly createError = signal<string | null>(null);
+
+  /**
+   * Creates a real run via POST /v1/analysis/runs and opens it in live mode.
+   *
+   * On 409 the backend returns the in-progress run's id, so a double-click
+   * attaches to that run rather than erroring. If the backend is unreachable
+   * we say so and fall back to the fixture, so the demo path still works —
+   * but we never pretend a fixture is a fresh run.
+   */
+  async newAnalysis(): Promise<void> {
+    if (this.creating()) return;
+    this.creating.set(true);
+    this.createError.set(null);
+
+    const res = await this.runService.createRun();
+    this.creating.set(false);
+
+    if ('error' in res) {
+      this.createError.set(`${res.error} — showing the frozen fixture instead`);
+      this.runService.loadFixture();
+      this.router.navigate(['/runs', 47]);
+      return;
+    }
+    // ?live=1 puts RunDetail on the polling path; the run starts as `queued`
+    // and the stage tracker follows it through to completed.
+    this.router.navigate(['/runs', res.runId], { queryParams: { live: 1 } });
   }
 }
