@@ -86,9 +86,20 @@ def _live_search_fn(settings) -> Any:
     return search_fn
 
 
+def _unwired_live_llm():
+    def llm(ctx: dict) -> dict:
+        raise NotImplementedError(
+            "Remedy Loop has no live LLM wired yet — see app/agents/code_scout/remedy_loop.py's "
+            "docstring (code-gap-assessment, template 21689, modes remedy_proposal/remedy_verification). "
+            "Same seam as analyst.py's _sphere_llm(); not yet built here. Run in demo_mode until it is."
+        )
+
+    return llm
+
+
 def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
     settings = get_settings()
-    llm = _demo_llm() if run_state.demo_mode else None  # TODO: real code-gap-assessment sphere call
+    llm = _demo_llm() if run_state.demo_mode else _unwired_live_llm()
     search_fn = _demo_search_fn() if run_state.demo_mode else _live_search_fn(settings)
     findings_by_rank = {f.rank: f for f in run_state.findings}
 
