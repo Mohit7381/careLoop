@@ -22,25 +22,30 @@ the whole run. Also applies the same docs/test path filter as
 search_client.py's find_gap() (review D1) - _live_search_fn used to take
 the top 3 raw hits unfiltered.
 """
+import json
 import logging
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
 
 import requests
 
-from app.agents.code_scout.assessor import StubCodeGapAssessor
+from app.agents.code_scout.assessor import SpherePlatformCodeGapAssessor, StubCodeGapAssessor
 from app.agents.code_scout.errors import CodeScoutExternalError
 from app.agents.code_scout.node import code_scout_node as _code_scout_node
 from app.agents.code_scout.remedy_loop import run_remedy_loop
 from app.agents.code_scout.routing import repos_for_stage
 from app.agents.code_scout.search_client import FixtureSearchClient, LiveGitlabSearchClient, is_source_path
 from app.config import get_settings
+from app.integrations.sphere import SphereClient
 from app.pipeline.state import GraphState
 from app.schemas.contracts import CodeGap, RunState
 
 logger = logging.getLogger(__name__)
 
 FIXTURES_DIR = Path("fixtures/code_scout")
+SPHERE_IDS_PATH = Path("fixtures/pd_checkout/sphere_ids.json")
+REMEDY_USE_CASE = "code-gap-assessment"
 
 # Scripted remedy proposals/verdicts matching the plan's demo script exactly
 # (the "verify moment" panel) — not a live LLM call. Real wiring is the same
@@ -112,13 +117,29 @@ def _live_search_fn(settings) -> Any:
     return search_fn
 
 
-def _unwired_live_llm():
+def _live_remedy_llm(settings) -> Any:
+    """Real wiring for the Remedy Loop's LLM role (contracts v3 decision #9),
+    keyed on ctx["mode"] ("remedy_proposal" | "remedy_verification") exactly
+    as remedy_loop.py's own docstring documents. Uses the same SphereClient
+    + calling convention already confirmed live in
+    scripts/run_remedy_loop_local.py (the whole ctx as one JSON-string
+    "code_context" param) rather than re-guessing the contract."""
+    ids = json.loads(SPHERE_IDS_PATH.read_text())
+    template_id = next(u["template_id"] for u in ids["use_cases"] if u["name"] == REMEDY_USE_CASE)
+    client = SphereClient(mode="sphere", service_type=settings.sphere_platform_service_type)
+
     def llm(ctx: dict) -> dict:
-        raise NotImplementedError(
-            "Remedy Loop has no live LLM wired yet — see app/agents/code_scout/remedy_loop.py's "
-            "docstring (code-gap-assessment, template 21689, modes remedy_proposal/remedy_verification). "
-            "Same seam as analyst.py's _sphere_llm(); not yet built here. Run in demo_mode until it is."
-        )
+        try:
+            return client.call(REMEDY_USE_CASE, template_id, {"code_context": json.dumps(ctx)})
+        except URLError as exc:
+            raise CodeScoutExternalError(f"Sphere Platform call failed (mode={ctx.get('mode')!r}): {exc}") from exc
+        except RuntimeError as exc:
+            # SphereClient._live() raises RuntimeError itself when status != "SUCCESS".
+            raise CodeScoutExternalError(f"Sphere Platform call did not succeed (mode={ctx.get('mode')!r}): {exc}") from exc
+        except ValueError as exc:
+            raise CodeScoutExternalError(
+                f"Sphere Platform returned invalid JSON (mode={ctx.get('mode')!r}): {exc}"
+            ) from exc
 
     return llm
 
@@ -135,7 +156,7 @@ def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
     no remedies in demo_mode rather than a mismatched one.
     """
     settings = get_settings()
-    llm = _demo_llm() if run_state.demo_mode else _unwired_live_llm()
+    llm = _demo_llm() if run_state.demo_mode else _live_remedy_llm(settings)
     search_fn = _demo_search_fn() if run_state.demo_mode else _live_search_fn(settings)
     findings_by_rank = {f.rank: f for f in run_state.findings}
 
@@ -171,9 +192,10 @@ def code_scout_node(state: GraphState) -> GraphState:
 
     if state.get("demo_mode", True):
         search_client = FixtureSearchClient(FIXTURES_DIR)
+        assessor = StubCodeGapAssessor()
     else:
         search_client = LiveGitlabSearchClient(host=settings.gitlab_base_url, token=settings.gitlab_read_token)
-    assessor = StubCodeGapAssessor()  # TODO(Harshit/Nakul): swap for the real code-gap-assessment sphere call
+        assessor = SpherePlatformCodeGapAssessor(service_type=settings.sphere_platform_service_type)
 
     result = _code_scout_node(run_state, search_client=search_client, assessor=assessor)
     gaps_with_remedies = _run_remedies(run_state, result["code_gaps"])

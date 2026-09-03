@@ -14,6 +14,14 @@ crash code_scout_node's whole run. Now caught per-repo - a bad repo is
 logged and skipped, and the finding still gets a real (not fabricated)
 mechanism_found=False verdict from whatever repos DID resolve, instead of
 the entire run dying on one flaky call.
+
+Rev 3: assessor.assess() (now a real sphere-backed call in live mode, not
+just the offline stub) gets the same treatment - a classification failure
+AFTER a mechanism was already located is caught and treated as "not found
+in this repo" rather than crashing the whole run or fabricating a
+gap_class. CodeGap has no "located but unclassified" state, so this is the
+most honest outcome the current schema can express - search continues in
+the remaining routed repos.
 """
 from __future__ import annotations
 
@@ -68,7 +76,14 @@ def _process_finding(
             continue
         total_searches += searches_run
         if location is not None:
-            assessment = assessor.assess(finding, location.file, location.snippet)
+            try:
+                assessment = assessor.assess(finding, location.file, location.snippet)
+            except CodeScoutExternalError as exc:
+                logger.warning(
+                    "assess() failed for finding #%s in %r (%s): %s",
+                    finding.rank, repo_info["repo"], location.file, exc,
+                )
+                continue
             return [
                 CodeGap(
                     finding_rank=finding.rank,

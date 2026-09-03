@@ -1,5 +1,7 @@
 """app/pipeline/nodes/code_scout.py - resilience + path-filtering coverage
-(PR #3 review, ported onto the merged find_gap()/Remedy-Loop architecture).
+(PR #3 review, ported onto the merged find_gap()/Remedy-Loop architecture),
+plus the real live-LLM wiring for the Remedy Loop (gap #2 from the PR #3
+follow-up: _unwired_live_llm() used to raise NotImplementedError).
 
 Before this: _live_search_fn's requests call had nothing catching it, and
 since it's called from inside remedy_loop.py's verify_remedy() for every
@@ -7,6 +9,7 @@ remedy on every gap, one flaky GitLab response during verification crashed
 code_scout_node's ENTIRE run - taking down every other gap's already-located
 mechanism and already-verified remedies with it.
 """
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -98,3 +101,67 @@ def test_a_failing_gap_remedy_loop_does_not_abort_other_gaps(mock_run_remedy_loo
     assert result[0].mechanism_found is True
     assert result[0].remedies == []
     assert result[1] is ok_gap_with_remedies
+
+
+@patch("app.pipeline.nodes.code_scout.SphereClient")
+def test_live_remedy_llm_calls_the_right_use_case_and_template(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+    mock_client.call.return_value = {"remedies": []}
+
+    llm = code_scout_module._live_remedy_llm(Settings())
+    out = llm({"mode": "remedy_proposal", "finding": "f"})
+
+    assert out == {"remedies": []}
+    args = mock_client.call.call_args.args
+    assert args[0] == "code-gap-assessment"
+    assert args[1] == 21689
+    ctx = json.loads(args[2]["code_context"])
+    assert ctx == {"mode": "remedy_proposal", "finding": "f"}
+
+
+@patch("app.pipeline.nodes.code_scout.SphereClient")
+def test_live_remedy_llm_wraps_a_client_failure(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+    mock_client.call.side_effect = RuntimeError("sphere call failed for code-gap-assessment: FAILED")
+
+    llm = code_scout_module._live_remedy_llm(Settings())
+    with pytest.raises(CodeScoutExternalError):
+        llm({"mode": "remedy_verification"})
+
+
+class _AssessFailsAfterLocating:
+    """explore()/find_gap() succeeds (mechanism located), but assess()
+    fails - proves node.py isolates this instead of crashing."""
+
+    def find_gap(self, finding_rank, repo, search_terms):
+        from app.agents.code_scout.search_client import GapLocation
+
+        return GapLocation(file="OrderDao.java", line=1, snippet="..."), 1
+
+
+class _FailingAssessor:
+    def propose_search_terms(self, finding):
+        return ["abandon"]
+
+    def assess(self, finding, file, snippet):
+        raise CodeScoutExternalError("simulated Sphere outage during classification")
+
+
+def test_a_failing_assess_call_does_not_crash_and_reports_honestly():
+    """gap #1 follow-up: a real sphere-backed assess() can now fail at
+    runtime - this must not crash code_scout_node, and must not fabricate a
+    gap_class either."""
+    from app.agents.code_scout.node import code_scout_node
+
+    state = RunState(
+        run_id=1, window_start="a", window_end="b",
+        findings=[_finding(1)],
+    )
+    result = code_scout_node(state, search_client=_AssessFailsAfterLocating(), assessor=_FailingAssessor())
+    gaps = result["code_gaps"]
+
+    assert len(gaps) == 1
+    assert gaps[0].mechanism_found is False
+    assert gaps[0].gap_class is None
