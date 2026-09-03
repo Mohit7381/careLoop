@@ -45,7 +45,7 @@ The one step in the pipeline with no manual precedent — it connects a funnel f
 
 **Status: implemented and test-verified**, including a live reproduction of the proven example (`bintan/consultation` → `ConsultationDao.java:146`, constant `GET_ABANDON_CONSULTATION`) against the real GitLab instance. Currently lives at `~/dev/halodoc/careloop-service` pending merge into the shared repo — see [Current status](#current-status) below.
 
-### Reporter + PRD Generator + delivery
+### Reporter + Feature Generator + delivery
 Computes period-over-period deltas (funnel, feature adoption, VoC theme trends), turns them into a short business narrative, then fills an 8-section PRD template from findings + code gaps + trends + VoC quotes (≤2 quotes, always labeled anecdotal). Stamped `DRAFT — needs human review`. Delivered to the UI and a GChat channel via Garuda; a human clicking Approve is what makes it real.
 
 ### UI
