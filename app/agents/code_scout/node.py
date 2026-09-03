@@ -23,17 +23,17 @@ def code_scout_node(
 ) -> dict:
     new_gaps: list[CodeGap] = []
     for finding in state.findings:
-        new_gaps.extend(_process_finding(finding, search_client, assessor))
+        new_gaps.extend(_process_finding(finding, search_client, assessor, state.journey))
     return {"code_gaps": [*state.code_gaps, *new_gaps]}
 
 
 def _process_finding(
-    finding: Finding, search_client: SearchClient, assessor: CodeGapAssessor
+    finding: Finding, search_client: SearchClient, assessor: CodeGapAssessor, journey: str
 ) -> list[CodeGap]:
     search_terms = assessor.propose_search_terms(finding)
     total_searches = 0
 
-    for repo_info in repos_for_stage(finding.stage):
+    for repo_info in repos_for_stage(finding.stage, journey):
         if total_searches >= SEARCH_BUDGET_PER_FINDING:
             break
         location, searches_run = search_client.find_gap(
@@ -62,9 +62,9 @@ def _process_finding(
             ]
 
     # Nothing found in any routed repo within budget. mechanism_found=False is
-    # a first-class outcome (contracts.py v2) - never fabricate a gap_class here.
+    # a first-class outcome (contracts.py v3) - never fabricate a gap_class here.
     reason = "budget_exhausted" if total_searches >= SEARCH_BUDGET_PER_FINDING else "no_results"
-    fallback_repo = repos_for_stage(finding.stage)[0]
+    fallback_repo = repos_for_stage(finding.stage, journey)[0]
     return [
         CodeGap(
             finding_rank=finding.rank,

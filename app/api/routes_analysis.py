@@ -28,11 +28,17 @@ def _default_window() -> tuple[str, str]:
     return start.isoformat(), end.isoformat()
 
 
-def _run_pipeline_in_new_session(run_id: int, window_start: str, window_end: str, demo_mode: bool) -> None:
+def _run_pipeline_in_new_session(
+    run_id: int, window_start: str, window_end: str, demo_mode: bool,
+    journey: str, prev_window_start: str | None, prev_window_end: str | None,
+) -> None:
     """A background asyncio task needs its own DB session — never share one across threads/tasks."""
     session = SessionLocal()
     try:
-        run_pipeline(session, run_id, window_start, window_end, demo_mode)
+        run_pipeline(
+            session, run_id, window_start, window_end, demo_mode,
+            journey=journey, prev_window_start=prev_window_start, prev_window_end=prev_window_end,
+        )
     finally:
         session.close()
 
@@ -46,9 +52,12 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
 
     existing = session.execute(
         select(AnalysisRun).where(
+            AnalysisRun.journey == body.journey,
             AnalysisRun.window_start == window_start,
             AnalysisRun.window_end == window_end,
-            AnalysisRun.status.in_(["queued", "extracting", "analyzing", "reporting"]),
+            AnalysisRun.status.in_(
+                ["queued", "fetching", "analyzing", "scanning_code", "reporting", "drafting_prd"]
+            ),
         )
     ).scalar_one_or_none()
     if existing is not None:
@@ -58,6 +67,7 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
         )
 
     run = AnalysisRun(
+        journey=body.journey,
         window_start=window_start,
         window_end=window_end,
         status="queued",
@@ -68,7 +78,10 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     session.refresh(run)
 
     asyncio.create_task(
-        asyncio.to_thread(_run_pipeline_in_new_session, run.id, window_start, window_end, settings.demo_mode)
+        asyncio.to_thread(
+            _run_pipeline_in_new_session, run.id, window_start, window_end, settings.demo_mode,
+            body.journey, body.prev_window_start, body.prev_window_end,
+        )
     )
 
     return CreateRunResponse(run_id=run.id, status="queued")
@@ -82,9 +95,11 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
 
     return RunDetailResponse(
         run_id=run.id,
+        journey=run.journey,
         window_start=run.window_start,
         window_end=run.window_end,
         status=run.status,
+        failed_stage=run.failed_stage,
         config=run.config,
         snapshots=[
             {

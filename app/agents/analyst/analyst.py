@@ -9,20 +9,15 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-import yaml
-
 from app.agents.analyst import phase1
 from app.agents.analyst.aggregate_tool import AggregateTool
 from app.agents.analyst.phase2 import run_drilldown
 from app.agents.analyst.phase3_voc import corroborate, run_voc
 from app.agents.analyst.validator import filter_findings
+from app.journeys import load_journey
 from app.schemas.contracts import RunState, validate_routing_stage
 
 FIXTURES = Path("fixtures")
-
-
-def load_journey(journey: str) -> dict:
-    return yaml.safe_load(Path("config/journeys").joinpath(f"{journey}.yaml").read_text())
 
 
 def _default_routing_for_gap(gap: dict, journey_cfg: dict) -> str:

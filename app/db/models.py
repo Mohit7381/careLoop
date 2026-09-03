@@ -1,4 +1,5 @@
 import datetime
+from typing import Optional
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -14,9 +15,11 @@ class AnalysisRun(Base):
     __tablename__ = "analysis_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    journey: Mapped[str] = mapped_column(String(64), nullable=False, default="pd_checkout", index=True)
     window_start: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     window_end: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    failed_stage: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=_utcnow, index=True)
@@ -64,7 +67,7 @@ class DropOffFinding(Base):
     hypothesis: Mapped[str] = mapped_column(Text, nullable=False)
     segments: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    confidence: Mapped[float] = mapped_column(nullable=False)
+    confidence: Mapped[str] = mapped_column(String(8), nullable=False)  # high | medium | low
     confirm_via: Mapped[str] = mapped_column(Text, nullable=False)
 
     run: Mapped["AnalysisRun"] = relationship(back_populates="findings")

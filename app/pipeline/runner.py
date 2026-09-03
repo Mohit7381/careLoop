@@ -69,7 +69,16 @@ def _persist_artifacts(session: Session, run_id: int, state: dict) -> None:
         session.add(RunArtifact(run_id=run_id, kind="prd_md", uri=str(path)))
 
 
-def run_pipeline(session: Session, run_id: int, window_start: str, window_end: str, demo_mode: bool) -> None:
+def run_pipeline(
+    session: Session,
+    run_id: int,
+    window_start: str,
+    window_end: str,
+    demo_mode: bool,
+    journey: str = "pd_checkout",
+    prev_window_start: str | None = None,
+    prev_window_end: str | None = None,
+) -> None:
     """Synchronous — call via asyncio.to_thread from the API layer so the endpoint returns immediately."""
     run = session.get(AnalysisRun, run_id)
     if run is None:
@@ -77,7 +86,10 @@ def run_pipeline(session: Session, run_id: int, window_start: str, window_end: s
         return
 
     try:
-        state = initial_state(run_id, window_start, window_end, demo_mode)
+        state = initial_state(
+            run_id, window_start, window_end, demo_mode,
+            journey=journey, prev_window_start=prev_window_start, prev_window_end=prev_window_end,
+        )
         final_state = compiled_graph.invoke(state)
 
         if final_state.get("error"):
@@ -89,6 +101,7 @@ def run_pipeline(session: Session, run_id: int, window_start: str, window_end: s
         _persist_artifacts(session, run_id, final_state)
 
         run.status = final_state.get("status", "completed")
+        run.failed_stage = final_state.get("failed_stage")
         session.commit()
     except Exception:
         logger.exception("run %s failed", run_id)

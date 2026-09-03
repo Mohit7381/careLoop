@@ -35,7 +35,7 @@ def _findings_section(findings: list[Finding]) -> str:
     for f in sorted(findings, key=lambda f: f.rank):
         lines.append(
             f"**#{f.rank} [{f.origin}] {f.stage}** — {f.hypothesis} "
-            f"(confidence {f.confidence:.0%}; {_evidence_phrase(f)})"
+            f"(confidence {f.confidence}; {_evidence_phrase(f)})"
         )
     return "\n\n".join(lines) or "_no findings this run_"
 

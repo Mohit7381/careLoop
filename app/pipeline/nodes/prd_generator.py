@@ -107,8 +107,8 @@ def _render_prd_llm_stub(
         f"post-fix; no regression in adjacent stages."
     )
     open_questions = "- " + finding.confirm_via
-    if finding.confidence < 0.6:
-        open_questions += f"\n- Hypothesis confidence is only {finding.confidence:.0%} — treat as unconfirmed."
+    if finding.confidence == "low":
+        open_questions += f"\n- Hypothesis confidence is only '{finding.confidence}' — treat as unconfirmed."
     if gap and not gap.mechanism_found:
         open_questions += f"\n- Code Scout found no mechanism ({gap.no_match_reason}); solution above is a placeholder."
 
@@ -117,7 +117,7 @@ def _render_prd_llm_stub(
         .replace("{{run_id}}", str(run_id))
         .replace("{{window_start}}", window_start)
         .replace("{{window_end}}", window_end)
-        .replace("{{confidence}}", f"{finding.confidence:.0%}")
+        .replace("{{confidence}}", finding.confidence)
         .replace("{{overview}}", f"CareLoop-generated fix proposal for the #{finding.rank} ranked drop-off finding.")
         .replace("{{background}}", background)
         .replace("{{problem}}", problem)
@@ -151,4 +151,4 @@ def prd_generator_node(state: GraphState) -> GraphState:
         window_end=run_state.window_end,
     )
 
-    return {**state, "prd_draft": body, "status": "reporting"}
+    return {**state, "prd_draft": body, "status": "completed"}

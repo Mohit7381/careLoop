@@ -40,7 +40,7 @@ def test_reproduces_the_known_good_payment_timeout_example(search_client, assess
         origin="warehouse",
         stage="consultation",
         hypothesis="51,321/wk consultations killed by silent payment-timeout abandon script",
-        confidence=0.9,
+        confidence="high",
         confirm_via="check re-engagement CT events post-cancel",
         evidence=[EvidenceItem(type="snapshot", metric="system_cancelled_count", value=51321)],
     )
@@ -69,7 +69,7 @@ def test_no_match_produces_valid_first_class_outcome(search_client, assessor):
         origin="warehouse",
         stage="payments",
         hypothesis="hypothetical payment finding with no resolvable code location",
-        confidence=0.4,
+        confidence="low",
         confirm_via="manual code review",
     )
     state = _run_state(finding)
@@ -93,7 +93,7 @@ def test_voc_origin_finding_uses_its_own_theme_search_terms(search_client, asses
         origin="voc",
         stage="pharmacy_checkout",
         hypothesis="41 reviews mention payment/refund issues during pharmacy checkout",
-        confidence=0.6,
+        confidence="medium",
         confirm_via="cross-check against warehouse abandonment reasons",
         theme="payment_refund",
         theme_search_terms=["abandon"],
@@ -123,7 +123,7 @@ def test_existing_code_gaps_are_preserved_not_overwritten(search_client, assesso
         origin="warehouse",
         stage="consultation",
         hypothesis="51,321/wk consultations killed by silent payment-timeout abandon script",
-        confidence=0.9,
+        confidence="high",
         confirm_via="check re-engagement CT events post-cancel",
     )
     state = _run_state(finding)

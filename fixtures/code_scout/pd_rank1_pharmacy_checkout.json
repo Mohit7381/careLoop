@@ -1,0 +1,10 @@
+{
+  "finding_rank": 1,
+  "repo": "timor/oms",
+  "found": true,
+  "file": "src/main/java/com/halodoc/timor/oms/service/factory/impl/BaseCancellationTypeAdapterService.java",
+  "line": 208,
+  "snippet": "    @Override\n    public Order cancelOrderAndNotifyUser(final String customerOrderId, final CancelRequest cancelRequest) {\n        log.info(\"Cancellation request - {}\", cancelRequest.toString());\n        final Order order = cancelOrder(customerOrderId, cancelRequest);\n        getOrderService().notifyUsersWhatsapp(order, NotificationEvent.order_cancelled);\n        getOrderService().setRefundToWalletAttribute(order);\n        if (cancelRequest.getType() != CancellationType.customer_cancelled) {\n            final List<String> distinctOrderGroups = order.getItems().stream().filter(i -> !Strings.isNullOrEmpty(i.getGroupId()))\n                                                          .map(OrderItem::getGroupId).distinct().collect(Collectors.toList());\n            final Optional<NotificationEvent> notificationEventOptional = getOrderService().getNotificationEvent(order);\n            final MerchantLocation merchantLocation = getOrderService().getMerchantLocation(order);\n            if (CollectionUtils.isEmpty(distinctOrderGroups) && notificationEventOptional.isPresent()) {\n                getCommunicationService().sendCommunication(notificationEventOptional.get(), order, null, cancelRequest, null,",
+  "searches_run": 2,
+  "_verified": "Live GitLab search 2026-09-03, project id 61 (timor/oms). Candidate found via search term 'abandon' -> SystemAbandonAdapterService -> BaseCancellationTypeAdapterService.cancelOrderAndNotifyUser. NOT as rigorously confirmed as GAP 1 - sendCommunication/notifyUsersWhatsapp genuinely fire here, so this is NOT a clean 'no hook exists' case like the consultation example. The real question is whether the notification content is a generic cancellation notice vs. an actual cart-recovery nudge - unresolved without reading the notification template itself. Presented here as a real, weaker candidate; confirm with the team before using it as demo evidence."
+}
