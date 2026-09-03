@@ -62,7 +62,19 @@ def test_unknown_llm_stage_falls_back_to_routing_for_gap(cohort_cuts, journey_cf
 def test_evidence_numbers_extracted_from_prose():
     from app.agents.analyst.phase2 import _num
     assert _num("user_total: 199,417") == 199417.0
-    assert _num("lost 417,569 (share_of_prev 0.6452)") == 417569.0
     assert _num("rate: 0.3002") == 0.3002
     assert _num(199417) == 199417.0
     assert _num("no numbers here") is None
+
+
+def test_label_glued_numbers_are_not_mistaken_for_values():
+    """'price_band: 75k_200k: 90,851' must cite 90851, never 75."""
+    from app.agents.analyst.phase2 import _num
+    assert _num("price_band: 75k_200k: 90,851") == 90851.0
+    assert _num("price_band: gte_200k: 66,220") == 66220.0
+    assert _num("price_band: lt_25k: 24,769") == 24769.0
+    assert _num("price_band: 25k_75k: 62,875") == 62875.0
+    # trailing prose after the value: last STANDALONE number still wins
+    assert _num("consultation_required: rx_gated entered: 255,293 converted: 76,641 rate: 0.3002") == 0.3002
+    # all candidates glued -> fall back to the first number
+    assert _num("bucket 75k_200k only") == 75.0

@@ -40,17 +40,35 @@ def _parse_findings(raw: list[dict], journey_routing_keys: list[str],
 
 
 def _num(e: Any) -> Any:
-    """Evidence arrives as prose like 'user_total: 199,417' or 'lost 417,569
-    (share 0.6452)' — extract the FIRST number anywhere in the string."""
+    """Extract the CITED number from a prose evidence string.
+
+    The model writes evidence as "label: value" prose, and labels themselves
+    contain digits — 'price_band: 75k_200k: 90,851' must yield 90851, not 75.
+    Rule: drop numbers that are glued to letters (75k, 200k, gte_200k, v2) and
+    take the LAST remaining standalone number, which is the value in every
+    'label: ... : value' shape the model produces. Falls back to the first
+    number if every candidate is label-glued.
+    """
     if isinstance(e, (int, float)):
         return float(e)
-    m = _NUM_RE.search(str(e))
-    if not m:
+    s = str(e)
+    standalone = [m for m in _NUM_RE.finditer(s)
+                  if not _glued(s, m.start(), m.end())]
+    chosen = standalone[-1] if standalone else _NUM_RE.search(s)
+    if not chosen:
         return None
     try:
-        return float(m.group().replace(",", ""))
+        return float(chosen.group().replace(",", ""))
     except ValueError:
         return None
+
+
+def _glued(s: str, start: int, end: int) -> bool:
+    """True when the number touches a letter/underscore on either side —
+    i.e. it is part of a label token (75k_200k) rather than a value."""
+    before = s[start - 1] if start else ""
+    after = s[end] if end < len(s) else ""
+    return (before.isalpha() or before == "_") or (after.isalpha() or after == "_")
 
 
 def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
