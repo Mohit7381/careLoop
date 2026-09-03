@@ -27,3 +27,17 @@ def test_escalation_routes_to_journey_categories(reviews, journey_cfg):
     stages = {f.theme: f.stage for f in findings}
     assert stages["payment/refund"] == "payments"
     assert stages["consultation/doctor"] == "consultation"
+
+
+def test_corroboration_picks_largest_theme_and_respects_floor(reviews, journey_cfg):
+    from app.agents.analyst.phase3_voc import corroborate, run_voc
+    from app.schemas.contracts import EvidenceItem, Finding
+    _, voc = run_voc(reviews, journey_cfg["voc"], next_rank=10)
+    wh = [Finding(rank=1, origin="warehouse", stage="pharmacy_checkout",
+                  hypothesis="h", confidence="high",
+                  confirm_via="run the confirming experiment please",
+                  evidence=[EvidenceItem(type="snapshot", metric="m", value=1.0)])]
+    corroborate(wh, voc, journey_cfg["voc"])
+    # pharmacy_checkout themes: app/technical (8) and price (3).
+    # 8 >= floor -> app/technical wins; price(3) must never attach.
+    assert wh[0].theme == "app/technical" and wh[0].review_count == 8

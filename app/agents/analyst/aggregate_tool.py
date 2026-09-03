@@ -21,6 +21,10 @@ class AggregateTool:
         self.k = k
         self.calls_made = 0
 
+    @property
+    def dimensions_with_data(self) -> list[str]:
+        return sorted(set(self.cuts) & self.whitelist)
+
     def aggregate(self, stage: str, dimension: str,
                   compare_with_converted: bool = True) -> dict[str, Any]:
         self.calls_made += 1
@@ -29,7 +33,10 @@ class AggregateTool:
                     "allowed": sorted(self.whitelist)}
         cut = self.cuts.get(dimension)
         if cut is None:
-            return {"error": f"no cohort data for dimension '{dimension}'", "rows": []}
+            return {"error": f"no cohort data for dimension '{dimension}'",
+                    "no_data": True,
+                    "dimensions_with_data": sorted(set(self.cuts) & self.whitelist),
+                    "rows": []}
         rows = []
         for r in cut.get("rows", []):
             if r.get("entered", 0) < self.k:

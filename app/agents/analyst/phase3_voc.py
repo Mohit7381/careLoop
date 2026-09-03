@@ -71,14 +71,23 @@ def run_voc(reviews: list[dict], journey_voc_cfg: dict, next_rank: int
     return findings, voc
 
 
+CORROBORATION_FLOOR = 5  # fewer matching reviews than this is noise, not corroboration
+
+
 def corroborate(warehouse_findings: list[Finding], voc: Voc,
                 journey_voc_cfg: dict) -> None:
-    """Attach quotes to warehouse findings whose routing stage matches an
-    (escalated or not) theme cluster. Mutates findings in place."""
-    stage_to_theme = {t["routing_stage"]: t["name"] for t in journey_voc_cfg["themes"]}
+    """Attach VoC corroboration to warehouse findings whose routing stage has a
+    matching theme cluster. Several themes can share one routing stage — pick
+    the LARGEST cluster, and only attach when it clears the floor (a 3-review
+    cluster corroborates nothing). Mutates findings in place."""
     counts = {t["theme"]: t["count"] for t in voc.themes}
+    best_by_stage: dict[str, tuple[str, int]] = {}
+    for theme in journey_voc_cfg["themes"]:
+        n = counts.get(theme["name"], 0)
+        stage = theme["routing_stage"]
+        if n >= CORROBORATION_FLOOR and n > best_by_stage.get(stage, ("", 0))[1]:
+            best_by_stage[stage] = (theme["name"], n)
     for f in warehouse_findings:
-        theme = stage_to_theme.get(f.stage)
-        if theme and counts.get(theme, 0) > 0 and not f.theme:
-            f.theme = theme
-            f.review_count = counts[theme]
+        hit = best_by_stage.get(f.stage)
+        if hit and not f.theme:
+            f.theme, f.review_count = hit

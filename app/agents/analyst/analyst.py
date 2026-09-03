@@ -13,7 +13,7 @@ from app.agents.analyst import phase1
 from app.agents.analyst.aggregate_tool import AggregateTool
 from app.agents.analyst.phase2 import run_drilldown
 from app.agents.analyst.phase3_voc import corroborate, run_voc
-from app.agents.analyst.validator import filter_findings
+from app.agents.analyst.validator import collect_numbers, filter_findings
 from app.journeys import load_journey
 from app.schemas.contracts import RunState, validate_routing_stage
 
@@ -51,8 +51,9 @@ def run_analyst(state: RunState,
         llm, tool, gap or {}, summary, routing_keys,
         _default_routing_for_gap(gap or {}, cfg))
 
-    # ---- evidence gate ----
-    kept, rejected = filter_findings(findings, state.snapshot, trail)
+    # ---- evidence gate (accepts every number the model was shown) ----
+    shown = collect_numbers(summary) | collect_numbers(gap or {})
+    kept, rejected = filter_findings(findings, state.snapshot, trail, shown)
     for f in kept:
         validate_routing_stage(f.stage, routing_keys)
 

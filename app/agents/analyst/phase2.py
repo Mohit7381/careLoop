@@ -8,7 +8,10 @@ enforces the budget. Everything the model asks and sees is persisted to
 drilldown_trail — the trail renders in the UI and is half the demo.
 """
 import json
+import re
 from typing import Any, Callable
+
+_NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 from app.agents.analyst.aggregate_tool import AggregateTool
 from app.schemas.contracts import DrilldownStep, Finding
@@ -30,20 +33,42 @@ def _parse_findings(raw: list[dict], journey_routing_keys: list[str],
             hypothesis=f.get("hypothesis", ""),
             confidence=f.get("confidence", "low"),
             confirm_via=f.get("confirm_via", ""),
-            evidence=[{"type": "drilldown", "metric": "cited", "value": _num(e)}
+            evidence=[{"type": "drilldown", "metric": str(e)[:120], "value": _num(e)}
                       for e in f.get("evidence", []) if _num(e) is not None],
         ))
     return findings
 
 
 def _num(e: Any) -> Any:
-    """Evidence arrives as strings like '413973' or '0.383' — keep numerics only."""
+    """Extract the CITED number from a prose evidence string.
+
+    The model writes evidence as "label: value" prose, and labels themselves
+    contain digits — 'price_band: 75k_200k: 90,851' must yield 90851, not 75.
+    Rule: drop numbers that are glued to letters (75k, 200k, gte_200k, v2) and
+    take the LAST remaining standalone number, which is the value in every
+    'label: ... : value' shape the model produces. Falls back to the first
+    number if every candidate is label-glued.
+    """
     if isinstance(e, (int, float)):
         return float(e)
-    try:
-        return float(str(e).replace(",", "").split()[0])
-    except (ValueError, IndexError):
+    s = str(e)
+    standalone = [m for m in _NUM_RE.finditer(s)
+                  if not _glued(s, m.start(), m.end())]
+    chosen = standalone[-1] if standalone else _NUM_RE.search(s)
+    if not chosen:
         return None
+    try:
+        return float(chosen.group().replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _glued(s: str, start: int, end: int) -> bool:
+    """True when the number touches a letter/underscore on either side —
+    i.e. it is part of a label token (75k_200k) rather than a value."""
+    before = s[start - 1] if start else ""
+    after = s[end] if end < len(s) else ""
+    return (before.isalpha() or before == "_") or (after.isalpha() or after == "_")
 
 
 def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
@@ -57,7 +82,9 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             "top_gap": top_gap,
             "phase1": phase1_summary,
             "drilldown_trail": [s.model_dump() for s in trail],
-            "allowed_dimensions": sorted(tool.whitelist),
+            # only dimensions that actually HAVE cohort data — asking for others wastes budget
+            "allowed_dimensions": tool.dimensions_with_data,
+            "dimensions_already_tried": sorted({s.dimension for s in trail}),
             "budget_remaining": budget - len(trail),
         }
         out = llm(ctx)
@@ -72,7 +99,8 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             question=nq.get("rationale", f"cut by {dim}"),
             dimension=dim,
             result_rows=result.get("rows", []),
-            note="rejected: not whitelisted" if "error" in result else
-                 ("distribution_only" if result.get("distribution_only") else None),
+            note=("no cohort data — pick from dimensions_with_data" if result.get("no_data")
+                  else "rejected: not whitelisted" if "error" in result
+                  else "distribution_only" if result.get("distribution_only") else None),
         ))
     return findings, trail

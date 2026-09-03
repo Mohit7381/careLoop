@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "abandon_reason",
+  "rationale": "The top gap (created -> confirmed) is large: lost 417,569 (share_of_prev 0.6452). The provided reason clusters only account for a subset of that loss: user_total 199,417 + artifact_total 42,107 = 241,524, and artifact_share is 0.1743 \u2014 so known artifact reasons are a minority of known reasons. Request a cut by 'abandon_reason' to allocate the 417,569 losses across specific abandonment reasons (so we can see which labeled abandon reasons \u2014 e.g., price, shipping, UX, payment failures \u2014 drive the gap) before drilling by product/price or consultation. This will tell us whether further cuts (price_band, pd_category, consultation_required) are likely to pinpoint remediable segments."
+ }
+}
