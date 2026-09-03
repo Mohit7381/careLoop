@@ -1,9 +1,15 @@
 <div class="topbar-sub">
   <div class="topbar-sub-in">
     <div class="chip-env">data: prod snapshot · 26 Aug – 2 Sep 2026</div>
-    <div class="src-chip" [class.live]="source() === 'live'" [class.err]="source() === 'live-unreachable'">
+    <div class="src-chip" [class.live]="source() === 'live'" [class.err]="source() === 'live-failed'">
       source:
-      {{ source() === 'live' ? 'live' : source() === 'live-unreachable' ? 'live unreachable — showing fixture' : 'fixture' }}
+      @if (source() === 'live') {
+        live
+      } @else if (source() === 'live-failed') {
+        fixture — live failed: {{ liveError() }}
+      } @else {
+        fixture
+      }
     </div>
   </div>
 </div>

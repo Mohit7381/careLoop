@@ -36,6 +36,7 @@ export class RunDetailComponent {
   readonly reveal = this.runService.reveal;
   readonly trailVisibleCount = this.runService.trailVisibleCount;
   readonly source = this.runService.source;
+  readonly liveError = this.runService.liveError;
 
   /** Fixture-only enrichment for the Code Scout panel's code snippets —
    *  see CodeScoutPanelComponent's doc comment. Not present on a live
@@ -54,7 +55,10 @@ export class RunDetailComponent {
 
   constructor() {
     const idParam = this.route.snapshot.paramMap.get('id');
-    const id = idParam ? Number(idParam) : 47;
+    // Number('abc') is NaN, which used to be interpolated straight into the
+    // URL as GET /v1/analysis/runs/NaN. Fall back to the fixture id instead.
+    const parsed = idParam !== null ? Number(idParam) : NaN;
+    const id = Number.isInteger(parsed) && parsed > 0 ? parsed : 47;
     // Fixture-only for now: the /deliver and live-polling paths are wired
     // in RunService and exercised via ?live=<id>, but no backend serves
     // GET /v1/analysis/runs/{id} yet outside impl/codeScout's tests. See

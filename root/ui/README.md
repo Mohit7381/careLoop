@@ -46,13 +46,24 @@ Loads on the frozen fixture by default — no backend required, nothing to confi
 
 ### Against the real backend
 
-Nothing serves `GET /v1/analysis/runs/{id}` outside `impl/codeScout`'s tests yet. Once `careloop-service` exposes it:
+**Nothing serves `GET /v1/analysis/runs/{id}` at all yet** — `impl/codeScout` has no FastAPI app, no routes, and `requirements.txt` doesn't list `fastapi`. The live path below has been verified end-to-end against a *mock* service only. Once `careloop-service` exposes it:
 
 ```bash
 npm start -- --proxy-config proxy.conf.json    # proxies /v1/* to http://localhost:8000
 ```
 
-then open `http://localhost:4200/runs/47?live=47` — the `?live=` query param switches `RunService` from the fixture to polling `GET /v1/analysis/runs/{id}` every 1.5s until `completed`/`failed`. A fetch failure falls back to the fixture and the `source:` chip in the sub-header says so (`live unreachable — showing fixture`) — the screen is never left mid-state.
+then open `http://localhost:4200/runs/47?live=1` — the `?live` query param switches `RunService` from the fixture to polling `GET /v1/analysis/runs/{id}` every 1.5s until `completed`/`failed`. The run id comes from the **path**, not from `?live`'s value.
+
+Failure handling (all verified against a mock service):
+
+| Case | Behaviour |
+|---|---|
+| Network down / 5xx / timeout | Retries on the poll cadence, up to 2 consecutive failures, then gives up |
+| 404 | No retry — fails immediately (`run not found (404)`) |
+| Payload missing `suggestions[]` (Rev 2 backend) | No retry — `backend is on the Rev 2 contract (code_gaps, no suggestions[])` |
+| Any failure | Falls back to the **whole** fixture and the `source:` chip states the reason — never a mix of live and fixture data on one screen |
+
+> `proxy.conf.json` must use `/v1/**`, not `/v1/*`. Under http-proxy-middleware v3 a single `*` matches one path segment only, so `/v1/analysis/runs/1` fell through to the SPA fallback and returned `index.html`, which surfaced as a misleading "live unreachable".
 
 ### Build / test
 
