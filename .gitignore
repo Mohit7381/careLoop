@@ -1,7 +1,9 @@
-__pycache__/
-*.pyc
 .venv/
 venv/
+__pycache__/
+*.pyc
 .env
 *.db
+careloop.db
+data/
 .pytest_cache/

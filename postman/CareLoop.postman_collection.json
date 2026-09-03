@@ -1,0 +1,210 @@
+{
+  "info": {
+    "name": "CareLoop — careloop-service",
+    "description": "Manual test collection for Mohit's workstream: Orchestrator + Reporter + PRD + delivery + API. Run against DEMO_MODE=true (fixture data) with zero external creds.\n\nStart the server first:\n  cd careloop-service && source .venv/bin/activate && uvicorn app.main:app --reload --port 8077\n\nUse the paired environment (CareLoop.postman_environment.json) — it sets base_url and app_token, and {{run_id}} auto-populates from the Create Run response.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8077" },
+    { "key": "app_token", "value": "dev-local-token" },
+    { "key": "run_id", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/healthz"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status is ok', () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json().status).to.eql('ok');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create run (happy path, default 30-day window)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{app_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base_url}}/v1/analysis/runs",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "description": "No window given -> service defaults to the last 30 days. Returns {run_id, status}."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('run created', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.run_id).to.be.a('number');",
+              "    pm.expect(body.status).to.eql('queued');",
+              "    pm.collectionVariables.set('run_id', body.run_id);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create run (explicit fixture window — matches known-good demo finding)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{app_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base_url}}/v1/analysis/runs",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"window_start\": \"2026-08-01\",\n  \"window_end\": \"2026-08-30\"\n}"
+        },
+        "description": "This is the window the fixtures (app/fixtures/*.json) were built around — should reproduce GAP1: 51,321/wk payment_processing drop -> ConsultationDao.java:146 -> missing_retention_hook."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('run created', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('run_id', body.run_id);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create run — no auth token (expect 401)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base_url}}/v1/analysis/runs",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('rejected without app token', () => {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create run — duplicate in-flight window (expect 409)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{app_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base_url}}/v1/analysis/runs",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"window_start\": \"2026-08-01\",\n  \"window_end\": \"2026-08-30\"\n}"
+        },
+        "description": "Fire this immediately after 'Create run (explicit fixture window)', before that run finishes, to see the 409. Because the fixture pipeline runs in well under a second, you may need Postman's Collection Runner (0ms delay) or a quick double-click to catch it in-flight — if the prior run has already completed by the time this executes, you'll get a fresh 200 instead, which is correct (only concurrent duplicates are rejected)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('either 409 (still running) or 200 (already completed, new run started)', () => {",
+              "    pm.expect([200, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get run detail",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/v1/analysis/runs/{{run_id}}",
+        "description": "Returns run config + snapshots (current & previous window) + findings + artifact URIs. Poll this until status is 'completed'."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('run detail returned', () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json()).to.have.property('status');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get run detail — unknown id (expect 404)",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/v1/analysis/runs/999999"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('not found', () => {",
+              "    pm.response.to.have.status(404);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get run report (Markdown)",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/v1/analysis/runs/{{run_id}}/report",
+        "description": "Returns the rendered Markdown report (funnel table, ranked reasons, findings, trend narrative, data-quality notes). 404 if the run hasn't reached the report_writer node yet."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('report returned', () => {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
