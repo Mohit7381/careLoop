@@ -2,14 +2,6 @@
 
 **An autonomous engine that identifies and validates healthcare user journeys, then turns what it finds into evidence-backed, human-reviewed product recommendations.**
 
-Built in a 2-day hackathon. Scope for this build is deliberately narrow: **PD / pharmacy delivery / pharmacy / health store** flows, start-to-payment and everything in between. No other verticals.
-
-## Core insight
-
-CareLoop automates a workflow the team already did by hand. Before writing any code, the team ran 12 warehouse queries manually, verified 3 gap findings, and traced one of them to a specific line of source code (`ConsultationDao.java:146`). This hackathon encodes that proven manual process into four cooperating agents — it does not invent a new analysis method, it automates one that was already validated.
-
-Every output is a **proposal for human review**. Findings, code gaps, and PRDs are never auto-filed, auto-merged, or auto-shipped.
-
 ## Architecture — sequential pipeline
 
 ```
