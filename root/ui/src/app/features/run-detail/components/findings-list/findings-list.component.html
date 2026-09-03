@@ -22,9 +22,13 @@
       </div>
     </div>
 
-    @if (f.rank === 1) {
+    <!-- The trail belongs to the top warehouse finding; the quote panel
+         belongs to whichever finding the reviews were actually keyed to. -->
+    @if (f.rank === topWarehouseRank()) {
       <app-drilldown-trail [rows]="drilldownTrail()" [visibleCount]="trailVisibleCount()" />
-      <app-voc-panel [voc]="voc()" [findingRank]="1" />
+    }
+    @if (hasQuotes(f.rank)) {
+      <app-voc-panel [voc]="voc()" [findingRank]="f.rank" [theme]="f.theme ?? null" />
     }
   }
 </div>

@@ -4,54 +4,109 @@
   <div class="dbanner">{{ prd().banner }}</div>
   <div class="dhead">
     <div>
-      <h2>{{ prd().title }}</h2>
+      <h2>{{ hasMarkdown() ? doc()!.title : prd().title }}</h2>
       <div class="sub mono">{{ prd().subtitle }}</div>
     </div>
     <button class="btn dclose" type="button" (click)="close()">Close</button>
   </div>
 
   <div class="dbody">
-    <div class="dsec">
-      <h3>Overview</h3>
-      <p>{{ prd().overview }}</p>
-    </div>
-
-    <div class="dsec">
-      <h3>Goals</h3>
-      <div class="tblwrap">
-        <table>
-          <thead><tr><th>Goal</th><th>Target</th></tr></thead>
-          <tbody>
-            @for (g of prd().goals; track g[0]) {
-              <tr><td class="name">{{ g[0] }}</td><td>{{ g[1] }}</td></tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="dsec">
-      <h3>Functional requirements</h3>
-      <div class="frlist">
-        @for (f of prd().requirements; track f[0]) {
-          <div class="fr"><span class="id mono">{{ f[0] }}</span><span>{{ f[1] }}</span></div>
+    @if (doc(); as d) {
+      <!-- The real generated PRD (prd_markdown), split into editable sections. -->
+      <div class="editbar">
+        <button class="btn btn-sm" type="button" (click)="toggleEdit()">
+          {{ editing() ? 'Done editing' : 'Edit' }}
+        </button>
+        @if (editing()) {
+          <button class="btn btn-sm" type="button" (click)="addSection()">Add section</button>
+        }
+        @if (editedCount() > 0) {
+          <span class="editcount">{{ editedCount() }} section{{ editedCount() === 1 ? '' : 's' }} changed by you</span>
+          <button class="btn btn-sm" type="button" (click)="revertAll()">Revert all</button>
         }
       </div>
-    </div>
 
-    <div class="dsec">
-      <h3>Open questions</h3>
-      <div class="tblwrap">
-        <table>
-          <thead><tr><th>Question</th><th>Owner</th></tr></thead>
-          <tbody>
-            @for (q of prd().openQuestions; track q[0]) {
-              <tr><td class="name">{{ q[0] }}</td><td class="mono owner">{{ q[1] }}</td></tr>
+      @if (editedCount() > 0) {
+        <div class="unverified-note">
+          Your changes are <b>not verified against the code</b>. Agent requirements carry a Remedy Loop
+          verdict; typed ones do not, and stay marked as yours wherever they appear.
+        </div>
+      }
+
+      @for (s of d.sections; track s.id) {
+        <section class="prdsec" [class.touched]="isEdited(s)">
+          <div class="sechead">
+            @if (editing()) {
+              <input class="headinput" [value]="s.heading" (input)="onHeadingInput(s, $any($event.target).value)" />
+            } @else {
+              <h3>{{ s.heading }}</h3>
             }
-          </tbody>
-        </table>
+            @if (isEdited(s)) {
+              <span class="humanbadge">{{ originLabel(s) }}</span>
+            }
+            @if (editing()) {
+              <span class="secactions">
+                <button class="btn btn-xs" type="button" (click)="move(s.id, -1)" title="Move up">&uarr;</button>
+                <button class="btn btn-xs" type="button" (click)="move(s.id, 1)" title="Move down">&darr;</button>
+                @if (s.origin === 'human-edited') {
+                  <button class="btn btn-xs" type="button" (click)="revertSection(s.id)">Revert</button>
+                }
+                <button class="btn btn-xs danger" type="button" (click)="removeSection(s.id)" title="Delete">&#10005;</button>
+              </span>
+            }
+          </div>
+          @if (editing()) {
+            <textarea class="secbody" rows="6" [value]="s.body"
+                      (input)="onSectionInput(s, $any($event.target).value)"></textarea>
+          } @else {
+            <pre class="secbody-read">{{ s.body }}</pre>
+          }
+        </section>
+      }
+    } @else {
+      <!-- No prd_markdown on this run — structured fallback from findings + code_gaps. -->
+      <div class="dsec">
+        <h3>Overview</h3>
+        <p>{{ prd().overview }}</p>
       </div>
-    </div>
+
+      <div class="dsec">
+        <h3>Goals</h3>
+        <div class="tblwrap">
+          <table>
+            <thead><tr><th>Goal</th><th>Target</th></tr></thead>
+            <tbody>
+              @for (g of prd().goals; track g[0]) {
+                <tr><td class="name">{{ g[0] }}</td><td>{{ g[1] }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="dsec">
+        <h3>Functional requirements</h3>
+        <div class="frlist">
+          @for (f of prd().requirements; track f[0]) {
+            <div class="fr"><span class="id mono">{{ f[0] }}</span><span>{{ f[1] }}</span></div>
+          }
+        </div>
+      </div>
+
+      <div class="dsec">
+        <h3>Open questions</h3>
+        <div class="tblwrap">
+          <table>
+            <thead><tr><th>Question</th><th>Owner</th></tr></thead>
+            <tbody>
+              @for (q of prd().openQuestions; track q[0]) {
+                <tr><td class="name">{{ q[0] }}</td><td class="mono owner">{{ q[1] }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
   </div>
 
   <div class="dfoot">
