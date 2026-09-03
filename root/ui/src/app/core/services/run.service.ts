@@ -22,6 +22,20 @@ export interface StageView {
  *  most of them (a 404 or a stale-contract payload is not unreachable). */
 export type Source = 'fixture' | 'live' | 'live-failed';
 
+/** POST /v1/analysis/runs/resolve-scope — the backend's reading of a prompt. */
+export interface ResolvedScope {
+  scope: {
+    prompt?: string | null;
+    from_stage?: string | null;
+    to_stage?: string | null;
+    dimensions?: string[];
+    review_days?: number | null;
+  };
+  summary: string;
+  matched_on: string[];
+  unresolved: string[];
+}
+
 const STAGE_LABELS: Record<StageKey, string> = {
   fetch: 'FETCH DATA',
   analyze: 'ANALYZE DROP-OFFS',
@@ -292,18 +306,59 @@ export class RunService {
    * the caller can attach to it instead of dead-ending — which is what
    * happens if someone clicks "New analysis" twice.
    */
-  async createRun(journey = 'pd_checkout'): Promise<{ runId: number; existing: boolean } | { error: string }> {
+  /**
+   * POST /v1/analysis/runs/resolve-scope — what a prompt is understood to mean,
+   * without running anything.
+   *
+   * Separate from createRun on purpose: resolution is deterministic and cheap,
+   * so the reading can be confirmed before a run is spent on a misreading. An
+   * unresolvable prompt is not an error — it means the full funnel is analysed,
+   * and the summary says so.
+   */
+  async resolveScope(prompt: string, journey = 'pd_checkout'): Promise<ResolvedScope | { error: string }> {
     try {
-      const res = await firstValueFrom(
+      return await firstValueFrom(
         this.http
-          .post<{ run_id: number; status: RunStatus }>(
-            API_BASE,
-            { journey },
+          .post<ResolvedScope>(
+            `${API_BASE}/resolve-scope`,
+            { journey, prompt },
             { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
           )
           .pipe(timeout(REQUEST_TIMEOUT_MS))
       );
-      return { runId: res.run_id, existing: false };
+    } catch (err) {
+      return { error: err instanceof HttpErrorResponse ? describeError(err) : 'request timed out' };
+    }
+  }
+
+  /** A one-shot read for the dashboard's row, without starting the poller. */
+  async fetchRun(runId: number): Promise<RunDetailResponse | null> {
+    try {
+      const body = await firstValueFrom(
+        this.http.get<unknown>(`${API_BASE}/${runId}`).pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      const result = validateRunDetail(body);
+      return result.ok ? result.run : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async createRun(
+    journey = 'pd_checkout',
+    prompt?: string
+  ): Promise<{ runId: number; existing: boolean; scopeSummary?: string } | { error: string }> {
+    try {
+      const res = await firstValueFrom(
+        this.http
+          .post<{ run_id: number; status: RunStatus; scope_summary?: string }>(
+            API_BASE,
+            prompt ? { journey, prompt } : { journey },
+            { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
+          )
+          .pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      return { runId: res.run_id, existing: false, scopeSummary: res.scope_summary };
     } catch (err) {
       if (err instanceof HttpErrorResponse) {
         const detail = err.error?.detail;

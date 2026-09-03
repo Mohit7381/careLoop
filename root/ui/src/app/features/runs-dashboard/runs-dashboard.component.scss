@@ -144,3 +144,175 @@ td {
   color: var(--warn);
   font-size: 12.5px;
 }
+
+/* ---- ask ------------------------------------------------------------- */
+
+.ask {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+}
+
+.ask-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 10px;
+}
+
+.ask-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.ask-row textarea {
+  flex: 1;
+  resize: vertical;
+  min-height: 52px;
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+}
+
+.ask-row textarea::placeholder { color: var(--ink-3); }
+
+.ask-row textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.ask-row .btn { flex: none; min-height: 52px; padding-inline: 20px; }
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ex-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ex {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.ex:hover { color: var(--ink); border-color: var(--line-strong); }
+
+/* ---- what CareLoop understood, before it runs ------------------------ */
+
+.preview {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+}
+
+.preview-head { display: flex; flex-direction: column; gap: 4px; }
+
+.preview .lbl {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+.preview-summary { font-size: 15px; font-weight: 500; color: var(--ink); }
+
+.matched { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.tag {
+  font-size: 11px;
+  color: var(--accent-ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 7px;
+}
+
+.unresolved {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--warn);
+}
+
+.preview-actions { display: flex; gap: 10px; margin-top: 16px; }
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
+}
+
+.btn-ghost:hover { color: var(--ink); }
+
+/* ---- empty state ----------------------------------------------------- */
+
+.empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-title { font-size: 15px; font-weight: 600; color: var(--ink-2); }
+
+.empty-sub {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  margin-top: 6px;
+  max-width: 42ch;
+  margin-inline: auto;
+}
+
+/* ---- rows ------------------------------------------------------------ */
+
+.question { max-width: 30ch; }
+
+.question .scope {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 3px;
+}
+
+.row.pending { opacity: 0.85; }
+
+.pill.analyzing,
+.pill.queued { background: var(--warn-soft); color: var(--warn); }
+
+.pill.failed { background: var(--critical-soft); color: var(--critical); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .row.pending .pill { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.55; } }
+}
