@@ -1,0 +1,7 @@
+{
+  "finding_rank": 3,
+  "repo": "scrooge/payment-service",
+  "found": false,
+  "searches_run": 5,
+  "_verified": "SYNTHETIC test fixture, not a real proven finding - built to exercise the mechanism_found=False / no_match_reason path (contracts.py v2's model_post_init validation) with an honest budget-exhausted outcome. Do not present this as a real gap in the demo."
+}
