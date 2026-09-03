@@ -36,6 +36,38 @@ artifact_reasons:          # re-creation artifacts, excluded from user-abandonme
   - "cs change payment method, new order will be created"
 reason_field: abandon_reason
 
+# Scope resolution (FR: prompt-scoped runs). BA-owned vocabulary — the resolver
+# invents nothing, it only matches a request against what is listed here.
+
+# Which funnel stage each analytics event belongs to. "after adding items to
+# cart" resolves through add_to_cart_button -> created -> the created->confirmed
+# transition. Without this the events match but anchor nothing.
+event_stage:
+  pharmacy.view.service_homepage:        created
+  pharmacy.view.search_result_page:      created
+  pharmacy.view.product_detail_page:     created
+  pharmacy.click.add_to_cart_button:     created
+  pharmacy.view.cart_review_page:        created
+  pharmacy.click.confirm_cart_button:    created
+  pharmacy.view.delivery_options_list:   created
+  pharmacy.view.payment_page:            created
+  pharmacy.click.confirm_payment_button: created
+  pharmacy.backend.transaction_abandoned: created
+  pharmacy.backend.transaction_confirmed: confirmed
+  pharmacy.backend.transaction_delivered: delivered
+
+# How people actually refer to each drill-down dimension. Nobody types
+# "stock_status"; they type "unfulfilled items" or "out of stock".
+dimension_aliases:
+  stock_status:          [stock, unfulfilled, unavailable, availability, fulfilment, fulfillment, kosong]
+  item_count:            [items, item, basket, quantity, multiple, cart size]
+  price_band:            [price, priced, expensive, cost, costly, mahal]
+  consultation_required: [prescription, prescriptions, rx, consultation, doctor, resep]
+  hour_of_day:           [hour, hourly, evening, morning, night, time of day, timing]
+  abandon_reason:        [reason, reasons, abandonment, abandoned]
+  pd_category:           [category, categories, product type]
+  delivery_outcome:      [delivery, delivered, cancelled, courier]
+
 # Code Scout routing: category -> candidate repos (exact-match keys; Appx A #2)
 routing:
   pharmacy_checkout:

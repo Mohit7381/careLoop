@@ -1,0 +1,144 @@
+"""Turn a user's sentence into constraints the pipeline can obey.
+
+    "why are users dropping off after adding items to cart"
+        -> from_stage=created, to_stage=confirmed,
+           matched_on=["pharmacy.click.add_to_cart_button"]
+
+This is deliberately deterministic. `phase1.largest_drop` picks the target gap
+by arithmetic, and that is the reason the headline number cannot be argued into
+existence — so a prompt is resolved into constraints and shown back for
+confirmation, never handed to the Analyst as prose to interpret.
+
+Resolution is transparent for the same reason: `matched_on` says which piece of
+journey vocabulary each decision came from, and `unresolved` names anything the
+user asked for that we could not honour, so a misreading is visible before it
+costs a run rather than after.
+"""
+from __future__ import annotations
+
+import re
+from typing import Any, Optional
+
+from app.schemas.contracts import RunScope
+
+_MIN_TOKEN = 4
+_STOP = {
+    "want", "data", "analysis", "why", "the", "for", "are", "users", "user",
+    "dropping", "drop", "dropped", "after", "before", "from", "into", "with",
+    "show", "give", "run", "please", "them", "this", "that", "what", "where",
+    "happening", "going", "look", "into", "much", "many", "just", "only",
+    "last", "past", "days", "day", "week", "weeks", "review", "reviews",
+}
+
+
+def _tokens(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z_]{%d,}" % _MIN_TOKEN, (text or "").lower())
+            if w not in _STOP}
+
+
+def _label_tokens(label: str) -> set[str]:
+    """Journey vocabulary is dotted and underscored — split on both."""
+    return {w for w in re.split(r"[._\s-]+", label.lower()) if len(w) >= _MIN_TOKEN}
+
+
+def _review_days(prompt: str) -> Optional[int]:
+    """"past 10-15 days" -> 15. A range resolves to its upper bound: the user is
+    describing roughly how far back to look, and fetching the wider window and
+    reporting the real span is honest, where fetching the narrower one silently
+    answers a different question."""
+    m = re.search(r"(?:last|past|previous)\s+(\d+)\s*(?:-|–|to)\s*(\d+)\s*day", prompt, re.I)
+    if m:
+        return max(int(m.group(1)), int(m.group(2)))
+    m = re.search(r"(?:last|past|previous)\s+(\d+)\s*day", prompt, re.I)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"(?:last|past|previous)\s+(\d+)\s*week", prompt, re.I)
+    if m:
+        return int(m.group(1)) * 7
+    return None
+
+
+def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
+                  available_dimensions: list[str]) -> RunScope:
+    """Resolve `prompt` against this journey's own vocabulary.
+
+    Nothing is invented: a stage has to be named in journey_cfg, a dimension has
+    to be one the AggregateTool can actually answer, and an event has to be one
+    the snapshot really carries.
+    """
+    scope = RunScope(prompt=prompt)
+    if not (prompt or "").strip():
+        return scope
+
+    words = _tokens(prompt)
+
+    # --- reviews: how far back ---
+    scope.review_days = _review_days(prompt)
+
+    # --- dimensions the user named, by name or by how people actually say it ---
+    aliases: dict[str, list[str]] = journey_cfg.get("dimension_aliases") or {}
+    lowered = (prompt or "").lower()
+    for dim in available_dimensions:
+        hit = None
+        if _label_tokens(dim) & words:
+            hit = dim
+        else:
+            for alias in aliases.get(dim, []):
+                # multi-word aliases ("out of stock") need a substring test
+                if (" " in alias and alias in lowered) or alias in words:
+                    hit = alias
+                    break
+        if hit:
+            scope.dimensions.append(dim)
+            scope.matched_on.append(f"dimension:{dim}" + ("" if hit == dim else f" (via '{hit}')"))
+
+    # --- which funnel transition ---
+    stages: list[str] = list(journey_cfg.get("stages") or [])
+    hit_stages = [st for st in stages if _label_tokens(st) & words]
+
+    # Events are the richer vocabulary: "adding items to cart" matches
+    # pharmacy.click.add_to_cart_button long before it matches any stage name.
+    event_stage = journey_cfg.get("event_stage") or {}
+    hit_events = [e for e in ct_event_names if _label_tokens(e) & words]
+    for ev in hit_events:
+        scope.matched_on.append(f"event:{ev}")
+
+    anchor: Optional[str] = None
+    if hit_events:
+        mapped = [event_stage.get(e) for e in hit_events if event_stage.get(e) in stages]
+        anchor = mapped[0] if mapped else None
+    if anchor is None and hit_stages:
+        anchor = hit_stages[0]
+
+    if anchor is not None:
+        i = stages.index(anchor)
+        # "after X" means the transition leaving X; if X is terminal, the one into it.
+        if i < len(stages) - 1:
+            scope.from_stage, scope.to_stage = stages[i], stages[i + 1]
+        elif i > 0:
+            scope.from_stage, scope.to_stage = stages[i - 1], stages[i]
+        scope.matched_on.append(f"stage:{anchor}")
+
+    # --- say what we could not honour ---
+    if not scope.is_scoped() and not hit_events:
+        scope.unresolved.append(
+            "nothing in the request matched this journey's stages, events or dimensions")
+    if hit_events and anchor is None:
+        scope.unresolved.append(
+            f"matched events {hit_events} but none maps to a funnel stage — "
+            f"add them to journey_events/event_stage in the journey config")
+    return scope
+
+
+def describe(scope: RunScope) -> str:
+    """One line a human can confirm or reject before the run starts."""
+    if not scope.is_scoped():
+        return "Could not scope this request — the full funnel will be analysed."
+    bits = []
+    if scope.from_stage:
+        bits.append(f"the {scope.from_stage} to {scope.to_stage} drop")
+    if scope.dimensions:
+        bits.append("cut by " + ", ".join(scope.dimensions))
+    if scope.review_days:
+        bits.append(f"reviews from the last {scope.review_days} days")
+    return "Analysing " + "; ".join(bits) + "."

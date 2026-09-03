@@ -23,6 +23,7 @@ class GraphState(TypedDict, total=False):
     status: str
     demo_mode: bool
     failed_stage: Optional[str]
+    scope: dict[str, Any]
 
     snapshot: dict[str, Any]           # Agent 1 (Fetcher) — Alief
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
@@ -44,6 +45,7 @@ def initial_state(
     journey: str = "pd_checkout",
     prev_window_start: Optional[str] = None,
     prev_window_end: Optional[str] = None,
+    scope: Optional[dict[str, Any]] = None,
 ) -> GraphState:
     return GraphState(
         run_id=run_id,
@@ -55,6 +57,7 @@ def initial_state(
         status="fetching",
         demo_mode=demo_mode,
         failed_stage=None,
+        scope=scope or {},
         snapshot={},
         findings=[],
         drilldown_trail=[],

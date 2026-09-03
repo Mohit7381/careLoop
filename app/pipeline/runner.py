@@ -78,6 +78,7 @@ def run_pipeline(
     journey: str = "pd_checkout",
     prev_window_start: str | None = None,
     prev_window_end: str | None = None,
+    scope: dict | None = None,
 ) -> None:
     """Synchronous — call via asyncio.to_thread from the API layer so the endpoint returns immediately."""
     run = session.get(AnalysisRun, run_id)
@@ -88,7 +89,8 @@ def run_pipeline(
     try:
         state = initial_state(
             run_id, window_start, window_end, demo_mode,
-            journey=journey, prev_window_start=prev_window_start, prev_window_end=prev_window_end,
+            journey=journey, prev_window_start=prev_window_start,
+            prev_window_end=prev_window_end, scope=scope,
         )
         final_state = compiled_graph.invoke(state)
 

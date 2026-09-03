@@ -66,6 +66,21 @@ def largest_drop(table: list[dict]) -> Optional[dict]:
     return worst
 
 
+def gap_for_transition(table: list[dict], from_stage: str, to_stage: str) -> Optional[dict]:
+    """The same shape largest_drop returns, for a transition the user asked for.
+
+    Deliberately NOT a search over the table for the biggest anything — the
+    stages are given, and the arithmetic is identical to largest_drop's, so a
+    scoped run is as un-arguable as an unscoped one.
+    """
+    for prev, cur in zip(table, table[1:]):
+        if prev["stage"] == from_stage and cur["stage"] == to_stage:
+            lost = prev["count"] - cur["count"]
+            return {"from_stage": prev["stage"], "to_stage": cur["stage"], "lost": lost,
+                    "share_of_prev": round(lost / prev["count"], 4) if prev["count"] else 0.0}
+    return None
+
+
 def cluster_reasons(reasons: list[ReasonRow], artifact_reasons: list[str]) -> dict:
     """Case-normalized reason clusters, with re-creation artifacts split out."""
     artifacts_norm = {normalize_reason(a) for a in artifact_reasons}

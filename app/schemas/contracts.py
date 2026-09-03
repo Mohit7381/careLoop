@@ -310,6 +310,30 @@ class Snapshot(BaseModel):
     previous_stages: list[SnapshotRow] = Field(default_factory=list)
 
 
+class RunScope(BaseModel):
+    """What a user asked for, resolved into constraints the pipeline can obey.
+
+    A free-text prompt must never reach the Analyst as prose: phase1.largest_drop
+    is deterministic, and that is load-bearing — it is why the headline number
+    cannot be argued into existence. So a prompt is resolved into this, shown
+    back to the user, and then applied as constraints.
+
+    Every field is optional; an unscoped run leaves them all None and behaves
+    exactly as before.
+    """
+
+    prompt: Optional[str] = None            # what the user actually typed
+    from_stage: Optional[str] = None        # target transition, overriding largest_drop
+    to_stage: Optional[str] = None
+    dimensions: list[str] = Field(default_factory=list)   # restrict the drill-down
+    review_days: Optional[int] = None       # "the last 10-15 days of reviews"
+    matched_on: list[str] = Field(default_factory=list)   # why the resolver chose this
+    unresolved: list[str] = Field(default_factory=list)   # asked for, could not honour
+
+    def is_scoped(self) -> bool:
+        return bool(self.from_stage or self.dimensions or self.review_days)
+
+
 class RunState(BaseModel):
     """The full state object threaded through the LangGraph pipeline.
 
@@ -333,6 +357,8 @@ class RunState(BaseModel):
     demo_mode: bool = True
     status: RunStatus = "queued"
     failed_stage: Optional[str] = None    # no-silent-partial-success rule
+
+    scope: RunScope = Field(default_factory=RunScope)
 
     snapshot: Snapshot = Field(default_factory=Snapshot)
     findings: list[Finding] = Field(default_factory=list)

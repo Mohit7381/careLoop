@@ -11,7 +11,11 @@ from app.db.base import SessionLocal, get_session
 from app.db.models import AnalysisRun
 from app.integrations.garuda_client import GarudaDeliveryError, send_report
 from app.pipeline.runner import run_pipeline
-from app.schemas.api import CreateRunRequest, CreateRunResponse, DeliverResponse, RunDetailResponse
+from app.agents.scope_resolver import describe, resolve_scope
+from app.journeys import load_journey
+from app.schemas.api import (CreateRunRequest, CreateRunResponse, DeliverResponse,
+                             ResolveScopeRequest, ResolveScopeResponse, RunDetailResponse)
+from app.schemas.contracts import RunScope
 
 router = APIRouter(prefix="/v1/analysis", tags=["analysis"])
 
@@ -32,16 +36,34 @@ def _default_window() -> tuple[str, str]:
 def _run_pipeline_in_new_session(
     run_id: int, window_start: str, window_end: str, demo_mode: bool,
     journey: str, prev_window_start: str | None, prev_window_end: str | None,
+    scope: dict | None = None,
 ) -> None:
     """A background asyncio task needs its own DB session — never share one across threads/tasks."""
     session = SessionLocal()
     try:
         run_pipeline(
             session, run_id, window_start, window_end, demo_mode,
-            journey=journey, prev_window_start=prev_window_start, prev_window_end=prev_window_end,
+            journey=journey, prev_window_start=prev_window_start,
+            prev_window_end=prev_window_end, scope=scope,
         )
     finally:
         session.close()
+
+
+def _resolve(journey: str, prompt: str | None, dimensions: list[str] | None) -> RunScope:
+    """Resolve a prompt against the journey's own vocabulary.
+
+    Explicit `dimensions` win over anything inferred from the prompt — an API
+    caller that names them is being specific on purpose.
+    """
+    cfg = load_journey(journey)
+    events = list((cfg.get("event_stage") or {}).keys())
+    scope = resolve_scope(prompt or "", cfg, events, cfg["drilldown_dimensions"]) \
+        if prompt else RunScope()
+    if dimensions:
+        scope.dimensions = list(dimensions)
+        scope.matched_on.append("dimensions: given explicitly")
+    return scope
 
 
 @router.post("/runs", response_model=CreateRunResponse, dependencies=[Depends(require_app_token)])
@@ -67,12 +89,13 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
             detail={"message": "a run for this window is already in progress", "run_id": existing.id},
         )
 
+    scope = _resolve(body.journey, body.prompt, body.dimensions)
     run = AnalysisRun(
         journey=body.journey,
         window_start=window_start,
         window_end=window_end,
         status="queued",
-        config={"dimensions": body.dimensions or []},
+        config={"dimensions": body.dimensions or [], "scope": scope.model_dump()},
     )
     session.add(run)
     session.commit()
@@ -81,11 +104,25 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     asyncio.create_task(
         asyncio.to_thread(
             _run_pipeline_in_new_session, run.id, window_start, window_end, settings.demo_mode,
-            body.journey, body.prev_window_start, body.prev_window_end,
+            body.journey, body.prev_window_start, body.prev_window_end, scope.model_dump(),
         )
     )
 
-    return CreateRunResponse(run_id=run.id, status="queued")
+    return CreateRunResponse(run_id=run.id, status="queued",
+                             scope=scope.model_dump(), scope_summary=describe(scope))
+
+
+@router.post("/runs/resolve-scope", response_model=ResolveScopeResponse,
+             dependencies=[Depends(require_app_token)])
+def resolve_scope_only(body: ResolveScopeRequest) -> ResolveScopeResponse:
+    """Show what a prompt was understood to mean, without running anything.
+
+    Resolution is deliberately deterministic and cheap, so the UI can confirm
+    the reading with the user before spending a run on a misinterpretation.
+    """
+    scope = _resolve(body.journey, body.prompt, None)
+    return ResolveScopeResponse(scope=scope.model_dump(), summary=describe(scope),
+                                matched_on=scope.matched_on, unresolved=scope.unresolved)
 
 
 def _read_artifact(run: AnalysisRun, kind: str) -> str | None:

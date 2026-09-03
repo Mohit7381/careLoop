@@ -9,7 +9,8 @@ magnitudes stay warehouse-only (bias rule). Quotes carry rating+date, never
 identity (PII scrubbed at ingest by the Fetcher).
 """
 from collections import defaultdict
-from typing import Any
+from datetime import date, timedelta
+from typing import Any, Optional
 
 from app.schemas.contracts import Finding, Voc, VocQuote
 
@@ -24,20 +25,54 @@ def classify_review(text: str, themes: list[dict]) -> str:
     return "unmapped"
 
 
-def run_voc(reviews: list[dict], journey_voc_cfg: dict, next_rank: int
-            ) -> tuple[list[Finding], Voc]:
+def filter_by_days(reviews: list[dict], days: Optional[int]) -> tuple[list[dict], dict]:
+    """Keep reviews from the last `days`, measured from the newest review present.
+
+    Anchored to the corpus, not to wall-clock now(): the fixture is a frozen
+    capture, and anchoring to today would silently return nothing the moment it
+    ages past the window. Returns the real span alongside, so a report can state
+    what it actually looked at rather than what was asked for.
+    """
+    if not days:
+        return reviews, {}
+    dated = [(str(r.get("at") or "")[:10], r) for r in reviews]
+    dated = [(d, r) for d, r in dated if len(d) == 10]
+    if not dated:
+        return reviews, {"review_window_days": days, "note": "no dated reviews; window ignored"}
+    newest = max(d for d, _ in dated)
+    y, m, dd = (int(x) for x in newest.split("-"))
+    cutoff = date(y, m, dd) - timedelta(days=days - 1)
+    kept = [r for d, r in dated if date(*(int(x) for x in d.split("-"))) >= cutoff]
+    return kept, {"review_window_days": days, "review_window_from": cutoff.isoformat(),
+                  "review_window_to": newest, "reviews_in_window": len(kept),
+                  "reviews_available": len(reviews)}
+
+
+def run_voc(reviews: list[dict], journey_voc_cfg: dict, next_rank: int,
+            themes_per_review: Optional[list[str]] = None,
+            extra_meta: Optional[dict] = None) -> tuple[list[Finding], Voc]:
     themes_cfg = journey_voc_cfg["themes"]
     threshold = int(journey_voc_cfg.get("escalation_threshold", 20))
     by_theme_cfg = {t["name"]: t for t in themes_cfg}
 
-    negatives = [r for r in reviews if r.get("score", 5) <= NEGATIVE_MAX_SCORE]
+    # themes_per_review lets the caller supply semantic classifications (one per
+    # review, same order); without it we fall back to the keyword lexicon.
+    assigned = list(themes_per_review) if themes_per_review else None
+    negatives, neg_themes = [], []
+    for i, r in enumerate(reviews):
+        if r.get("score", 5) > NEGATIVE_MAX_SCORE:
+            continue
+        negatives.append(r)
+        neg_themes.append(assigned[i] if assigned and i < len(assigned)
+                          else classify_review(r.get("text", ""), themes_cfg))
+
     buckets: dict[str, list[dict]] = defaultdict(list)
-    for r in negatives:
-        buckets[classify_review(r.get("text", ""), themes_cfg)].append(r)
+    for r, theme in zip(negatives, neg_themes):
+        buckets[theme if theme in by_theme_cfg or theme == "unmapped" else "unmapped"].append(r)
 
     voc = Voc(
         reviews_meta={"total": len(reviews), "negatives": len(negatives),
-                      "threshold": threshold},
+                      "threshold": threshold, **(extra_meta or {})},
         themes=[{"theme": name, "count": len(items),
                  "escalated": name != "unmapped" and len(items) > threshold}
                 for name, items in sorted(buckets.items(), key=lambda kv: -len(kv[1]))],

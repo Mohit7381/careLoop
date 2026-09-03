@@ -18,7 +18,7 @@ from typing import Any
 
 from app.agents.analyst.analyst import run_analyst
 from app.config import get_settings
-from app.integrations.sphere import SphereClient
+from app.integrations.sphere import SphereClient, make_use_case_llm
 from app.pipeline.state import GraphState
 from app.schemas.contracts import RunState
 
@@ -49,6 +49,8 @@ def analyst_node(state: GraphState) -> GraphState:
     run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
     llm = _demo_llm() if state.get("demo_mode", True) else _sphere_llm()
 
-    out = run_analyst(run_state, llm=llm)
+    voc_llm = make_use_case_llm(get_settings().llm_use_case_voc_theme_classification,
+                                bool(state.get("demo_mode", True)))
+    out = run_analyst(run_state, llm=llm, voc_llm=voc_llm)
 
     return {**state, **out.model_dump()}
