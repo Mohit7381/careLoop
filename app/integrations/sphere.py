@@ -56,3 +56,38 @@ class SphereClient:
                 raise FileNotFoundError(f"no replay fixtures for {use_case} under {REPLAY_DIR}")
             path = last[-1]
         return json.loads(path.read_text())
+
+
+SPHERE_IDS_PATH = Path("fixtures/pd_checkout/sphere_ids.json")
+
+
+def make_use_case_llm(use_case: str, demo_mode: bool):
+    """An `llm(ctx) -> dict` for one sphere use case, or None if unavailable.
+
+    Returning None rather than raising is deliberate: the Reporter and the PRD
+    generator both fall back to their deterministic renderers, and a missing
+    replay fixture or an unset token should degrade the prose, never fail the
+    run. Demo mode replays a recorded session; live mode calls sphere.
+    """
+    try:
+        ids = json.loads(SPHERE_IDS_PATH.read_text())
+        template_id = next(u["template_id"] for u in ids["use_cases"]
+                           if u["name"] == use_case)
+    except Exception:
+        return None
+
+    if demo_mode:
+        if not (Path("fixtures/llm_replay") / use_case).exists():
+            return None                      # nothing recorded yet
+        client = SphereClient(mode="replay")
+    else:
+        if not APP_TOKEN:
+            return None
+        client = SphereClient(mode="sphere")
+
+    def llm(ctx: dict[str, Any]) -> dict[str, Any]:
+        params = {k: (json.dumps(v) if isinstance(v, (dict, list)) else str(v))
+                  for k, v in ctx.items()}
+        return client.call(use_case, template_id, params)
+
+    return llm

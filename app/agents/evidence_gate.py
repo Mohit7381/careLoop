@@ -1,0 +1,63 @@
+"""Evidence gate for generated prose.
+
+The Analyst has been under this rule since day one: a finding may only cite
+numbers the model was actually shown. The Reporter's narrative and the PRD are
+the two places where a model writes free text that a human then reads, approves
+and forwards — so the same rule applies, checked the same way.
+
+Structural numbers are exempt (section numbers, FR-01, "at most 2 quotes"), as
+are dates, which are formatting rather than claims. Everything above
+STRUCTURAL_MAX has to be traceable to an input.
+
+Percentages are matched in both directions: a model shown a rate of 0.3654 may
+legitimately write "36.5%", and one shown 36.5 may write "0.365".
+"""
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from app.agents.analyst.validator import collect_numbers
+
+# Below this, a bare integer is assumed to be structure ("Section 3", "FR-07",
+# "up to 2 quotes", "a 5% uplift") rather than a claim about the data. Every
+# real magnitude in this pipeline — review counts, order counts, rates as
+# percentages — lands above it.
+STRUCTURAL_MAX = 20.0
+
+_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_LABELLED = re.compile(r"\b(?:FR|NFR|OQ|G)-?\d+\b", re.I)
+_NUMBER = re.compile(r"-?\d[\d,]*\.?\d*")
+
+
+def numbers_in_text(text: str) -> set[float]:
+    """Every number a reader would see as a magnitude."""
+    stripped = _LABELLED.sub(" ", _DATE.sub(" ", text or ""))
+    out: set[float] = set()
+    for raw in _NUMBER.findall(stripped):
+        try:
+            out.add(float(raw.replace(",", "")))
+        except ValueError:
+            continue
+    return out
+
+
+def _supported(value: float, allowed: set[float]) -> bool:
+    for a in allowed:
+        # exact, or the same quantity expressed as a percentage either way
+        for candidate in (a, a * 100.0, a / 100.0):
+            if abs(value - candidate) <= max(0.05, abs(candidate) * 0.001):
+                return True
+    return False
+
+
+def unsupported_numbers(text: str, inputs: Any) -> list[float]:
+    """Numbers in `text` that do not trace back to anything in `inputs`.
+
+    Empty list means the prose is fully grounded. Callers treat a non-empty
+    result as "do not ship this text", not as "correct it" — silently editing a
+    model's numbers would hide the fact that it invented one.
+    """
+    allowed = collect_numbers(inputs)
+    return sorted(v for v in numbers_in_text(text)
+                  if abs(v) > STRUCTURAL_MAX and not _supported(v, allowed))
