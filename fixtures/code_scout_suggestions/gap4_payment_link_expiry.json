@@ -1,0 +1,16 @@
+{
+  "finding_rank": 4,
+  "repo": "scrooge/payment-service",
+  "inventory": [
+    {
+      "file": "src/main/java/com/halodoc/scrooge/payment/service/PaymentLinkService.java",
+      "line": 97,
+      "snippet": "    public Payment getPaymentDetails(final String paymentLinkId) {\n        final PaymentLink paymentLink = paymentLinkDao.findByExternalId(paymentLinkId);\n        if (paymentLink.isActive() && paymentLink.isValid()) {\n            return paymentService.findByCustomerPaymentId(paymentLink.getCustomerPaymentId());\n        }\n        paymentLinkDao.expireLink(paymentLink.getCustomerPaymentId());\n        throw HalodocWebException.builder().statusCode(400).code(ErrorCode.PAYMNET_LINK_EXPIRED.getCode()).message(\"Payment link expired\")\n                                 .header(\"link expired\").build();\n    }"
+    }
+  ],
+  "searches_run": 3,
+  "verification_checks": {
+    "garuda": null
+  },
+  "_verified": "Live GitLab search 2026-09-03, project id 842 (scrooge/payment-service). Found via search term 'expire' -> PaymentLinkService.java. getPaymentDetails() silently expires an inactive/invalid payment link and throws an error, with zero notification/communication calls anywhere in the file (confirmed via full-file grep for 'notif|Communication|garuda|whatsapp|reminder', case-insensitive - only the expire+throw path matched). Never referenced by StubFeatureSuggestionAssessor - used specifically to test generalization beyond the two hardcoded areas via a simulated LLM response."
+}
