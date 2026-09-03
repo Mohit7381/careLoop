@@ -57,7 +57,9 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             "top_gap": top_gap,
             "phase1": phase1_summary,
             "drilldown_trail": [s.model_dump() for s in trail],
-            "allowed_dimensions": sorted(tool.whitelist),
+            # only dimensions that actually HAVE cohort data — asking for others wastes budget
+            "allowed_dimensions": tool.dimensions_with_data,
+            "dimensions_already_tried": sorted({s.dimension for s in trail}),
             "budget_remaining": budget - len(trail),
         }
         out = llm(ctx)
@@ -72,7 +74,8 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             question=nq.get("rationale", f"cut by {dim}"),
             dimension=dim,
             result_rows=result.get("rows", []),
-            note="rejected: not whitelisted" if "error" in result else
-                 ("distribution_only" if result.get("distribution_only") else None),
+            note=("no cohort data — pick from dimensions_with_data" if result.get("no_data")
+                  else "rejected: not whitelisted" if "error" in result
+                  else "distribution_only" if result.get("distribution_only") else None),
         ))
     return findings, trail

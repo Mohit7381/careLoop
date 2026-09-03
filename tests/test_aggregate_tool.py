@@ -27,3 +27,11 @@ def test_k_floor_suppresses_small_segments(cohort_cuts, journey_cfg):
     out = tool.aggregate("confirmed", "pd_category")
     small = [r for r in out["rows"] if r.get("segment") == "small_segment_example"]
     assert small and small[0]["suppressed"] is True
+
+
+def test_no_data_dimension_is_distinct_from_not_whitelisted(cohort_cuts, journey_cfg):
+    tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
+    out = tool.aggregate("confirmed", "platform")  # whitelisted, but no cohort data
+    assert out.get("no_data") is True
+    assert "platform" not in out["dimensions_with_data"]
+    assert "consultation_required" in out["dimensions_with_data"]

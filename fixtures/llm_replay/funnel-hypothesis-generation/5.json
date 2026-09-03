@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "price_band",
+  "rationale": "We still have a large unexplained loss: top_gap lost = 417,569 while reason clusters sum to user_total = 199,417 + artifact_total = 42,107 = 241,524, leaving 176,045 unexplained. Large explicit user reasons exist ('user abandon the cart' = 111,993; 'user clicked back' = 83,517). Consultation-required items convert worse (rx_gated entered = 255,293, converted = 76,641, rate = 0.3002 vs non_rx entered = 391,898, converted = 152,981, rate = 0.3904), but pd_category counts for consultation-like categories are small (Digital Clinic entered = 3,889; Mental Health entered = 1,075) relative to the full loss. A prior distribution-only cut by price_band shows substantial volume in higher bands (75k_200k entered = 90,851; gte_200k entered = 66,220; 25k_75k entered = 62,875; lt_25k entered = 24,769). Break down the created->confirmed funnel and the abandon_reason clusters by price_band (counts and conversion rates per band plus reason counts per band) so we can (a) allocate portions of the unexplained 176,045 loss across price bands, (b) see whether high-price orders have disproportionately low created->confirmed conversion or concentrate the large user reasons ('user abandon the cart' = 111,993; 'user clicked back' = 83,517), and (c) prioritize experiments (e.g., targeted payment options or discounts for bands with high unexplained loss)."
+ }
+}

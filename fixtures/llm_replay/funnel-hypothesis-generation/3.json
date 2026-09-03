@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "price_band",
+  "rationale": "There is a large unexplained loss between created and confirmed (top_gap lost = 417,569; reason clusters sum leaves 176,045 unexplained). User-initiated reasons are large (user_total = 199,417; specifically 'user abandon the cart' = 111,993 and 'user clicked back' = 83,517) and consultation items show worse conversion (rx_gated entered = 255,293, converted = 76,641, rate = 0.3002 vs non_rx entered = 391,898, converted = 152,981, rate = 0.3904). However, pd_category counts for consultation-like categories are small relative to the full loss (e.g., Digital Clinic entered = 3,889; Mental Health entered = 1,075), so consultation requirement alone may not explain the full 417,569 loss. Breaking the created->confirmed funnel (and the abandon_reason distribution) down by price_band will: (a) allocate portions of the unexplained 176,045 loss across price bands, (b) show whether high-price orders have disproportionately low created->confirmed conversion or concentrate the large user reasons ('user abandon the cart' = 111,993; 'user clicked back' = 83,517), and (c) indicate whether price-sensitivity / payment friction is a plausible correlate to target with experiments (e.g., targeted discounts, alternative payment options, price transparency). Allowed dimensions tried so far: abandon_reason, consultation_required, pd_category; price_band is the remaining relevant cut. Budget remaining = 7."
+ }
+}

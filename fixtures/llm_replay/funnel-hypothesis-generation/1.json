@@ -1,0 +1,45 @@
+{
+ "done": false,
+ "findings": [
+  {
+   "stage": "created->confirmed (overall)",
+   "evidence": [
+    "created = 647191",
+    "confirmed = 229622",
+    "conversion_from_previous = 0.3548",
+    "top_gap lost = 417569",
+    "top_gap share_of_prev = 0.6452"
+   ],
+   "segments": [
+    "overall"
+   ],
+   "confidence": "high",
+   "hypothesis": "A large majority of drop is happening between created and confirmed (417,569 lost; conversion 0.3548). This loss likely contains multiple distinct reasons (both user-initiated and artifact), so the next useful step is to attribute that loss to specific abandon_reason categories to prioritize interventions.",
+   "confirm_via": "Drill the created->confirmed funnel down by abandon_reason to observe counts per reason; then run targeted experiments (example: for the top user-abandon reason, A/B test a cart-save or proactive recovery prompt and measure lift in created->confirmed conversion)."
+  },
+  {
+   "stage": "created->confirmed (reason clusters coverage)",
+   "evidence": [
+    "user_total = 199417",
+    "artifact_total = 42107",
+    "user_reasons: user abandon the cart = 111993",
+    "user_reasons: user clicked back = 83517",
+    "user_reasons: items unavailable = 3907",
+    "artifact_reasons: address changed = 35111",
+    "artifact_reasons: add items = 6996",
+    "artifact_share = 0.1743",
+    "top_gap lost = 417569"
+   ],
+   "segments": [
+    "known_reason_clusters"
+   ],
+   "confidence": "medium",
+   "hypothesis": "The pre-aggregated reason clusters account for 199,417 + 42,107 = 241,524 of the 417,569 created->confirmed losses, leaving 176,045 unaccounted for in the provided clusters. The unexplained portion may be concentrated in other abandon_reason categories (e.g., payment failures, price shock, session timeout) or in uncaptured artifact/user labels.",
+   "confirm_via": "Drill down by abandon_reason to allocate the remaining 176,045 losses across explicit reasons; follow with experiments per dominant reason (e.g., fix payment friction and measure conversion lift for that reason-segment)."
+  }
+ ],
+ "next_question": {
+  "dimension": "abandon_reason",
+  "rationale": "Reason clusters in phase1 already show user_total = 199,417 and artifact_total = 42,107 (artifact_share = 0.1743) but those sum to only 241,524 of the 417,569 lost between created and confirmed \u2014 leaving 176,045 unexplained. Breaking the created->confirmed funnel down by abandon_reason will (a) allocate the unexplained losses to explicit reasons, (b) show which specific user reasons (e.g., 'user abandon the cart' vs payment failures) actually dominate, and (c) enable targeted experiments per top reason."
+ }
+}

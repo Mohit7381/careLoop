@@ -1,0 +1,44 @@
+{
+ "done": false,
+ "findings": [
+  {
+   "stage": "created->confirmed",
+   "evidence": [
+    "top_gap: lost: 417569",
+    "top_gap: share_of_prev: 0.6452",
+    "funnel: stage created count 647191",
+    "funnel: stage confirmed count 229622",
+    "funnel: confirmed conversion_from_previous 0.3548"
+   ],
+   "segments": [
+    "overall"
+   ],
+   "confidence": "high",
+   "hypothesis": "There is a large overall drop between created and confirmed (64.52% of created orders lost). This pattern is correlated with broad checkout friction or buyer second thoughts across the catalog rather than a small technical artifact visible in the delivered stage.",
+   "confirm_via": "Run a randomized experiment that applies a generic friction-reduction treatment (e.g., persistent cart + one-click confirm flow + clearer price/fees summary) vs control across all users and measure change in created->confirmed conversion. If the treatment increases conversion materially relative to control, this supports the friction hypothesis."
+  },
+  {
+   "stage": "created->confirmed",
+   "evidence": [
+    "reason_clusters: user_total 199417",
+    "reason_clusters: artifact_total 42107",
+    "reason_clusters: artifact_share 0.1743",
+    "reason_clusters: user abandon the cart 111993",
+    "reason_clusters: user clicked back 83517",
+    "reason_clusters: address changed 35111",
+    "reason_clusters: add items 6996",
+    "reason_clusters: items unavailable 3907"
+   ],
+   "segments": [
+    "overall"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Most captured reasons for the created->confirmed loss are user-initiated (user_total 199417) rather than artifact issues (artifact_total 42107), suggesting user behavior (cart abandonment / navigation away) is a major correlate of the gap. However, the reason clusters sum (199417 + 42107 = 241524) explains only part of the total lost (417569), so other uncaptured reasons are also present.",
+   "confirm_via": "Drill down by product segment (or run targeted experiments per segment) to see whether user-initiated abandonment concentrates in specific product categories or price bands. Alternatively, run an experiment showing tailored recovery nudges (e.g., exit intent / persistent cart reminders) to a random subset of users who start checkout; measure whether confirmed counts increase relative to control to validate that user-initiated abandonment is addressable."
+  }
+ ],
+ "next_question": {
+  "dimension": "pd_category",
+  "rationale": "We need to localize where the unexplained losses and the heavy user-initiated abandons are concentrated. Breaking the created->confirmed funnel and reason clusters down by pd_category will show whether a few product categories drive most of the drop (and whether those categories align with user abandon reasons), which informs whether product-targeted fixes (inventory, pricing, content, consultation prompts) or broad UX fixes are the right priority."
+ }
+}

@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "consultation_required",
+  "rationale": "We still have a large unexplained loss: top_gap shows 417,569 lost between created and confirmed, while reason clusters sum to only 241,524 (user_total = 199,417 + artifact_total = 42,107) leaving 176,045 unexplained. The pd_category breakdown includes categories that plausibly require consultation (e.g., Digital Clinic: 3889 entered; Mental Health: 1075 entered) which could concentrate user-initiated abandons. Breaking the created->confirmed funnel and reason clusters by consultation_required will show whether consultation-required items account for a disproportionate share of the 417,569 loss and of the heavy user reasons (e.g., 'user abandon the cart' = 111,993; 'user clicked back' = 83,517). This will inform whether product-level fixes around consultation flow (product-targeted) or broader UX/checkout fixes are the right priority."
+ }
+}

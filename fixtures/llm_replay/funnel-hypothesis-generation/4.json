@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "platform",
+  "rationale": "There is a large unexplained loss between created -> confirmed (top_gap lost = 417,569) while reason clusters only account for 241,524 (user_total = 199,417 + artifact_total = 42,107), leaving 176,045 unexplained. Large user reasons exist (\"user abandon the cart\" = 111,993; \"user clicked back\" = 83,517). Consultation-required items convert worse (rx_gated entered = 255,293, converted = 76,641, rate = 0.3002 vs non_rx entered = 391,898, converted = 152,981, rate = 0.3904) but consultation-like pd_category counts (e.g., Digital Clinic entered = 3,889; Mental Health entered = 1,075) are small relative to the full loss. A platform breakdown (e.g., iOS app / Android app / mobile web / desktop) can show whether the unexplained 176,045 loss and the big user-initiated reasons are concentrated on a particular platform \u2014 which would point to platform-specific payment/UX fixes (vs product-level fixes). If we see a platform with a high share of created sessions but a much lower created->confirmed conversion (or a high share of the unexplained loss), that would prioritize platform-targeted experiments (e.g., fix mobile payment flow, instrument checkout errors, show platform-specific messaging)."
+ }
+}

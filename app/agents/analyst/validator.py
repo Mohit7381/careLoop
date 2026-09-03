@@ -5,9 +5,30 @@ trail is rejected before it reaches RunState. "Insufficient data" is a valid
 finding; an uncited claim is not. Patterns are correlations, never causes —
 `confirm_via` is therefore mandatory and must be non-trivial.
 """
+from typing import Any, Optional
+
 from app.schemas.contracts import DrilldownStep, Finding, Snapshot
 
 _TOL = 1e-6
+
+
+def collect_numbers(obj: Any) -> set[float]:
+    """Every numeric leaf in an arbitrary dict/list — used so the validator
+    accepts any number the model was actually SHOWN (phase-1 summary etc.),
+    not only raw snapshot rows. Cluster totals like 111,993 are legitimate
+    citations because the model received them."""
+    out: set[float] = set()
+    if isinstance(obj, bool):
+        return out
+    if isinstance(obj, (int, float)):
+        out.add(float(obj))
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            out |= collect_numbers(v)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            out |= collect_numbers(v)
+    return out
 
 
 def _known_numbers(snapshot: Snapshot, trail: list[DrilldownStep]) -> set[float]:
@@ -27,7 +48,8 @@ def _known_numbers(snapshot: Snapshot, trail: list[DrilldownStep]) -> set[float]
 
 
 def validate_finding(finding: Finding, snapshot: Snapshot,
-                     trail: list[DrilldownStep]) -> tuple[bool, str]:
+                     trail: list[DrilldownStep],
+                     shown: Optional[set[float]] = None) -> tuple[bool, str]:
     """Returns (valid, reason). VoC findings cite review counts; warehouse
     findings must cite at least one number that exists in the provided data."""
     if not finding.confirm_via or len(finding.confirm_via.strip()) < 10:
@@ -40,7 +62,7 @@ def validate_finding(finding: Finding, snapshot: Snapshot,
 
     if not finding.evidence:
         return False, "warehouse finding with no evidence items"
-    known = _known_numbers(snapshot, trail)
+    known = _known_numbers(snapshot, trail) | (shown or set())
     for item in finding.evidence:
         if any(abs(item.value - k) <= _TOL * max(1.0, abs(k)) for k in known):
             return True, "ok"
@@ -54,9 +76,10 @@ def validate_finding(finding: Finding, snapshot: Snapshot,
 
 
 def filter_findings(findings: list[Finding], snapshot: Snapshot,
-                    trail: list[DrilldownStep]) -> tuple[list[Finding], list[dict]]:
+                    trail: list[DrilldownStep],
+                    shown: Optional[set[float]] = None) -> tuple[list[Finding], list[dict]]:
     kept, rejected = [], []
     for f in findings:
-        ok, why = validate_finding(f, snapshot, trail)
+        ok, why = validate_finding(f, snapshot, trail, shown)
         (kept if ok else rejected).append(f if ok else {"finding": f.hypothesis[:80], "reason": why})
     return kept, rejected
