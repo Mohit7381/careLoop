@@ -1,11 +1,37 @@
 """
-The shared state contract between CareLoop's four agents.
+The shared state contract between CareLoop's four agents — v3.
 
-This module is the single source of truth for the shape of `findings[]`
-and `code_gaps[]` that cross team boundaries (Analyst -> Code Scout -> Reporter
--> PRD Generator). Do not change field names here without syncing with
-Nakul (Analyst) and Harshit (Code Scout) — the pipeline validates against
-these models at each node boundary.
+v3 = Mohit's v2 (adopted structurally intact) + the eight alignment decisions
+recorded in the TCD, Appendix A ("State-contract alignment", 2026-09-03):
+
+  1. Finding.confidence is Literal["high","medium","low"] — the live sphere
+     template (21687 v4) enforces this enum in its strict output schema; a
+     float can never arrive from the LLM.
+  2. Finding.stage / CodeGap.stage is `str`, validated at the node boundary
+     against the ACTIVE journey's routing-table keys (config/journeys/*.yaml)
+     via `validate_routing_stage()` — the routing-category CONCEPT is kept
+     exactly as v2 designed it; only the vocabulary moves to config (FR9:
+     adding a journey is a config drop, zero code change).
+  3. RunStatus gains fetching/scanning_code/drafting_prd (UI tracker parity).
+  4. RunState gains journey, demo_mode, failed_stage, prev_window_start/end.
+  5. gap_class three-way enum is enforced HERE (model_post_init), not in the
+     LLM output schema (gpt-5-mini strict mode cannot express nullable enums).
+  6. Golden-run target is the PD fixture set (see fixtures/pd_checkout/).
+  7. Cohort-cut slices are served by the aggregate() tool directly from
+     fixture files — they are NOT carried in Snapshot.
+  8. StageDelta gains `maturing` — `delivered` is right-censored (94.5% vs
+     69.2% delivered-of-confirmed across the two frozen windows); a naive
+     WoW delta reports a phantom "delivery collapse" every week.
+  9. CodeGap gains `remedies[]` — the Remedy Loop (2026-09-03): after the
+     mechanism is located, a proposer LLM turn suggests <=3 code-verifiable
+     remedies; a verifier turn checks each against the source (search) and
+     returns exists | absent | partial, iterating once on partial/ambiguous
+     results. A remedy verified ABSENT is the strongest PRD input there is;
+     one that EXISTS kills a fix-proposal before it embarrasses anyone.
+
+Do not change field names here without syncing with Nakul (Analyst) and
+Harshit (Code Scout) — the pipeline validates against these models at each
+node boundary.
 """
 from typing import Any, Literal, Optional
 
@@ -13,16 +39,25 @@ from pydantic import BaseModel, Field
 
 FindingOrigin = Literal["warehouse", "voc"]
 GapClass = Literal["logic_flaw", "missing_retention_hook", "ux_gap"]
-RunStatus = Literal["queued", "extracting", "analyzing", "reporting", "completed", "failed"]
-
-# Canonical routing-table keys (rev 2, per Harshit) — exact match, no fuzzy substring lookup.
-# Finding.stage MUST be one of these; it is a ROUTING CATEGORY, not a funnel-stage id. The
-# specific funnel stage (e.g. "payment_processing") lives in the Fetcher's Snapshot and in the
-# finding's own hypothesis/evidence text — a finding whose funnel drop is at "payment_processing"
-# can still route to stage="consultation" if that's where the owning code actually lives (the
-# proven demo example: the abandon-kill script lives in ConsultationDao, not payment-service).
-RoutingStage = Literal["consultation", "pharmacy_checkout", "payments", "re_engagement"]
+Confidence = Literal["high", "medium", "low"]
+RunStatus = Literal[
+    "queued", "fetching", "analyzing", "scanning_code",
+    "reporting", "drafting_prd", "completed", "failed",
+]
 NoMatchReason = Literal["no_results", "budget_exhausted", "ambiguous"]
+RemedyStatus = Literal["exists", "absent", "partial"]
+
+_GAP_CLASSES = {"logic_flaw", "missing_retention_hook", "ux_gap"}
+
+
+def validate_routing_stage(stage: str, journey_routing_keys: list[str]) -> str:
+    """Boundary check replacing v2's hardcoded RoutingStage Literal (decision #2)."""
+    if stage not in journey_routing_keys:
+        raise ValueError(
+            f"stage '{stage}' is not a routing category of the active journey "
+            f"(expected one of {sorted(journey_routing_keys)})"
+        )
+    return stage
 
 
 class SegmentFilter(BaseModel):
@@ -31,27 +66,19 @@ class SegmentFilter(BaseModel):
 
 
 class EvidenceItem(BaseModel):
-    type: str  # e.g. "snapshot", "drilldown"
+    type: str  # "snapshot" | "drilldown"
     metric: str
     value: float
 
 
 class Finding(BaseModel):
-    """
-    Output of Agent 2 (Analyst). Consumed by Agent 3 (Code Scout).
-
-    origin drives which optional fields are populated:
-      - "warehouse": segments, evidence, drilldown_ref
-      - "voc": theme, theme_search_terms, review_count, top_quotes
-    `origin` is also carried through to CodeGap and read by the Reporter, which needs it to
-    phrase a finding as a funnel number vs. "N users report X".
-    """
+    """Output of Agent 2 (Analyst). Consumed by Agent 3 (Code Scout)."""
 
     rank: int
     origin: FindingOrigin
-    stage: RoutingStage
+    stage: str  # routing category — validate with validate_routing_stage()
     hypothesis: str
-    confidence: float
+    confidence: Confidence
     confirm_via: str
 
     # warehouse-origin fields
@@ -72,40 +99,50 @@ class Finding(BaseModel):
 
 
 class DrilldownStep(BaseModel):
-    """Agent 2 phase-2 whitelisted aggregate() drill-down trail."""
-
     question: str
     dimension: str
     result_rows: list[dict[str, Any]] = Field(default_factory=list)
     note: Optional[str] = None
 
 
+class Remedy(BaseModel):
+    """One candidate improvement, proposed from the located mechanism and
+    then VERIFIED against the source. `signature` is the code-verifiable
+    description the verifier searches for (e.g. "a notification/Garuda call
+    inside the abandon batch path")."""
+
+    proposal: str
+    signature: str
+    search_terms: list[str] = Field(default_factory=list)
+    status: Optional[RemedyStatus] = None      # None = not yet verified
+    evidence_file: Optional[str] = None        # set when exists/partial
+    evidence_line: Optional[int] = None
+    evidence_snippet: Optional[str] = None     # cap ~10 lines
+    searched_terms: list[str] = Field(default_factory=list)  # audit trail
+    iterations: int = 0
+
+
 class CodeGap(BaseModel):
-    """
-    Output of Agent 3 (Code Scout). Consumed by Reporter + PRD Generator.
-
-    mechanism_found=False is a first-class outcome (mirrors the Analyst's "insufficient data"
-    rule) — gap_class must be null and no_match_reason must be set when that happens. The
-    ~5-searches/finding budget is tracked via searches_run for the risk register.
-    """
-
     finding_rank: int
     origin: FindingOrigin
-    stage: RoutingStage
+    stage: str  # routing category — validate with validate_routing_stage()
     service: str
     repo: str
 
     mechanism_found: bool
-    gap_class: Optional[GapClass] = None  # null when mechanism_found = False
+    gap_class: Optional[GapClass] = None
     gap_statement: str
     file: Optional[str] = None
     line: Optional[int] = None
-    snippet: Optional[str] = None  # cap ~15 lines / 800 chars — PRD-generation token budget
+    snippet: Optional[str] = None  # cap ~15 lines / 800 chars
     proposed_change_location: Optional[str] = None
 
     search_terms_used: list[str] = Field(default_factory=list)
     searches_run: int = 0
-    no_match_reason: Optional[NoMatchReason] = None  # required non-null when mechanism_found = False
+    no_match_reason: Optional[NoMatchReason] = None
+
+    # Remedy Loop output (decision #9). Only populated when mechanism_found.
+    remedies: list[Remedy] = Field(default_factory=list)
 
     def model_post_init(self, __context: Any) -> None:
         if self.mechanism_found and self.gap_class is None:
@@ -120,6 +157,9 @@ class StageDelta(BaseModel):
     previous_rate: float
     current_rate: float
     delta_pp: float
+    # Decision #8: right-censored stages (e.g. `delivered`) — the current
+    # window hasn't matured; Reporter must exclude or label, never compare raw.
+    maturing: bool = False
 
 
 class AdoptionDelta(BaseModel):
@@ -137,8 +177,6 @@ class VocThemeDelta(BaseModel):
 
 
 class TrendReport(BaseModel):
-    """Sits between Code Scout and PRD Generator. Owned by Mohit."""
-
     deltas: list[StageDelta] = Field(default_factory=list)
     adoption: list[AdoptionDelta] = Field(default_factory=list)
     voc_theme_deltas: list[VocThemeDelta] = Field(default_factory=list)
@@ -180,7 +218,7 @@ class CtEventRow(BaseModel):
 
 
 class Snapshot(BaseModel):
-    """Output of Agent 1 (Fetcher). Owned by Alief."""
+    """Output of Agent 1 (Fetcher). Cohort cuts intentionally NOT here (decision #7)."""
 
     stages: list[SnapshotRow] = Field(default_factory=list)
     segments: list[str] = Field(default_factory=list)
@@ -193,9 +231,14 @@ class RunState(BaseModel):
     """The full state object threaded through the LangGraph pipeline."""
 
     run_id: int
+    journey: str = "pd_checkout"          # decision #4
     window_start: str
     window_end: str
+    prev_window_start: Optional[str] = None
+    prev_window_end: Optional[str] = None
+    demo_mode: bool = True
     status: RunStatus = "queued"
+    failed_stage: Optional[str] = None    # no-silent-partial-success rule
 
     snapshot: Snapshot = Field(default_factory=Snapshot)
     findings: list[Finding] = Field(default_factory=list)
