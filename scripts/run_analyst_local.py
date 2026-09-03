@@ -1,9 +1,10 @@
 """Local end-to-end Analyst run: real sphere LLM, frozen fixtures.
 
     LLM_MODE=sphere SPHERE_APP_TOKEN=... python scripts/run_analyst_local.py
+    LLM_MODE=replay python scripts/run_analyst_local.py          # offline, deterministic
 
-Also records every LLM response to fixtures/llm_replay/funnel-hypothesis-generation/
-so the demo's replay mode has real material.
+Add RECORD_REPLAY=1 to a live run to (re)record fixtures/llm_replay/ — off by
+default so an exploratory live run never clobbers the demo's frozen session.
 """
 import json
 import os
@@ -23,13 +24,18 @@ TEMPLATE = next(u["template_id"] for u in IDS["use_cases"]
                 if u["name"] == "funnel-hypothesis-generation")
 
 client = SphereClient()
-REPLAY.mkdir(parents=True, exist_ok=True)
+# Recording is OPT-IN: a plain live run must not silently overwrite the
+# committed replay fixtures the demo depends on.
+RECORD = os.environ.get("RECORD_REPLAY") == "1"
+if RECORD:
+    REPLAY.mkdir(parents=True, exist_ok=True)
 counter = {"n": 0}
 
 def llm(ctx: dict) -> dict:
     out = client.call("funnel-hypothesis-generation", TEMPLATE,
                       {"analysis_context": json.dumps(ctx)})
-    (REPLAY / f"{counter['n']}.json").write_text(json.dumps(out, indent=1))
+    if RECORD:
+        (REPLAY / f"{counter['n']}.json").write_text(json.dumps(out, indent=1))
     counter["n"] += 1
     q = (out.get("next_question") or {})
     print(f"  [LLM turn {counter['n']}] done={out.get('done')} "
