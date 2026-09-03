@@ -1,0 +1,88 @@
+# Journey #1 — pharmacy delivery (team decision 2026-09-03).
+# A journey is configuration, not code (FR9): the five pipeline agents read
+# everything journey-specific from this file.
+name: pd_checkout
+description: Pharmacy delivery order journey — cart to delivered medicine
+
+stages:            # ordered funnel stages; names match Fetcher's SnapshotRow.stage
+  - created
+  - confirmed
+  - delivered
+
+maturing_stages:   # right-censored — Reporter labels, never raw-compares (Appx A #8)
+  - delivered
+
+# Analyst phase-2 drill-down whitelist (aggregate() rejects anything else)
+drilldown_dimensions:
+  - pd_category
+  - price_band
+  - consultation_required
+  - abandon_reason
+  - platform
+  - hour_of_day
+  - item_count
+  - stock_status
+
+# Recorded-reason handling (phase 1)
+artifact_reasons:          # re-creation artifacts, excluded from user-abandonment rates
+  - "address changed"
+  - "add items"
+  - "halodoc+ recreate"
+  - "cs change payment method, new order will be created"
+reason_field: abandon_reason
+
+# Code Scout routing: category -> candidate repos (exact-match keys; Appx A #2)
+routing:
+  pharmacy_checkout:
+    - timor/oms
+    - timor/fulfilment
+  payments:
+    - scrooge/payment-service
+    - timor/oms
+  delivery:
+    - derawan/courier-service
+    - transformers/delivery-system
+  stock:
+    - timor/inventory
+    - timor/fulfilment
+  re_engagement:
+    - transformers/garuda
+  consultation:            # rx_gated segment leads back into the consult flow
+    - bintan/consultation
+
+# VoC (phase 3): priority-ordered lexicon — FIRST match wins (single primary
+# theme per review; counts cannot double-trigger). BA-owned.
+voc:
+  app_id: com.linkdokter.halodoc.android
+  lang: id
+  country: id
+  escalation_threshold: 20      # themes with MORE than this many negatives escalate
+  themes:
+    - name: payment/refund
+      routing_stage: payments
+      search_terms: [payment_failed, refund, abandon, "payment timeout"]
+      keywords: [refund, pembayaran, bayar, "dana tidak", uang, saldo, tagihan, "gagal bayar", potong]
+    - name: consultation/doctor
+      routing_stage: consultation
+      search_terms: ["session end", "doctor response", missed_by_doctor]
+      keywords: [dokter, konsul, "sesi berakhir", resep]
+    - name: delivery/order
+      routing_stage: delivery
+      search_terms: ["delivery status", "courier assign", reassign]
+      keywords: [kurir, kirim, pesanan, sampai, antar, driver, ekspedisi]
+    - name: stock/medicine
+      routing_stage: stock
+      search_terms: [stock, unavailable, inventory]
+      keywords: [stok, "obat kosong", "apotek tutup", tersedia]
+    - name: app/technical
+      routing_stage: pharmacy_checkout
+      search_terms: [error, crash, timeout]
+      keywords: [error, aplikasi, login, otp, loading, crash, bug, verifikasi, update]
+    - name: cs/support
+      routing_stage: re_engagement
+      search_terms: [escalation, ticket]
+      keywords: ["customer service", "cs ", bantuan, "respon lambat"]
+    - name: price
+      routing_stage: pharmacy_checkout
+      search_terms: [pricing, fee, delivery_fee]
+      keywords: [mahal, harga, ongkir, "biaya admin"]

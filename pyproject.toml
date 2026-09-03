@@ -1,0 +1,12 @@
+[project]
+name = "careloop-service"
+version = "0.1.0"
+description = "CareLoop — journey drop-off analysis agent pipeline (Halodoc hackathon)"
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2.5", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
