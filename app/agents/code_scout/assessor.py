@@ -36,11 +36,13 @@ class StubCodeGapAssessor:
 
     assess() below is hand-written against the two real candidates found via
     live GitLab search on 2026-09-03. GAP 1 (ConsultationDao) is fully
-    hand-verified per the plan. GAP 2 (BaseCancellationTypeAdapterService) is
-    a real, weaker candidate - communication does fire on abandonment, so the
-    actual gap (if any) is about notification intent, not an outright missing
-    hook. Flag that distinction before using it in the live demo; don't
-    upgrade its confidence just because the stub found a file.
+    hand-verified per the plan. GAP 2 (BaseCancellationTypeAdapterService) was
+    CORRECTED 2026-09-03 (Harshit, PR #3): the original candidate
+    (cancelOrderAndNotifyUser:208) was a sibling method never actually called
+    by the timer job. The real mechanism is abandonOrderV2:298 — the method
+    the timer-driven AbandonOrderService actually calls — confirmed via full
+    call-chain trace + grep to call zero notification methods. Now a clean,
+    fully confirmed gap like GAP 1, not a weaker candidate.
     """
 
     def propose_search_terms(self, finding: Finding) -> list[str]:
@@ -64,13 +66,13 @@ class StubCodeGapAssessor:
             return GapAssessment(
                 gap_class="missing_retention_hook",
                 gap_statement=(
-                    "A communication does fire on system abandonment "
-                    "(sendCommunication / notifyUsersWhatsapp), but it reads as a "
-                    "generic cancellation notice, not a cart-recovery nudge - needs "
-                    "confirming against the actual template content before the PRD "
-                    "claims this as a clean missing-hook gap."
+                    "abandonOrderV2 — the method the timer-driven abandon job actually calls — "
+                    "reverses benefits/payment-links/delivery-fee and marks the order failed, but "
+                    "calls zero notification/communication methods anywhere in its body. Garuda is "
+                    "never called before the kill; sendCommunication exists in this same file but "
+                    "82 lines away, in an unrelated method never reached by this path."
                 ),
-                proposed_change_location=f"{file}: review the notification template used here",
+                proposed_change_location=f"{file}: call Garuda before abandonOrderV2 marks the order failed",
             )
         return GapAssessment(
             gap_class="ux_gap",
