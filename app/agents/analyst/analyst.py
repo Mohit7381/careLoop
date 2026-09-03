@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 
 from app.agents.analyst import phase1
 from app.agents.analyst.aggregate_tool import AggregateTool
+from app.agents.analyst.journey_events import journey_events_for
 from app.agents.analyst.phase2 import run_drilldown
 from app.agents.analyst.phase3_voc import corroborate, run_voc
 from app.agents.analyst.validator import collect_numbers, filter_findings
@@ -56,6 +57,9 @@ def run_analyst(state: RunState,
     kept, rejected = filter_findings(findings, state.snapshot, trail, shown)
     for f in kept:
         validate_routing_stage(f.stage, routing_keys)
+        # Decision #11 - real analytics event names, better GitLab search
+        # seed material for Code Scout than hypothesis-prose splitting.
+        f.journey_events = journey_events_for(f, state.snapshot.ct_events)
 
     # ---- phase 3: VoC ----
     voc_findings: list = []

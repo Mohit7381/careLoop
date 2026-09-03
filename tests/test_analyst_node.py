@@ -31,6 +31,9 @@ def test_golden_run(cohort_cuts, reviews):
     # warehouse finding survived the evidence gate
     wh = [f for f in out.findings if f.origin == "warehouse"]
     assert wh and wh[0].stage == "pharmacy_checkout"
+    # journey_events populated from real ct_events (decision #11) - "orders"
+    # in the hypothesis stems to the fixture's order_placed/order_abandoned
+    assert "order_placed" in wh[0].journey_events or "order_abandoned" in wh[0].journey_events
     # VoC escalations appended after warehouse ranks
     voc = [f for f in out.findings if f.origin == "voc"]
     assert {f.theme for f in voc} == {"payment/refund", "consultation/doctor"}

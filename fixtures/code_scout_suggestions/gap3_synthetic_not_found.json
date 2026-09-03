@@ -1,0 +1,7 @@
+{
+  "finding_rank": 3,
+  "repo": "scrooge/payment-service",
+  "inventory": [],
+  "searches_run": 8,
+  "_verified": "SYNTHETIC test fixture, not a real proven finding - built to exercise the 'explored, found nothing worth suggesting' path (empty inventory -> zero suggestions, not a fabricated one). Do not present this as a real gap in the demo."
+}

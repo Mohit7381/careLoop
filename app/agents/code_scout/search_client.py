@@ -10,10 +10,23 @@ Two implementations share the same Protocol:
     search ever runs. Confirmed reproducing the hand-verified example
     exactly: bintan/consultation -> ConsultationDao.java:146,
     GET_ABANDON_CONSULTATION.
+
+Rev 2 (PR #3 review): two fixes carried over from the parallel Rev 3 attempt
+in PR #3, ported onto this (the merged) find_gap()-based architecture:
+  1. Resilience - every `requests` call is now wrapped and raises
+     CodeScoutExternalError instead of letting a raw RequestException /
+     KeyError propagate. A single bad search term no longer aborts the
+     whole find_gap() call (review: "one bad HTTP call kills the whole
+     run" - see errors.py).
+  2. Path filtering - `_first_source_hit()` rejects docs/tests so a search
+     term can't ground a gap in AGENTS.md or a *Test.java file (live-
+     verified against gitlab.devops.mhealth.tech/timor/oms: unfiltered,
+     several real search terms hit context/*.md before any real source).
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,7 +35,35 @@ from urllib.parse import quote
 
 import requests
 
+from app.agents.code_scout.errors import CodeScoutExternalError
+
+logger = logging.getLogger(__name__)
+
 SEARCH_BUDGET_PER_REPO = 5
+
+_EXCLUDED_PATH_MARKERS = ("/test/", "/tests/", "/context/")
+_SOURCE_EXTENSIONS = (
+    ".java", ".kt", ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rb", ".php", ".cs", ".swift",
+)
+
+
+def is_source_path(path: str) -> bool:
+    """Rejects docs and test code so a search term can't ground a gap in a
+    markdown file or a *Test.java."""
+    lower = f"/{path.lower()}"
+    if any(marker in lower for marker in _EXCLUDED_PATH_MARKERS):
+        return False
+    return lower.endswith(_SOURCE_EXTENSIONS)
+
+
+def _first_source_hit(hits: list) -> Optional[dict]:
+    """First hit that looks like real source, not just hits[0] - GitLab's
+    own relevance ranking freely puts docs/tests ahead of the source file a
+    search term is actually about."""
+    return next(
+        (h for h in hits if isinstance(h, dict) and "path" in h and is_source_path(h["path"])),
+        None,
+    )
 
 
 @dataclass
@@ -87,13 +128,20 @@ class LiveGitlabSearchClient:
     def _project_id(self, repo_path: str) -> int:
         if repo_path in self._project_id_cache:
             return self._project_id_cache[repo_path]
-        resp = requests.get(
-            f"{self.host}/api/v4/projects/{quote(repo_path, safe='')}",
-            headers=self._headers(),
-            timeout=10,
-        )
-        resp.raise_for_status()
-        project_id = resp.json()["id"]
+        try:
+            resp = requests.get(
+                f"{self.host}/api/v4/projects/{quote(repo_path, safe='')}",
+                headers=self._headers(),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            project_id = resp.json()["id"]
+        except requests.RequestException as exc:
+            raise CodeScoutExternalError(f"GitLab project lookup failed for {repo_path!r}: {exc}") from exc
+        except (ValueError, KeyError) as exc:
+            raise CodeScoutExternalError(
+                f"GitLab project lookup returned an unexpected response for {repo_path!r}: {exc}"
+            ) from exc
         self._project_id_cache[repo_path] = project_id
         return project_id
 
@@ -106,20 +154,34 @@ class LiveGitlabSearchClient:
             if searches_run >= SEARCH_BUDGET_PER_REPO:
                 break
             searches_run += 1
-            resp = requests.get(
-                f"{self.host}/api/v4/projects/{project_id}/search",
-                headers=self._headers(),
-                params={"scope": "blobs", "search": term},
-                timeout=15,
-            )
-            resp.raise_for_status()
-            hits = resp.json()
-            if not hits:
+            try:
+                resp = requests.get(
+                    f"{self.host}/api/v4/projects/{project_id}/search",
+                    headers=self._headers(),
+                    params={"scope": "blobs", "search": term},
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                hits = resp.json()
+            except requests.RequestException as exc:
+                # One bad search term shouldn't sink the whole find_gap()
+                # call - keep trying the remaining terms.
+                logger.warning("GitLab search failed for term %r in %r: %s", term, repo, exc)
                 continue
-            hit = hits[0]
-            location = self._resolve_exact_location(
-                project_id, hit["path"], hit.get("ref", "master"), term
-            )
+            except ValueError as exc:
+                logger.warning("GitLab search returned invalid JSON for term %r in %r: %s", term, repo, exc)
+                continue
+
+            hit = _first_source_hit(hits)
+            if hit is None:
+                continue
+            try:
+                location = self._resolve_exact_location(
+                    project_id, hit["path"], hit.get("ref", "master"), term
+                )
+            except CodeScoutExternalError as exc:
+                logger.warning("Could not resolve exact location for %r in %r: %s", hit["path"], repo, exc)
+                continue
             if location is not None:
                 return location, searches_run
         return None, searches_run
@@ -130,13 +192,16 @@ class LiveGitlabSearchClient:
         """The GitLab search API's inline snippet doesn't reliably pin the exact
         matched line, so fetch the whole raw file and locate the term ourselves -
         this is exactly how ConsultationDao.java:146 was confirmed manually."""
-        resp = requests.get(
-            f"{self.host}/api/v4/projects/{project_id}/repository/files/{quote(path, safe='')}/raw",
-            headers=self._headers(),
-            params={"ref": ref},
-            timeout=15,
-        )
-        resp.raise_for_status()
+        try:
+            resp = requests.get(
+                f"{self.host}/api/v4/projects/{project_id}/repository/files/{quote(path, safe='')}/raw",
+                headers=self._headers(),
+                params={"ref": ref},
+                timeout=15,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            raise CodeScoutExternalError(f"GitLab raw file fetch failed for {path!r}: {exc}") from exc
         lines = resp.text.splitlines()
         needle = term.lower()
         for idx, text in enumerate(lines):
