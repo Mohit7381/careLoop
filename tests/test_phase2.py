@@ -57,3 +57,12 @@ def test_unknown_llm_stage_falls_back_to_routing_for_gap(cohort_cuts, journey_cf
         "confirm_via": "run the confirming experiment on the gap"}]}])
     findings, _ = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout")
     assert findings[0].stage == "pharmacy_checkout"
+
+
+def test_evidence_numbers_extracted_from_prose():
+    from app.agents.analyst.phase2 import _num
+    assert _num("user_total: 199,417") == 199417.0
+    assert _num("lost 417,569 (share_of_prev 0.6452)") == 417569.0
+    assert _num("rate: 0.3002") == 0.3002
+    assert _num(199417) == 199417.0
+    assert _num("no numbers here") is None

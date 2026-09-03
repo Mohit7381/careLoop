@@ -8,7 +8,10 @@ enforces the budget. Everything the model asks and sees is persisted to
 drilldown_trail — the trail renders in the UI and is half the demo.
 """
 import json
+import re
 from typing import Any, Callable
+
+_NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 from app.agents.analyst.aggregate_tool import AggregateTool
 from app.schemas.contracts import DrilldownStep, Finding
@@ -30,19 +33,23 @@ def _parse_findings(raw: list[dict], journey_routing_keys: list[str],
             hypothesis=f.get("hypothesis", ""),
             confidence=f.get("confidence", "low"),
             confirm_via=f.get("confirm_via", ""),
-            evidence=[{"type": "drilldown", "metric": "cited", "value": _num(e)}
+            evidence=[{"type": "drilldown", "metric": str(e)[:120], "value": _num(e)}
                       for e in f.get("evidence", []) if _num(e) is not None],
         ))
     return findings
 
 
 def _num(e: Any) -> Any:
-    """Evidence arrives as strings like '413973' or '0.383' — keep numerics only."""
+    """Evidence arrives as prose like 'user_total: 199,417' or 'lost 417,569
+    (share 0.6452)' — extract the FIRST number anywhere in the string."""
     if isinstance(e, (int, float)):
         return float(e)
+    m = _NUM_RE.search(str(e))
+    if not m:
+        return None
     try:
-        return float(str(e).replace(",", "").split()[0])
-    except (ValueError, IndexError):
+        return float(m.group().replace(",", ""))
+    except ValueError:
         return None
 
 
