@@ -20,13 +20,46 @@ Injected callables keep this testable without network:
     llm(ctx: dict) -> dict          # parsed strict-schema model output
     search_fn(repo, term) -> list[dict{path, line, snippet}]
 """
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from app.schemas.contracts import CodeGap, Remedy
 
 MAX_REMEDIES = 3
+_BAD_SIGNATURES = {"", "null", "none", "n/a", "-"}
+
+# The LLM output schema cannot express a nullable enum (gpt-5-mini strict mode),
+# so the model sometimes invents descriptive statuses ("signature_not_found").
+# Normalise defensively rather than collapsing everything to "partial".
+_STATUS_ALIASES = {
+    "exists": "exists", "found": "exists", "present": "exists",
+    "code_found": "exists", "evidence_found": "exists",
+    "absent": "absent", "missing": "absent", "not_found": "absent",
+    "signature_not_found": "absent", "no_matching_code_found": "absent",
+    "no_match": "absent", "no_results": "absent", "not_present": "absent",
+    "partial": "partial", "partial_evidence_found": "partial",
+    "partially_present": "partial", "related_found": "partial",
+    "ambiguous": "partial", "inconclusive": "partial",
+}
+
+
+def normalise_status(raw: Any) -> Optional[str]:
+    """Map a model-supplied status onto exists|absent|partial, or None."""
+    if not raw:
+        return None
+    key = str(raw).strip().lower().replace(" ", "_").replace("-", "_")
+    if key in _STATUS_ALIASES:
+        return _STATUS_ALIASES[key]
+    if "partial" in key or "ambigu" in key or "related" in key:
+        return "partial"
+    if "not" in key or "absent" in key or "missing" in key or "no_" in key:
+        return "absent"
+    if "exist" in key or "found" in key or "present" in key:
+        return "exists"
+    return None
 MAX_ITERATIONS = 2      # initial verify + one refinement
-SEARCH_BUDGET = 10      # total searches across all remedies
+SEARCH_BUDGET = 12      # total searches across all remedies
+PER_REMEDY_SHARE = 4    # max searches one remedy may consume — stops the first
+                        # remedy exhausting the budget and leaving the rest unverified
 
 LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
 SearchFn = Callable[[str, str], list[dict[str, Any]]]
@@ -42,9 +75,13 @@ def propose_remedies(llm: LLMCall, gap: CodeGap, finding_summary: str) -> list[R
     })
     remedies = []
     for r in (out.get("remedies") or [])[:MAX_REMEDIES]:
-        if r.get("proposal") and r.get("signature"):
+        sig = str(r.get("signature") or "").strip()
+        # A remedy with no real signature is not code-verifiable — the loop
+        # cannot rule on it, so it never enters the pipeline (process/business
+        # suggestions belong to the PRD step, unverified and labelled as such).
+        if r.get("proposal") and sig.lower() not in _BAD_SIGNATURES:
             remedies.append(Remedy(
-                proposal=r["proposal"], signature=r["signature"],
+                proposal=r["proposal"], signature=sig,
                 search_terms=[t for t in (r.get("search_terms") or []) if t][:5],
             ))
     return remedies
@@ -52,19 +89,32 @@ def propose_remedies(llm: LLMCall, gap: CodeGap, finding_summary: str) -> list[R
 
 def verify_remedy(llm: LLMCall, search_fn: SearchFn, remedy: Remedy,
                   repos: list[str], budget_left: int) -> tuple[Remedy, int]:
-    """The proposer<->verifier loop for ONE remedy. Returns (remedy, budget_left)."""
+    """The proposer<->verifier loop for ONE remedy. Returns (remedy, budget_left).
+
+    A remedy we could not search is left UNVERIFIED (status None) — never
+    ruled "absent". No hits because we did not look is not evidence of
+    absence, and the pipeline's rule is that verdicts are search-backed or
+    they do not ship.
+    """
+    if budget_left <= 0:
+        return remedy, budget_left          # status stays None → unverified
+    spent_here = 0
     terms = list(remedy.search_terms)
     for iteration in range(MAX_ITERATIONS):
         hits: list[dict] = []
         for term in terms:
-            if budget_left <= 0:
+            if budget_left <= 0 or spent_here >= PER_REMEDY_SHARE:
                 break
             for repo in repos:
-                if budget_left <= 0:
+                if budget_left <= 0 or spent_here >= PER_REMEDY_SHARE:
                     break
-                found = search_fn(repo, term)
+                # GitLab blob search treats the query literally, so a
+                # multi-word term matches nothing — search its longest token.
+                q = max(term.split(), key=len) if " " in term else term
+                found = search_fn(repo, q)
                 budget_left -= 1
-                remedy.searched_terms.append(f"{repo}:{term}")
+                spent_here += 1
+                remedy.searched_terms.append(f"{repo}:{q}")
                 hits.extend({"repo": repo, **h} for h in (found or []))
         remedy.iterations = iteration + 1
 
@@ -74,7 +124,7 @@ def verify_remedy(llm: LLMCall, search_fn: SearchFn, remedy: Remedy,
             "search_hits": hits[:10],
             "budget_left": budget_left,
         })
-        status = verdict.get("status")
+        status = normalise_status(verdict.get("status"))
         if status in ("exists", "partial"):
             remedy.status = status
             remedy.evidence_file = verdict.get("evidence_file")
@@ -87,6 +137,13 @@ def verify_remedy(llm: LLMCall, search_fn: SearchFn, remedy: Remedy,
             if not terms:
                 return remedy, budget_left
         elif status == "absent":
+            # A verdict never DOWNGRADES: if a previous round already found
+            # related machinery, the sharper follow-up search failing to find
+            # the exact remedy does not erase that evidence — the honest
+            # verdict stays "partial" (related machinery exists, remedy does
+            # not). Only a remedy that was never partial can end up absent.
+            if remedy.status == "partial":
+                return remedy, budget_left
             refined = [t for t in (verdict.get("refined_search_terms") or []) if t][:5]
             if refined and iteration + 1 < MAX_ITERATIONS and budget_left > 0:
                 terms = refined          # verifier unsure -> one more look
@@ -94,10 +151,11 @@ def verify_remedy(llm: LLMCall, search_fn: SearchFn, remedy: Remedy,
             remedy.status = "absent"
             return remedy, budget_left
         else:                            # malformed verdict -> conservative
-            remedy.status = "partial"
+            remedy.status = remedy.status or "partial"
             return remedy, budget_left
-    if remedy.status is None:
-        remedy.status = "absent" if budget_left > 0 else "partial"
+    # Loop ended without a verdict: only claim "absent" if we actually looked.
+    if remedy.status is None and remedy.searched_terms:
+        remedy.status = "absent"
     return remedy, budget_left
 
 
