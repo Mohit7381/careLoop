@@ -55,6 +55,28 @@ def _collect_quotes(finding: Finding, per_finding_quotes: dict) -> list:
     return list(per_finding_quotes.get(str(finding.rank), []))
 
 
+def _remedies_block(gap: CodeGap) -> str:
+    """
+    Appendix A #9: confirmed-ABSENT remedies become the PRD's proposed FRs;
+    EXISTING ones are surfaced so the PRD never proposes what's already
+    built; PARTIAL is flagged as needing a closer look.
+    """
+    if not gap.remedies:
+        return ""
+    lines = ["\n\n**Remedy Loop verdicts (proposed fixes, verified against the code):**"]
+    for r in gap.remedies:
+        if r.status == "absent":
+            lines.append(f"- **[FR candidate — confirmed missing]** {r.proposal}")
+        elif r.status == "exists":
+            lines.append(
+                f"- **[Already built — do not re-propose]** {r.proposal} "
+                f"(`{r.evidence_file}:{r.evidence_line}`)"
+            )
+        else:
+            lines.append(f"- **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
+    return "\n".join(lines)
+
+
 def _render_prd_llm_stub(
     finding: Finding,
     gaps: list[CodeGap],
@@ -88,6 +110,7 @@ def _render_prd_llm_stub(
             f"**Gap statement:** {gap.gap_statement}\n\n"
             f"**Location:** `{gap.repo}/{gap.file}:{gap.line}`"
             + (f"\n\n**Proposed change location:** {gap.proposed_change_location}" if gap.proposed_change_location else "")
+            + _remedies_block(gap)
         )
         scope = f"In scope: routing category `{finding.stage}` in `{gap.service}`. Out of scope: unrelated stages."
     elif gap and not gap.mechanism_found:
