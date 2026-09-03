@@ -1,0 +1,42 @@
+{
+  "_note": "Illustrative fixture data for the Day-1 demo/orchestrator scaffold. Alief: replace with the real frozen query-pack output (warehouse + scrubbed VoC) before Day 2 — keep this exact shape.",
+  "segments": ["jakarta", "bandung", "surabaya", "all"],
+  "current": {
+    "stages": [
+      {"stage": "requested", "dimension": "overall", "segment": "all", "entered": 218000, "converted": 205000, "suppressed": false},
+      {"stage": "payment_processing", "dimension": "overall", "segment": "all", "entered": 205000, "converted": 153679, "suppressed": false},
+      {"stage": "confirmed", "dimension": "overall", "segment": "all", "entered": 153679, "converted": 145000, "suppressed": false},
+      {"stage": "consultation_completed", "dimension": "overall", "segment": "all", "entered": 145000, "converted": 136219, "suppressed": false},
+      {"stage": "erx_checkout", "dimension": "overall", "segment": "all", "entered": 136219, "converted": 100000, "suppressed": false},
+      {"stage": "pharmacy_delivered", "dimension": "overall", "segment": "all", "entered": 100000, "converted": 73000, "suppressed": false}
+    ],
+    "reasons": [
+      {"cancellation_reason": "system_abandon_timeout", "cancellation_reason_group": "payment_processing", "count": 51321},
+      {"cancellation_reason": "no_erx_followthrough", "cancellation_reason_group": "erx_checkout", "count": 36219},
+      {"cancellation_reason": "doctor_unavailable", "cancellation_reason_group": "confirmed", "count": 4200},
+      {"cancellation_reason": "user_cancelled", "cancellation_reason_group": "requested", "count": 3100}
+    ],
+    "ct_events": [
+      {"event_name": "cd_cart_add", "count": 0},
+      {"event_name": "cd_cart_view", "count": 0},
+      {"event_name": "resume_checkout_tap", "count": 8400},
+      {"event_name": "erx_download", "count": 41200}
+    ]
+  },
+  "previous": {
+    "stages": [
+      {"stage": "requested", "dimension": "overall", "segment": "all", "entered": 209500, "converted": 163400, "suppressed": false},
+      {"stage": "payment_processing", "dimension": "overall", "segment": "all", "entered": 163400, "converted": 121800, "suppressed": false},
+      {"stage": "confirmed", "dimension": "overall", "segment": "all", "entered": 121800, "converted": 115900, "suppressed": false},
+      {"stage": "consultation_completed", "dimension": "overall", "segment": "all", "entered": 115900, "converted": 107600, "suppressed": false},
+      {"stage": "erx_checkout", "dimension": "overall", "segment": "all", "entered": 107600, "converted": 73981, "suppressed": false},
+      {"stage": "pharmacy_delivered", "dimension": "overall", "segment": "all", "entered": 73981, "converted": 73100, "suppressed": false}
+    ],
+    "ct_events": [
+      {"event_name": "cd_cart_add", "count": 0},
+      {"event_name": "cd_cart_view", "count": 0},
+      {"event_name": "resume_checkout_tap", "count": 9100},
+      {"event_name": "erx_download", "count": 46700}
+    ]
+  }
+}

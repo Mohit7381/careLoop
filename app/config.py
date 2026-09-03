@@ -1,0 +1,63 @@
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # Service
+    app_name: str = "careloop-service"
+    app_token: str = "dev-local-token"
+    demo_mode: bool = True
+
+    # Storage
+    database_url: str = "sqlite:///./careloop.db"
+    artifacts_dir: str = "./data/artifacts"
+
+    # sphere-platform LLM gateway (Analyst / Code Scout / Reporter / PRD use cases). Names
+    # verified 2026-09-03 against the real AI Studio project — Control Center project 7121
+    # ("funnel-analysis"), 5 ACTIVE use cases, SPHERE_INPUT_SANITIZER + SPHERE_OUTPUT_SANITIZER
+    # guardrails wired on all 5. https://controlcenter.stage.halodoc.com/ai-studio/prompt-management/projects/7121
+    # Only the base_url/api_key are still missing — the use cases themselves already exist.
+    sphere_platform_base_url: str = ""
+    sphere_platform_api_key: str = ""
+    llm_use_case_funnel_dropoff: str = "funnel-hypothesis-generation"  # was "funnel-dropoff-analysis" — wrong name, fixed
+    llm_use_case_code_gap: str = "code-gap-assessment"
+    llm_use_case_trend_narrative: str = "trend-narrative"
+    llm_use_case_prd_generation: str = "prd-generation"
+    llm_use_case_voc_theme_classification: str = "voc-theme-classification"  # NEW — not previously wired anywhere
+
+    # Metabase (read-only, Fetcher / Alief)
+    metabase_base_url: str = ""
+    metabase_api_key: str = ""
+    metabase_redshift_db_id: int = 39
+
+    # GitLab (read-only PAT, Code Scout / Harshit). Halodoc is self-hosted — NOT gitlab.com
+    # (verified via org memory 2026-09-03).
+    gitlab_base_url: str = "https://gitlab.devops.mhealth.tech"
+    gitlab_read_token: str = ""
+
+    # Garuda (GChat delivery) — real API verified via org memory 2026-09-03: POST
+    # /v1/communication_requests (NOT /v3), auth header X-APP-TOKEN (not Bearer), no
+    # self-service template registration endpoint exists. channel_id/provider_id/template_id
+    # are free-form attributes that must already be provisioned in Garuda's own config —
+    # get real values from whoever owns the Garuda integration, same blocker Harshit's been
+    # tracking ("yet to get the webhook", SRE not fully aware). OPEN QUESTION: none of the
+    # verified examples show a GChat channel type (only WhatsApp/SMS/Email/Voice) — confirm
+    # GChat delivery is even a supported Garuda channel before relying on this for the demo.
+    garuda_base_url: str = ""
+    garuda_app_token: str = ""
+    garuda_channel_id: str = ""
+    garuda_provider_id: str = ""
+    garuda_template_id: str = ""
+    garuda_destination: str = ""  # the channel-specific target (e.g. webhook URL / space id / MSISDN)
+    garuda_service_source: str = "careloop-service"
+
+    # Privacy / batch discipline
+    k_suppression_floor: int = 25
+    query_timeout_seconds: int = 60
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+careloop.db
+data/
+.pytest_cache/
