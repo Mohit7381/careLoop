@@ -1,0 +1,7 @@
+{
+  "finding_rank": 2,
+  "repo": "scrooge/payment-service",
+  "found": false,
+  "searches_run": 5,
+  "_verified": "SYNTHETIC \u2014 PD golden run VoC/payments finding (rank 2). No hand-verified payment-service candidate yet; exercises the mechanism_found=False / budget_exhausted path honestly rather than fabricating a location."
+}

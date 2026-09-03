@@ -1,0 +1,10 @@
+{
+  "finding_rank": 3,
+  "repo": "bintan/consultation",
+  "found": true,
+  "file": "src/main/java/com/halodoc/bintan/consultation/dao/ConsultationDao.java",
+  "line": 146,
+  "snippet": "    private final String GET_ABANDON_CONSULTATION = \"SELECT customer_consultation_id FROM consultations where ((type in (:type) and updated_at<now() - INTERVAL :interval MINUTE AND updated_at > now() - INTERVAL :max_interval HOUR and status in ('requested','payment_processing', 'payment_failed')) OR type = 'private_practice' and status = 'requested' and updated_at<now() - INTERVAL :pp_internal MINUTE AND updated_at > now() - INTERVAL :max_interval HOUR) and customer_consultation_id is not NULL LIMIT :limit\";",
+  "searches_run": 1,
+  "_verified": "Live GitLab search 2026-09-03 against gitlab.devops.mhealth.tech, project id 311 (bintan/consultation). Search term 'GET_ABANDON_CONSULTATION' resolved to exactly this file:line - matches the plan's hand-verified example precisely."
+}

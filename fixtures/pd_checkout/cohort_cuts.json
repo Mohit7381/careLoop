@@ -1,0 +1,108 @@
+{
+ "consultation_required": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "rx_gated",
+    "entered": 255293,
+    "converted": 76641
+   },
+   {
+    "segment": "non_rx",
+    "entered": 391898,
+    "converted": 152981
+   }
+  ],
+  "source": "modeled_fact_pharmacy_transaction_product, erx_quantity>0, window 2026-08-27..09-02"
+ },
+ "price_band": {
+  "distribution_only": true,
+  "rows": [
+   {
+    "segment": "75k_200k",
+    "entered": 90851
+   },
+   {
+    "segment": "gte_200k",
+    "entered": 66220
+   },
+   {
+    "segment": "25k_75k",
+    "entered": 62875
+   },
+   {
+    "segment": "lt_25k",
+    "entered": 24769
+   }
+  ],
+  "source": "order_abandoned CT events by price param (abandons only \u2014 placed events lack price context symmetry)"
+ },
+ "pd_category": {
+  "distribution_only": true,
+  "rows": [
+   {
+    "segment": "Contraceptions & Hormone",
+    "entered": 8704
+   },
+   {
+    "segment": "Antibiotics & Antifungal",
+    "entered": 4153
+   },
+   {
+    "segment": "Digital Clinic",
+    "entered": 3889
+   },
+   {
+    "segment": "Cough and Flu",
+    "entered": 2965
+   },
+   {
+    "segment": "Skin",
+    "entered": 2900
+   },
+   {
+    "segment": "Halofit (Halodiet)",
+    "entered": 1729
+   },
+   {
+    "segment": "Pain Killer",
+    "entered": 1385
+   },
+   {
+    "segment": "Mental Health",
+    "entered": 1075
+   },
+   {
+    "segment": "small_segment_example",
+    "entered": 12
+   }
+  ],
+  "source": "order_abandoned CT events, pd_category normalized to FIRST tag; order_placed events carry NULL category -> distribution only"
+ },
+ "abandon_reason": {
+  "distribution_only": true,
+  "rows": [
+   {
+    "segment": "user abandon the cart",
+    "entered": 111993
+   },
+   {
+    "segment": "user clicked back",
+    "entered": 83517
+   },
+   {
+    "segment": "address changed",
+    "entered": 35111
+   },
+   {
+    "segment": "add items",
+    "entered": 6996
+   },
+   {
+    "segment": "items unavailable",
+    "entered": 3907
+   }
+  ],
+  "source": "order_abandoned CT events, case-normalized, window 2026-08-27..09-02"
+ }
+}

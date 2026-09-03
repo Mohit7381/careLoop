@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": [],
+ "next_question": {
+  "dimension": "price_band",
+  "rationale": "The top gap (created -> confirmed) is large: lost 417,569 (share_of_prev 0.6452). The provided reason clusters only account for part of that loss: user_total 199,417 + artifact_total 42,107 = 241,524, leaving ~176,045 losses unallocated. The abandon_reason drill shows fragments: \"user abandon the cart\" 111,993; \"user clicked back\" 83,517; \"address changed\" 35,111; \"add items\" 6,996; \"items unavailable\" 3,907, and was marked distribution_only. Cut by price_band next to see whether the remaining/total loss concentrates in higher price bands (which would point to price sensitivity) versus being spread evenly (which would point toward UX/flow issues or category effects). If price_band shows concentration, confirm via an A/B experiment offering targeted discounts or price messaging to that band."
+ }
+}
