@@ -1,5 +1,4 @@
-import { RunState, Suggestion } from '../models/run-state';
-import { ExploredAnchor } from '../../features/run-detail/components/code-scout-panel/code-scout-panel.component';
+import { RunState } from '../models/run-state';
 
 /**
  * Frozen demo fixture — run #47, pharmacy delivery order journey,
@@ -9,24 +8,12 @@ import { ExploredAnchor } from '../../features/run-detail/components/code-scout-
  *  - snapshot / findings / drilldown_trail / voc numbers: the 7-day hand-run
  *    (2026-09-02), k≥25 suppression applied at fetch. Matches the "Claude
  *    Design prompt — full text" section of the CareLoop Build Plan verbatim.
- *  - suggestions (Rev 3, 2026-09-03): Code Scout no longer diagnoses one bug
- *    per finding — it explores the routing-matched repo(s) and proposes
- *    zero to several tech/business/process suggestions. finding_rank 1 and
- *    2's suggestions + EXPLORED_ANCHORS are copied verbatim from
- *    impl/codeScout's LIVE, verified fixtures (gap1_consultation.json,
- *    gap2_pharmacy_checkout.json — 2026-09-03 GitLab search against
- *    gitlab.devops.mhealth.tech). This SUPERSEDES my earlier Rev 2 fixture,
- *    which had an "UNCONFIRMED" caveat on finding #2's mechanism
- *    (cancelOrderAndNotifyUser, line 208) — Rev 3's live trace corrected
- *    this: the timer-driven AbandonOrderService actually calls
- *    abandonOrderV2 (line 298), which calls ZERO notification methods.
- *    sendCommunication does exist in the same file (line 216) but 82 lines
- *    from abandonOrderV2 — a real "partial" verification case, not
- *    "exists": the capability is in the file, not wired into this path.
- *    finding_rank 3 and 4 have no suggestions — Code Scout hasn't explored
- *    scrooge/payment-service for this run's actual findings (the real
- *    fixtures for that repo, gap3/gap4, are synthetic/off-topic — see
- *    README "Known contract gaps"). Left empty rather than fabricated.
+ *  - code_gaps + nested remedies[]: the shape the plan (rev 2.1) and the
+ *    running backend both use. finding #1's gap is copied from
+ *    impl/codeScout's live-verified gap fixture; the three remedy verdicts
+ *    match what Mohit's API returns for the same mechanism
+ *    (BaseCancellationTypeAdapterService.abandonOrderV2) — two `absent`, one
+ *    `partial`. On a live run these come from the API, not from here.
  *  - trend_report: illustrative — no previous-window figures were published
  *    for pharmacy delivery. Swap before the demo if real deltas land.
  */
@@ -65,7 +52,7 @@ export const RUN_47: RunState = {
       origin: 'warehouse',
       stage: 'pharmacy_checkout',
       hypothesis: 'Orders die on a silent abandonment timer',
-      confidence: 0.9,
+      confidence: 'high',
       confirm_via: 'Hold the abandon timer for one cohort and measure recovered confirmations.',
       segments: [{ dimension: 'reason', value: 'system_abandoned' }],
       evidence: [
@@ -79,7 +66,7 @@ export const RUN_47: RunState = {
       origin: 'warehouse',
       stage: 'pharmacy_checkout',
       hypothesis: 'Prescription-gated carts are the biggest revenue leak',
-      confidence: 0.85,
+      confidence: 'high',
       confirm_via: 'Compare abandon rate for rx-gated vs non-gated carts at equal price band.',
       segments: [{ dimension: 'consultation_required', value: 'true' }],
       evidence: [
@@ -93,7 +80,7 @@ export const RUN_47: RunState = {
       origin: 'warehouse',
       stage: 'pharmacy_checkout',
       hypothesis: '~15% of "abandonment" is a counting artifact',
-      confidence: 0.8,
+      confidence: 'high',
       confirm_via: 'Normalise reason casing and exclude re-create pairs, then re-run the funnel.',
       segments: [{ dimension: 'cancellation_reason_group', value: 'artifact' }],
       evidence: [
@@ -106,7 +93,7 @@ export const RUN_47: RunState = {
       origin: 'voc',
       stage: 'payments',
       hypothesis: '41 negative reviews on payments / refunds in 112 days',
-      confidence: 0.6,
+      confidence: 'medium',
       confirm_via: 'Theme-derived search terms routed to Code Scout.',
       theme: 'payment/refund',
       theme_search_terms: ['payment failed', 'refund not received', 'bayar berkali-kali'],
@@ -163,6 +150,16 @@ export const RUN_47: RunState = {
         `type = 'private_practice' and status = 'requested' and updated_at<now() - INTERVAL :pp_internal MINUTE ` +
         `AND updated_at > now() - INTERVAL :max_interval HOUR) and customer_consultation_id is not NULL LIMIT :limit";`,
       proposed_change_location: 'ConsultationAbandonService.abandon(), before the abandon batch',
+      remedies: [
+        { proposal: 'Pre-abandon retention hook — re-engage the user before the batch kills the cart',
+          signature: 'RetentionService.tryReengage in the abandon path', status: 'absent', iterations: 1 },
+        { proposal: 'Soft-abandon grace state (SOFT_ABANDONED) before final abandonment',
+          signature: 'a SOFT_ABANDONED state set before the final kill', status: 'absent', iterations: 1 },
+        { proposal: 'Longer / excluded abandon timeout for prescription-gated carts',
+          signature: 'an rx-aware abandon timeout override', status: 'partial',
+          evidence_file: 'src/main/java/com/halodoc/timor/oms/resource/internal/InternalAbandonOrderResource.java',
+          iterations: 1 },
+      ],
       search_terms_used: ['GET_ABANDON_CONSULTATION'],
       searches_run: 1,
     },
@@ -194,115 +191,6 @@ export const RUN_47: RunState = {
     },
   ],
 
-  // PROVISIONAL (Rev 3) — Code Scout's actual output. Verbatim from
-  // impl/codeScout's fixtures/code_scout/gap1_consultation.json and
-  // gap2_pharmacy_checkout.json (both live GitLab searches, 2026-09-03),
-  // run through the same verification logic as node.py's _verify_and_build
-  // (VERIFICATION_PROXIMITY_LINES = 15): a signature found >15 lines from
-  // the explored mechanism is "partial", not "exists" — see the module doc.
-  suggestions: [
-    // finding #1 — consultation abandon-kill (ConsultationDao.java:146)
-    {
-      finding_rank: 1,
-      origin: 'warehouse',
-      stage: 'consultation',
-      service: 'consultation',
-      repo: 'bintan/consultation',
-      suggestion_type: 'tech',
-      title: 'Re-engagement call before consultation abandon',
-      description: "Call Garuda's re-engagement gateway before the timeout script kills a stuck consultation.",
-      rationale:
-        'GET_ABANDON_CONSULTATION (ConsultationDao.java:146) silently kills consultations in ' +
-        'requested/payment_processing/payment_failed past timeout, with no notification anywhere in that path.',
-      verification_status: 'absent',
-      evidence_file: 'src/main/java/com/halodoc/bintan/consultation/dao/ConsultationDao.java',
-      evidence_line: null,
-      search_terms_used: ['GET_ABANDON_CONSULTATION', 'garuda'],
-      searches_run: 1,
-    },
-    {
-      finding_rank: 1,
-      origin: 'warehouse',
-      stage: 'consultation',
-      service: 'consultation',
-      repo: 'bintan/consultation',
-      suggestion_type: 'business',
-      title: 'Payment-retry grace period',
-      description:
-        "Offer a short grace-period SMS/WhatsApp reminder with a one-tap 'resume payment' link before the " +
-        'timeout fires, instead of a silent cancellation.',
-      rationale:
-        'The abandon-kill is purely timer-driven with no user-facing warning — a process change (not a code ' +
-        'fix) could recover some of the 413,973/wk (abandoned) lost here.',
-      verification_status: 'not_applicable',
-      search_terms_used: ['GET_ABANDON_CONSULTATION', 'garuda'],
-      searches_run: 1,
-    },
-
-    // finding #2 — pharmacy abandon-kill (BaseCancellationTypeAdapterService.abandonOrderV2, line 298 —
-    // the method the timer-driven AbandonOrderService actually calls; CORRECTED from my Rev 2 fixture,
-    // which pointed at the wrong sibling method (cancelOrderAndNotifyUser, line 208) and carried an
-    // "unconfirmed" caveat as a result. This is the resolved version.
-    {
-      finding_rank: 2,
-      origin: 'warehouse',
-      stage: 'pharmacy_checkout',
-      service: 'oms',
-      repo: 'timor/oms',
-      suggestion_type: 'tech',
-      title: 'Re-engagement call before order abandon',
-      description: 'Call Garuda before abandonOrderV2 completes.',
-      rationale:
-        'abandonOrderV2 — the method the timer-driven AbandonOrderService actually calls — reverses ' +
-        'benefits/rewards/payment links and marks the order failed, but never calls a notification method.',
-      verification_status: 'absent',
-      evidence_file: 'src/main/java/com/halodoc/timor/oms/service/factory/impl/BaseCancellationTypeAdapterService.java',
-      evidence_line: null,
-      search_terms_used: ['abandon', 'garuda'],
-      searches_run: 3,
-    },
-    {
-      finding_rank: 2,
-      origin: 'warehouse',
-      stage: 'pharmacy_checkout',
-      service: 'oms',
-      repo: 'timor/oms',
-      suggestion_type: 'tech',
-      title: 'Reuse the existing communication hook',
-      description:
-        'Wire the sendCommunication call (already used by cancelOrderAndNotifyUser in this same class) ' +
-        'into abandonOrderV2 too.',
-      rationale:
-        "The capability already exists in this file, just isn't invoked from the timer-driven abandon " +
-        'path — cheaper than building something new.',
-      // PARTIAL, not exists: sendCommunication is real (line 216) but 82 lines from abandonOrderV2 (line
-      // 298) — beyond VERIFICATION_PROXIMITY_LINES (15). The capability exists in the file; it isn't
-      // proven wired into THIS mechanism. This is the case worth pointing at on stage.
-      verification_status: 'partial',
-      evidence_file: 'src/main/java/com/halodoc/timor/oms/service/factory/impl/BaseCancellationTypeAdapterService.java',
-      evidence_line: 216,
-      search_terms_used: ['abandon', 'sendCommunication'],
-      searches_run: 3,
-    },
-    {
-      finding_rank: 2,
-      origin: 'warehouse',
-      stage: 'pharmacy_checkout',
-      service: 'oms',
-      repo: 'timor/oms',
-      suggestion_type: 'business',
-      title: 'Cart-recovery incentive',
-      description:
-        'Offer a small discount or reminder nudge when an order sits in payment_processing/payment_failed ' +
-        'beyond a threshold, instead of a silent timeout-driven abandon.',
-      rationale:
-        'Based on 68,915/wk (rx_gated_abandons_per_week), orders are abandoned on a timer with no ' +
-        'user-facing recovery moment — a policy change could recover some of this independent of any code fix.',
-      verification_status: 'not_applicable',
-      search_terms_used: ['abandon', 'sendCommunication'],
-      searches_run: 3,
-    },
-  ] satisfies Suggestion[],
 
   // Fixture-only UI enrichment for the "Explored" code block — NOT part of
   // contracts.py's Suggestion (which has no snippet field, only
@@ -350,46 +238,3 @@ export const RUN_47: RunState = {
   artifacts: [],
 };
 
-/**
- * Fixture-only UI enrichment for the Code Scout panel's "Explored" code
- * block — NOT part of contracts.py's Suggestion, which carries only
- * evidence_file/evidence_line, no snippet. One anchor per finding,
- * matching the real inventory Code Scout's search actually returned
- * (impl/codeScout's fixtures/code_scout/gap1_consultation.json and
- * gap2_pharmacy_checkout.json, both live-verified 2026-09-03). See the
- * doc comment on CodeScoutPanelComponent for why this lives outside the
- * contract mirror rather than being added to RunState.
- */
-export const EXPLORED_ANCHORS: Record<number, ExploredAnchor> = {
-  1: {
-    file: 'src/main/java/com/halodoc/bintan/consultation/dao/ConsultationDao.java',
-    line: 146,
-    snippet:
-      `private final String GET_ABANDON_CONSULTATION = "SELECT customer_consultation_id FROM consultations ` +
-      `where ((type in (:type) and updated_at<now() - INTERVAL :interval MINUTE AND updated_at > now() - ` +
-      `INTERVAL :max_interval HOUR and status in ('requested','payment_processing','payment_failed')) OR ` +
-      `type = 'private_practice' and status = 'requested' and updated_at<now() - INTERVAL :pp_internal MINUTE ` +
-      `AND updated_at > now() - INTERVAL :max_interval HOUR) and customer_consultation_id is not NULL LIMIT :limit";`,
-  },
-  2: {
-    file: 'src/main/java/com/halodoc/timor/oms/service/factory/impl/BaseCancellationTypeAdapterService.java',
-    line: 298,
-    snippet:
-      `@Override\n` +
-      `public Order abandonOrderV2(final String customerOrderId, final CancelRequest cancelRequest) {\n` +
-      `    final String lockKey = customerOrderId;\n` +
-      `    final boolean isLockAcquired = lockUtil.lock(lockKey);\n` +
-      `    try {\n` +
-      `        if (isLockAcquired) {\n` +
-      `            final Order order = getOrderService().findbyCustOrderIdFromDao(customerOrderId);\n` +
-      `            checkPaymentStatus(order);\n` +
-      `            getOrderService().setRefundToWalletAttribute(order);\n` +
-      `            if (!order.canCancel(cancelRequest)) {\n` +
-      `                throw new HalodocWebException(...); // 422, cannot be abandoned\n` +
-      `            }\n` +
-      `            if (!order.shouldSwallowAbandonAction()) {\n` +
-      `                // ... reverses benefits/rewards/payment-links/delivery-fee, marks order failed —\n` +
-      `                // zero notification/communication calls anywhere in this method body\n` +
-      `            }`,
-  },
-};

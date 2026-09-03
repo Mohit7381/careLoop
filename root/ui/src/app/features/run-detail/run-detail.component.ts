@@ -1,7 +1,6 @@
 import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
-import { EXPLORED_ANCHORS } from '../../core/fixtures/run-47.fixture';
 import { DemoPlaybackService } from '../../core/services/demo-playback.service';
 import { RunService } from '../../core/services/run.service';
 import { CodeScoutPanelComponent } from './components/code-scout-panel/code-scout-panel.component';
@@ -38,12 +37,6 @@ export class RunDetailComponent {
   readonly source = this.runService.source;
   readonly liveError = this.runService.liveError;
 
-  /** Fixture-only enrichment for the Code Scout panel's code snippets —
-   *  see CodeScoutPanelComponent's doc comment. Not present on a live
-   *  RunState (contracts.py's Suggestion has no snippet field), so a live
-   *  run shows verification chips + file:line only, no code block, until
-   *  that's resolved with Harshit. */
-  readonly anchors = EXPLORED_ANCHORS;
 
   readonly statusPill = computed(() => {
     const failed = this.stages().some((s) => s.status === 'failed');

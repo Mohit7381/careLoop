@@ -1,54 +1,86 @@
-@if (groups().length) {
-  @for (group of groups(); track group.findingRank) {
+@if (resolved().length || unresolved().length) {
+  @for (entry of resolved(); track entry.gap.repo + entry.gap.file + entry.gap.line) {
     <div class="scoutgroup">
       <div class="group-head">
-        <span class="finding-ref">finding #{{ group.findingRank }}</span>
-        @if (group.repo) {
-          <span class="mono repo">{{ group.repo }}</span>
+        <span class="finding-ref">
+          finding{{ entry.findingRanks.length > 1 ? 's' : '' }}
+          {{ '#' + entry.findingRanks.join(', #') }}
+        </span>
+        <span class="mono repo">{{ entry.gap.repo }}</span>
+        <span class="gapclass" [class]="gapClassTone(entry.gap)">{{ gapClassLabel(entry.gap) }}</span>
+      </div>
+
+      <div class="explored">
+        <div class="explored-head">
+          <span class="lbl">Mechanism pinned</span>
+          <span class="crumb mono">{{ entry.gap.file }}<b>:{{ entry.gap.line }}</b></span>
+        </div>
+        @if (entry.gap.snippet) {
+          <div class="codewrap">
+            <pre class="code"><span class="code-inner">@for (tok of tokenize(entry.gap.snippet); track $index) {<span [class]="'tok-' + tok.cls">{{ tok.text }}</span>}</span></pre>
+          </div>
         }
       </div>
 
-      @if (group.anchor; as anchor) {
-        <div class="explored">
-          <div class="explored-head">
-            <span class="lbl">Explored</span>
-            <span class="crumb mono">{{ anchor.file }}<b>:{{ anchor.line }}</b></span>
+      <div class="gapstmt">
+        <div class="lbl">Gap statement</div>
+        <p>{{ entry.gap.gap_statement }}</p>
+        @if (entry.gap.proposed_change_location) {
+          <div class="ploc">Proposed change location: {{ entry.gap.proposed_change_location }}</div>
+        }
+      </div>
+
+      @if (entry.gap.remedies?.length) {
+        <div class="remedies">
+          <div class="remedies-head">
+            <span class="lbl">Remedy Loop — proposed fixes, verified against the code</span>
           </div>
-          <div class="codewrap">
-            <pre class="code"><span class="code-inner">@for (tok of tokenize(anchor.snippet); track $index) {<span [class]="'tok-' + tok.cls">{{ tok.text }}</span>}</span></pre>
-          </div>
+          @for (r of entry.gap.remedies!; track r.proposal) {
+            <div class="remedy">
+              <div class="remedy-head">
+                <span class="verify" [class]="remedyTone(r.status)">{{ r.status }}</span>
+                <span class="remedy-title">{{ r.proposal }}</span>
+              </div>
+              <p class="remedy-copy">{{ remedyCopy(r) }}</p>
+              <div class="remedy-foot mono">
+                <span>looked for: {{ r.signature }}</span>
+                @if (r.evidence_file) {
+                  <span>{{ r.evidence_file }}@if (r.evidence_line) {:{{ r.evidence_line }}}</span>
+                }
+                @if (r.iterations) {
+                  <span>{{ r.iterations }} iteration{{ r.iterations > 1 ? 's' : '' }}</span>
+                }
+              </div>
+            </div>
+          }
         </div>
       }
 
-      <div class="suggestions">
-        @for (s of group.suggestions; track s.title) {
-          <div class="sugg">
-            <div class="sugg-head">
-              <span class="typebadge" [class]="s.suggestion_type">{{ typeLabel(s.suggestion_type) }}</span>
-              <span class="sugg-title">{{ s.title }}</span>
-              <span class="verify" [class]="verificationTone(s.verification_status)">{{ s.verification_status.replace('_', ' ') }}</span>
-            </div>
-            <p class="sugg-desc">{{ s.description }}</p>
-            <p class="sugg-rationale"><b>Why</b>{{ s.rationale }}</p>
-            <div class="sugg-foot">
-              <span class="verify-copy">{{ verificationCopy(s.verification_status) }}</span>
-              @if (s.evidence_file) {
-                <span class="mono evidence">
-                  {{ s.evidence_file }}@if (s.evidence_line) {:{{ s.evidence_line }}}
-                </span>
-              }
-            </div>
-          </div>
+      <div class="scout-foot">
+        <span>read-only analysis · agent never modifies code, never opens an MR</span>
+        @if (entry.gap.search_terms_used?.length) {
+          <span>search terms: {{ entry.gap.search_terms_used!.join(' · ') }}</span>
+        }
+        @if (entry.gap.searches_run) {
+          <span>searches run: {{ entry.gap.searches_run }}</span>
         }
       </div>
     </div>
   }
 
-  <div class="scout-foot">
-    <span>read-only analysis · agent never modifies code, never opens an MR</span>
-  </div>
+  @if (unresolved().length) {
+    <div class="unresolved">
+      <span class="lbl">Searched, no mechanism pinned</span>
+      @for (g of unresolved(); track g.finding_rank) {
+        <div class="unresolved-row">
+          <span class="mono">finding #{{ g.finding_rank }} · {{ g.repo }}</span>
+          <span class="why">{{ noMatchCopy(g) }}</span>
+        </div>
+      }
+    </div>
+  }
 } @else {
-  <div class="scout nomatch">
-    <div class="scout-head"><div class="crumb mono">no suggestions on this run yet</div></div>
+  <div class="scoutgroup">
+    <div class="group-head"><span class="mono repo">no code gaps on this run yet</span></div>
   </div>
 }

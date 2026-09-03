@@ -4,7 +4,7 @@ import { EMPTY, Subscription, firstValueFrom, timer } from 'rxjs';
 import { catchError, switchMap, tap, timeout } from 'rxjs/operators';
 
 import { RUN_47 } from '../fixtures/run-47.fixture';
-import { RunState, RunStatus } from '../models/run-state';
+import { RunDetailResponse, RunState, RunStatus, SnapshotRow } from '../models/run-state';
 
 export type StageKey = 'fetch' | 'analyze' | 'code' | 'prd';
 export type StageStatus = 'pending' | 'running' | 'done' | 'failed';
@@ -45,9 +45,11 @@ const STAGE_LABELS: Record<StageKey, string> = {
  */
 const STATUS_MAP: Record<Exclude<RunStatus, 'failed'>, StageStatus[]> = {
   queued: ['pending', 'pending', 'pending', 'pending'],
-  extracting: ['running', 'pending', 'pending', 'pending'],
+  fetching: ['running', 'pending', 'pending', 'pending'],
   analyzing: ['done', 'running', 'pending', 'pending'],
+  scanning_code: ['done', 'done', 'running', 'pending'],
   reporting: ['done', 'done', 'done', 'running'],
+  drafting_prd: ['done', 'done', 'done', 'running'],
   completed: ['done', 'done', 'done', 'done'],
 };
 
@@ -57,46 +59,73 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const DELIVER_TIMEOUT_MS = 8_000;
 const MAX_RETRIES = 2;
 const API_BASE = '/v1/analysis/runs';
+// POST routes require Bearer auth (.env.example -> APP_TOKEN). Dev-only value;
+// a real deployment injects this at build/serve time, never hardcoded.
+const APP_TOKEN = 'dev-local-token';
 
 /**
  * Runtime shape check on the polled payload.
  *
- * `http.get<RunState>()` is a compile-time assertion, not a guarantee —
- * the server can send anything. This matters concretely here: Code Scout
- * moved from `code_gaps` (Rev 2) to `suggestions` (Rev 3) mid-build, and a
- * backend still on Rev 2 sends a body with no `suggestions` key at all.
- * Without this check the computed stage summary throws on
- * `suggestions.length`, Angular keeps the last good value, and the screen
- * renders the LIVE run's header over the FIXTURE's funnel, findings and
- * counts — every number belonging to a different run than the header
- * claims, with the source chip still reading "live". Fail loudly instead.
- *
- * Deliberately shallow: it checks the fields this UI dereferences, not the
- * whole contract. A schema validator (zod) would be the real answer if the
- * contract keeps moving.
+ * `http.get<T>()` is a compile-time assertion, not a guarantee. This checks
+ * the fields the UI actually dereferences, so a backend on an older contract
+ * fails loudly and visibly rather than half-rendering: without it, a missing
+ * array makes a computed throw, Angular keeps the last good value, and the
+ * screen shows the LIVE header over FIXTURE data with the chip still reading
+ * "live" — every number belonging to a different run than the header claims.
  */
-function validateRunState(body: unknown): { ok: true; run: RunState } | { ok: false; reason: string } {
+function validateRunDetail(body: unknown): { ok: true; run: RunDetailResponse } | { ok: false; reason: string } {
   if (!body || typeof body !== 'object') return { ok: false, reason: 'response was not an object' };
-  const r = body as Partial<RunState>;
+  const r = body as Partial<RunDetailResponse>;
 
   if (typeof r.run_id !== 'number') return { ok: false, reason: 'missing run_id' };
   if (typeof r.status !== 'string') return { ok: false, reason: 'missing status' };
-  if (!Array.isArray(r.findings)) return { ok: false, reason: 'missing findings[]' };
-  if (!Array.isArray(r.drilldown_trail)) return { ok: false, reason: 'missing drilldown_trail[]' };
-  if (!Array.isArray(r.suggestions)) {
+  if (!Array.isArray(r.snapshots)) {
     return {
       ok: false,
-      // Named explicitly: this is the Rev 2 -> Rev 3 skew, the single most
-      // likely reason a real backend fails this check today.
-      reason: Array.isArray((r as { code_gaps?: unknown[] }).code_gaps)
-        ? 'backend is on the Rev 2 contract (code_gaps, no suggestions[])'
-        : 'missing suggestions[]',
+      reason: (r as { snapshot?: unknown }).snapshot
+        ? 'backend is on the old contract (snapshot.stages, not snapshots[])'
+        : 'missing snapshots[]',
     };
   }
-  if (!r.snapshot || !Array.isArray(r.snapshot.stages)) return { ok: false, reason: 'missing snapshot.stages[]' };
+  if (!Array.isArray(r.findings)) return { ok: false, reason: 'missing findings[]' };
+  if (!Array.isArray(r.code_gaps)) return { ok: false, reason: 'missing code_gaps[] — backend predates the Remedy Loop API' };
+  if (!Array.isArray(r.drilldown_trail)) return { ok: false, reason: 'missing drilldown_trail[]' };
   if (!r.voc || typeof r.voc !== 'object') return { ok: false, reason: 'missing voc' };
 
-  return { ok: true, run: body as RunState };
+  return { ok: true, run: body as RunDetailResponse };
+}
+
+/**
+ * RunDetailResponse -> the view model the components render.
+ *
+ * The ONLY place API field names are touched. Two shape differences worth
+ * naming: `snapshots` is flat with a `window` discriminator (so the current
+ * window has to be filtered out of it), and the markdown artifacts arrive
+ * inline rather than needing a second fetch.
+ */
+function toRunState(r: RunDetailResponse): RunState {
+  const current = r.snapshots.filter((s) => (s.window ?? 'current') === 'current');
+  const previous = r.snapshots.filter((s) => s.window === 'previous');
+  return {
+    run_id: r.run_id,
+    window_start: r.window_start,
+    window_end: r.window_end,
+    status: r.status,
+    snapshot: {
+      stages: current as SnapshotRow[],
+      segments: [],
+      reasons: [],
+      ct_events: [],
+      previous_stages: previous as SnapshotRow[],
+    },
+    findings: r.findings ?? [],
+    drilldown_trail: r.drilldown_trail ?? [],
+    code_gaps: r.code_gaps ?? [],
+    trend_report: { deltas: [], adoption: [], voc_theme_deltas: [], narrative: '' },
+    voc: r.voc,
+    prd_draft: r.prd_markdown ?? null,
+    artifacts: (r.artifacts ?? []).map((a) => a.uri),
+  };
 }
 
 /** Transient = worth retrying. A 404 or a 4xx is not going to fix itself. */
@@ -237,14 +266,14 @@ export class RunService {
           )
         ),
         tap((body) => {
-          const result = validateRunState(body);
+          const result = validateRunDetail(body);
           if (!result.ok) {
             // A malformed payload is not transient — no point retrying it.
             this.failLive(result.reason);
             return;
           }
           consecutiveFailures = 0;
-          this._run.set(result.run);
+          this._run.set(toRunState(result.run));
           if (result.run.status === 'completed' || result.run.status === 'failed') {
             this.stopPolling();
           }
@@ -278,19 +307,27 @@ export class RunService {
    * Bounded by DELIVER_TIMEOUT_MS so a hanging backend resolves false
    * instead of leaving the caller's promise pending forever.
    */
-  async deliver(runId: number, channel: string): Promise<boolean> {
+  async deliver(runId: number): Promise<{ delivered: boolean; detail?: string }> {
     try {
-      await firstValueFrom(
-        this.http.post(`${API_BASE}/${runId}/deliver`, { channel }).pipe(timeout(DELIVER_TIMEOUT_MS))
+      const res = await firstValueFrom(
+        this.http
+          .post<{ run_id: number; delivered: boolean; detail?: string }>(
+            `${API_BASE}/${runId}/deliver`,
+            {},
+            { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
+          )
+          .pipe(timeout(DELIVER_TIMEOUT_MS))
       );
-      return true;
+      // 200 with delivered:false is the normal case while Garuda is
+      // unconfigured — the endpoint reports honestly instead of throwing.
+      return { delivered: !!res?.delivered, detail: res?.detail };
     } catch {
-      return false;
+      return { delivered: false, detail: 'delivery endpoint unreachable' };
     }
   }
 
   private failedStatuses(run: RunState): StageStatus[] {
-    const reached = run.suggestions.length ? 3 : run.findings.length ? 2 : run.snapshot.stages.length ? 1 : 0;
+    const reached = run.code_gaps.length ? 3 : run.findings.length ? 2 : run.snapshot.stages.length ? 1 : 0;
     const statuses: StageStatus[] = ['done', 'done', 'done', 'done'];
     for (let i = reached; i < 4; i++) statuses[i] = i === reached ? 'failed' : 'pending';
     return statuses;
@@ -307,9 +344,10 @@ export class RunService {
           ? `drilling down… (query ${run.drilldown_trail.length}/10)`
           : `${run.findings.length} findings, ${run.findings.filter((f) => f.rank === 1).length ? 1 : 0} critical`;
       case 'code': {
-        const n = run.suggestions.length;
-        const findings = new Set(run.suggestions.map((sg) => sg.finding_rank)).size;
-        return n ? `${n} suggestion(s) across ${findings} finding(s)` : 'no suggestions yet';
+        const found = run.code_gaps.filter((g) => g.mechanism_found);
+        const remedies = found.reduce((n, g) => n + (g.remedies?.length ?? 0), 0);
+        if (!run.code_gaps.length) return 'no code gaps yet';
+        return `${found.length} mechanism(s) pinned · ${remedies} remedy verdict(s)`;
       }
       case 'prd':
         return run.prd_draft ? 'PRD draft ready' : 'PRD draft ready (built from findings)';

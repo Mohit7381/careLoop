@@ -46,13 +46,15 @@ Loads on the frozen fixture by default — no backend required, nothing to confi
 
 ### Against the real backend
 
-**Nothing serves `GET /v1/analysis/runs/{id}` at all yet** — `impl/codeScout` has no FastAPI app, no routes, and `requirements.txt` doesn't list `fastapi`. The live path below has been verified end-to-end against a *mock* service only. Once `careloop-service` exposes it:
+The service is Mohit's, on **PR #1** (`origin/pr/1` — a pull-request ref, so it does *not* show up in `git branch -r`; fetch with `git fetch origin '+refs/pull/*/head:refs/remotes/origin/pr/*'`). Run it with `uvicorn app.main:app --port 8000`; `DEMO_MODE=true` in `.env.example` needs no credentials.
+
+The live path below is verified end-to-end against that service. Once `careloop-service` exposes it:
 
 ```bash
 npm start -- --proxy-config proxy.conf.json    # proxies /v1/* to http://localhost:8000
 ```
 
-then open `http://localhost:4200/runs/47?live=1` — the `?live` query param switches `RunService` from the fixture to polling `GET /v1/analysis/runs/{id}` every 1.5s until `completed`/`failed`. The run id comes from the **path**, not from `?live`'s value.
+then open `http://localhost:4200/runs/1?live=1` — the `?live` query param switches `RunService` from the fixture to polling `GET /v1/analysis/runs/{id}` every 1.5s until `completed`/`failed`. The run id comes from the **path**, not from `?live`'s value.
 
 Failure handling (all verified against a mock service):
 

@@ -53,7 +53,8 @@ export class FindingsListComponent {
     return `${e.metric}: ${val}`;
   }
 
+  /** contracts.py sends a literal now ("high"/"medium"/"low"), not a float. */
   confLabel(f: Finding): string {
-    return f.confidence >= 0.8 ? 'HIGH' : f.confidence >= 0.5 ? 'MEDIUM' : 'LOW';
+    return (f.confidence ?? 'medium').toUpperCase();
   }
 }

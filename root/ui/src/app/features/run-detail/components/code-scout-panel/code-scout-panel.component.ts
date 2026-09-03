@@ -1,47 +1,37 @@
 import { Component, computed, input } from '@angular/core';
 
-import { Suggestion, SuggestionType, VerificationStatus } from '../../../../core/models/run-state';
+import { CodeGap, Remedy, RemedyStatus } from '../../../../core/models/run-state';
 
-const VERIFICATION_COPY: Record<VerificationStatus, string> = {
-  exists: 'Already built — found wired into this mechanism.',
-  absent: 'Checked this file — not built.',
-  partial: 'Exists in this file, but not wired into this mechanism.',
-  not_applicable: 'No code to verify — business/process change.',
+const NO_MATCH_COPY: Record<string, string> = {
+  no_results: 'No candidate mechanism matched the search terms.',
+  budget_exhausted: 'Search budget spent before a mechanism was isolated.',
+  ambiguous: 'Several candidate mechanisms matched; none conclusive.',
 };
 
-export interface ExploredAnchor {
-  file: string;
-  line: number;
-  snippet: string;
-}
+/** What each Remedy Loop verdict actually means, in the reviewer's terms. */
+const REMEDY_COPY: Record<RemedyStatus, string> = {
+  exists: 'Already built — found wired into this mechanism.',
+  absent: 'Confirmed missing — checked this file, not there.',
+  partial: 'Half-built — present in the codebase, not wired into this path.',
+};
 
 interface CodeToken {
   text: string;
   cls: 'kw' | 'str' | 'var' | 'plain';
 }
 
-interface FindingGroup {
-  findingRank: number;
-  repo: string | null;
-  anchor: ExploredAnchor | null;
-  suggestions: Suggestion[];
-}
-
 /**
- * Renders Suggestion[] from Agent 3 (Code Scout) — Rev 3's "explore and
- * suggest" flow, replacing the single-CodeGap "money moment" panel.
+ * Renders Agent 3's CodeGap[] with the Remedy Loop verdicts nested inside —
+ * the shape the plan (rev 2.1) and the running backend both use.
  *
- * Two-part rendering per finding, matching the real pipeline's two steps:
- *  1. "Explored" — the mechanism Code Scout's search actually located
- *     (file:line + snippet). NOTE: this comes from `anchors`, NOT from the
- *     Suggestion contract — contracts.py's Suggestion has no snippet field,
- *     only evidence_file/evidence_line. `anchors` is fixture-only UI
- *     enrichment (see run-47.fixture.ts), matching the real inventory in
- *     impl/codeScout's fixtures/code_scout/*.json. Flagged in the README
- *     rather than worked around silently — ask Harshit whether
- *     Suggestion should carry the snippet, or whether file:line is enough.
- *  2. Suggestions — 0..N cards, tech (code-verified) mixed with
- *     business/process (unverifiable by design, no code to check).
+ * Two-part rendering per gap, mirroring what Code Scout actually does:
+ *  1. the mechanism it pinned (file:line + snippet), and
+ *  2. the remedies it proposed, each verified exists / absent / partial.
+ *
+ * `mechanism_found: false` is a first-class outcome enforced by
+ * CodeGap.model_post_init on the Python side, not an error — it gets an
+ * honest rendering rather than an empty card. The backend returns several of
+ * these per run, so this is a common path, not an edge case.
  */
 @Component({
   selector: 'app-code-scout-panel',
@@ -49,48 +39,56 @@ interface FindingGroup {
   styleUrl: './code-scout-panel.component.scss',
 })
 export class CodeScoutPanelComponent {
-  readonly suggestions = input.required<Suggestion[]>();
-  readonly anchors = input<Record<number, ExploredAnchor>>({});
+  readonly gaps = input.required<CodeGap[]>();
 
-  readonly groups = computed<FindingGroup[]>(() => {
-    const byRank = new Map<number, Suggestion[]>();
-    for (const s of this.suggestions()) {
-      const list = byRank.get(s.finding_rank) ?? [];
-      list.push(s);
-      byRank.set(s.finding_rank, list);
+  /** Gaps that pinned a mechanism, first and de-duplicated.
+   *
+   *  The backend can emit the same gap for several findings that route to
+   *  the same repo (two findings both routing to pharmacy_checkout resolve
+   *  to the same file), which would otherwise render as identical cards.
+   *  Keyed on repo+file+line; the findings it covers are listed on the card. */
+  readonly resolved = computed(() => {
+    const byLocation = new Map<string, { gap: CodeGap; findingRanks: number[] }>();
+    for (const gap of this.gaps().filter((g) => g.mechanism_found)) {
+      const key = `${gap.repo}|${gap.file}|${gap.line}`;
+      const hit = byLocation.get(key);
+      if (hit) hit.findingRanks.push(gap.finding_rank);
+      else byLocation.set(key, { gap, findingRanks: [gap.finding_rank] });
     }
-    const anchors = this.anchors();
-    return [...byRank.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([findingRank, suggestions]) => ({
-        findingRank,
-        repo: suggestions[0]?.repo ?? null,
-        anchor: anchors[findingRank] ?? null,
-        suggestions,
-      }));
+    return [...byLocation.values()].sort((a, b) => a.findingRanks[0] - b.findingRanks[0]);
   });
 
-  typeLabel(t: SuggestionType): string {
-    return t.toUpperCase();
+  /** Searched, nothing pinned. Summarised rather than given a card each. */
+  readonly unresolved = computed(() => this.gaps().filter((g) => !g.mechanism_found));
+
+  gapClassLabel(gap: CodeGap): string {
+    return gap.gap_class ? gap.gap_class.replace(/_/g, ' ').toUpperCase() : 'NO MECHANISM FOUND';
   }
 
-  verificationCopy(status: VerificationStatus): string {
-    return VERIFICATION_COPY[status];
+  gapClassTone(gap: CodeGap): string {
+    if (gap.gap_class === 'logic_flaw') return 'logic';
+    if (gap.gap_class === 'ux_gap') return 'ux';
+    return '';
   }
 
-  verificationTone(status: VerificationStatus): string {
+  noMatchCopy(gap: CodeGap): string {
+    return (gap.no_match_reason && NO_MATCH_COPY[gap.no_match_reason]) || 'Not determined.';
+  }
+
+  remedyCopy(r: Remedy): string {
+    return REMEDY_COPY[r.status] ?? '';
+  }
+
+  remedyTone(status: RemedyStatus): string {
     if (status === 'exists') return 'good';
     if (status === 'partial') return 'warn';
-    if (status === 'absent') return 'gap';
-    return 'na';
+    return 'gap';
   }
 
-  /** Snippets are fixture-only (see class doc) — tokenized the same way
-   *  the Rev 2 panel did, kept for visual continuity. */
   tokenize(snippet: string | null | undefined): CodeToken[] {
     if (!snippet) return [];
     const KEYWORDS =
-      /\b(private|final|String|public|Order|Override|SELECT|FROM|WHERE|AND|IN|INTERVAL|MINUTE|now|return|if|boolean|throw|new)\b/;
+      /\b(private|final|String|public|Order|Override|SELECT|FROM|WHERE|AND|IN|INTERVAL|MINUTE|now|return|if|boolean|throw|new|try)\b/;
     return snippet
       .split(/(\s+|\b)/)
       .filter(Boolean)

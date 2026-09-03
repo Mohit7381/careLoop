@@ -12,7 +12,15 @@
 
 export type FindingOrigin = 'warehouse' | 'voc';
 export type GapClass = 'logic_flaw' | 'missing_retention_hook' | 'ux_gap';
-export type RunStatus = 'queued' | 'extracting' | 'analyzing' | 'reporting' | 'completed' | 'failed';
+export type RunStatus =
+  | 'queued' | 'fetching' | 'analyzing' | 'scanning_code'
+  | 'reporting' | 'drafting_prd' | 'completed' | 'failed';
+
+/** Was a float in v2; the backend now sends a literal. */
+export type Confidence = 'high' | 'medium' | 'low';
+
+/** Remedy Loop verdict (rev 2.1). Same three values the demo's beat 6 shows. */
+export type RemedyStatus = 'exists' | 'absent' | 'partial';
 
 /** Rev 3 (2026-09-03) — Code Scout's output shape. Replaces CodeGap, kept
  *  below for reference only (contracts.py keeps it too, marked SUPERSEDED).
@@ -48,7 +56,7 @@ export interface Finding {
   origin: FindingOrigin;
   stage: RoutingStage;
   hypothesis: string;
-  confidence: number;
+  confidence: Confidence;
   confirm_via: string;
 
   segments?: SegmentFilter[];
@@ -96,6 +104,8 @@ export interface CodeGap {
   search_terms_used?: string[];
   searches_run?: number;
   no_match_reason?: NoMatchReason | null;
+  /** Remedy Loop output — only populated when mechanism_found is true. */
+  remedies?: Remedy[];
 }
 
 /** PROVISIONAL (Rev 3) — Code Scout's actual output as of 2026-09-03,
@@ -128,6 +138,18 @@ export interface Suggestion {
 
   search_terms_used?: string[];
   searches_run?: number;
+}
+
+/** One proposed, code-verified fix inside a CodeGap (Remedy Loop, rev 2.1).
+ *  `signature` is what the loop searched for to decide `status`. */
+export interface Remedy {
+  proposal: string;
+  signature: string;
+  status: RemedyStatus;
+  evidence_file?: string | null;
+  evidence_line?: number | null;
+  searched_terms?: string[];
+  iterations?: number;
 }
 
 export interface StageDelta {
@@ -203,9 +225,34 @@ export interface Snapshot {
   previous_stages: SnapshotRow[];
 }
 
-/** The full state object threaded through the LangGraph pipeline —
- *  identical shape to Python's RunState. Fetched from
- *  GET /v1/analysis/runs/{id}. */
+/**
+ * What GET /v1/analysis/runs/{id} actually returns — `RunDetailResponse` in
+ * app/schemas/api.py, which is NOT the pipeline's internal RunState:
+ *  - `snapshots` is a flat array (with a `window` discriminator), not
+ *    `snapshot.stages`
+ *  - it carries `journey`, `failed_stage`, `config`
+ *  - the markdown artifacts arrive inline as report_markdown / prd_markdown
+ * Mapped onto the view model by RunService; see the adapter there.
+ */
+export interface RunDetailResponse {
+  run_id: number;
+  journey: string;
+  window_start: string;
+  window_end: string;
+  status: RunStatus;
+  failed_stage?: string | null;
+  config: Record<string, unknown>;
+  snapshots: (SnapshotRow & { window?: 'current' | 'previous' })[];
+  findings: Finding[];
+  code_gaps: CodeGap[];
+  voc: Voc;
+  drilldown_trail: DrilldownStep[];
+  artifacts: { kind: string; uri: string }[];
+  report_markdown?: string | null;
+  prd_markdown?: string | null;
+}
+
+/** The view model the components render. */
 export interface RunState {
   run_id: number;
   window_start: string;
@@ -215,8 +262,8 @@ export interface RunState {
   snapshot: Snapshot;
   findings: Finding[];
   drilldown_trail: DrilldownStep[];
-  code_gaps: CodeGap[]; // SUPERSEDED (Rev 3) — see suggestions
-  suggestions: Suggestion[]; // PROVISIONAL (Rev 3)
+  /** Agent 3's output, with Remedy Loop verdicts nested per gap. */
+  code_gaps: CodeGap[];
   trend_report: TrendReport;
   voc: Voc;
   prd_draft: string | null;

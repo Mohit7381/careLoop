@@ -47,8 +47,8 @@ export class PrdDrawerComponent {
     const channel = this.prd().channel;
     this.close();
     this.toast('Sent to ' + channel);
-    const ok = await this.runService.deliver(this.run().run_id, channel);
-    this.toast(ok ? 'Delivered to ' + channel : 'Draft approved · delivery unavailable');
+    const res = await this.runService.deliver(this.run().run_id);
+    this.toast(res.delivered ? 'Delivered to ' + channel : 'Draft approved · delivery unavailable');
   }
 
   requestChanges(): void {

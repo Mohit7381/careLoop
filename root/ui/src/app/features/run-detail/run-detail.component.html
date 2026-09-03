@@ -57,7 +57,7 @@
         <h2>Code scout</h2>
         <div class="hint">read-only · names lines, never writes diffs</div>
       </div>
-      <app-code-scout-panel [suggestions]="run().suggestions" [anchors]="anchors" />
+      <app-code-scout-panel [gaps]="run().code_gaps" />
     </section>
   }
 </div>
