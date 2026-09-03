@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 
 from app.agents.analyst import phase1
 from app.agents.analyst.aggregate_tool import AggregateTool
+from app.agents.analyst.journey_events import journey_events_for
 from app.agents.analyst.phase2 import run_drilldown
 from app.agents.analyst.phase3_voc import corroborate, run_voc
 from app.agents.analyst.validator import collect_numbers, filter_findings
@@ -54,13 +55,11 @@ def run_analyst(state: RunState,
     # ---- evidence gate (accepts every number the model was shown) ----
     shown = collect_numbers(summary) | collect_numbers(gap or {})
     kept, rejected = filter_findings(findings, state.snapshot, trail, shown)
-    gap_events = phase1.events_for_gap(
-        gap, cfg.get("journey_events") or {}, state.snapshot.ct_events)
     for f in kept:
         validate_routing_stage(f.stage, routing_keys)
-        # Warehouse findings all describe the same funnel gap, so they share
-        # its bounding events. VoC findings carry theme_search_terms instead.
-        f.journey_events = list(gap_events)
+        # Decision #11 - real analytics event names, better GitLab search
+        # seed material for Code Scout than hypothesis-prose splitting.
+        f.journey_events = journey_events_for(f, state.snapshot.ct_events)
 
     # ---- phase 3: VoC ----
     voc_findings: list = []

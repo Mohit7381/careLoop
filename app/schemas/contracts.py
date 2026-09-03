@@ -29,13 +29,32 @@ recorded in the TCD, Appendix A ("State-contract alignment", 2026-09-03):
      results. A remedy verified ABSENT is the strongest PRD input there is;
      one that EXISTS kills a fix-proposal before it embarrasses anyone.
 
+v3.1 (PR #3 rebase, 2026-09-03): two additive decisions, neither touching
+the CodeGap/Remedy shape above:
+  10. RunState gets `model_config = ConfigDict(extra="forbid")`. Without it,
+      pydantic's default extra="ignore" silently drops any field a caller
+      sends that this model doesn't declare - the PR #3 review reproduced
+      this live (a real Analyst handoff payload lost journey/demo_mode/
+      prev_window_start/prev_window_end/failed_stage with no error).
+      journey is the serious one: it's the key that resolves routing, so
+      losing it means nothing downstream can re-derive where a finding
+      belongs. Silent loss is worse than a crash.
+  11. Finding gains `journey_events` and CodeGap/RunState gain the
+      Suggestion/SuggestionType/VerificationStatus family - Code Scout's
+      alternate "explore the repo, then propose tech/business/process
+      improvements" output shape (PR #3's Rev 3), kept ADDITIVE alongside
+      CodeGap/Remedy rather than replacing it. Whether Suggestion replaces
+      CodeGap.remedies, sits alongside it, or doesn't ship is an explicit
+      three-way call (Nakul/Mohit/Harshit) per the PR #3 review (S2) - this
+      file makes room for either answer without forcing one.
+
 Do not change field names here without syncing with Nakul (Analyst) and
 Harshit (Code Scout) — the pipeline validates against these models at each
 node boundary.
 """
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 FindingOrigin = Literal["warehouse", "voc"]
 GapClass = Literal["logic_flaw", "missing_retention_hook", "ux_gap"]
@@ -46,6 +65,13 @@ RunStatus = Literal[
 ]
 NoMatchReason = Literal["no_results", "budget_exhausted", "ambiguous"]
 RemedyStatus = Literal["exists", "absent", "partial"]
+
+SuggestionType = Literal["tech", "business", "process"]
+# "not_applicable" = nothing to verify (business/process, or tech with no
+# signature). "unverified" = there WAS something to verify but we didn't -
+# budget exhausted, or the verification call itself failed. Conflating the
+# two misreports "we didn't check" as "there was nothing to check" (review S3).
+VerificationStatus = Literal["exists", "absent", "partial", "not_applicable", "unverified"]
 
 _GAP_CLASSES = {"logic_flaw", "missing_retention_hook", "ux_gap"}
 
@@ -81,12 +107,10 @@ class Finding(BaseModel):
     confidence: Confidence
     confirm_via: str
 
-    # Real analytics event names bounding this drop-off, from the journey
-    # config and intersected with the events actually present in the
-    # snapshot. Product vocabulary, NOT code identifiers — Code Scout seeds
-    # its search with these instead of words split out of hypothesis prose.
-    # Additive and backward-compatible: empty for VoC findings, which carry
-    # theme_search_terms instead.
+    # Decision #11 - the real analytics event names bounding the drop-off.
+    # Not code identifiers, but far better search-term seed material than
+    # parsing free-text hypothesis prose. Additive - defaults to empty, so
+    # existing findings/fixtures that don't set it are unaffected.
     journey_events: list[str] = Field(default_factory=list)
 
     # warehouse-origin fields
@@ -133,8 +157,8 @@ class Remedy(BaseModel):
         # A verdict of exists/partial is a claim about specific source. If we
         # cannot name the file, we have not earned the claim — the honest
         # states are "absent" (searched, not found) or None (unverified).
-        # Adopted from Harshit's Suggestion model (PR #3); the Remedy Loop's
-        # verify path was hardened to satisfy it rather than the reverse.
+        # Adopted from Harshit's Suggestion model; the Remedy Loop's verify
+        # path was hardened to satisfy this rather than the reverse.
         if self.status in ("exists", "partial") and not self.evidence_file:
             raise ValueError(
                 f"evidence_file is required when status is {self.status!r}"
@@ -168,6 +192,46 @@ class CodeGap(BaseModel):
             raise ValueError("gap_class is required when mechanism_found=True")
         if not self.mechanism_found and self.no_match_reason is None:
             raise ValueError("no_match_reason is required when mechanism_found=False")
+
+
+class Suggestion(BaseModel):
+    """Decision #11 - Code Scout's alternate output shape (Rev 3): explore a
+    routing-matched repo to inventory what already exists, then propose
+    improvements - NOT limited to code. "business"/"process" suggestions are
+    equally valid and carry no code evidence. Kept additive alongside
+    CodeGap/Remedy; see this file's module docstring.
+
+    A Finding can produce zero to several Suggestions - generative (propose
+    improvements/new features), not diagnostic (find the one bug).
+    verification_status only applies to suggestion_type="tech" - checked
+    within the specific inventory file the suggestion is grounded in (not a
+    whole-repo search, which false-positives when unrelated infrastructure
+    for the same capability exists elsewhere in the service).
+    """
+
+    finding_rank: int
+    origin: FindingOrigin
+    stage: str  # routing category — validate with validate_routing_stage()
+    service: str
+    repo: str
+
+    suggestion_type: SuggestionType
+    title: str
+    description: str
+    rationale: str  # why this addresses the drop-off - ties back to the finding
+
+    verification_status: VerificationStatus = "not_applicable"
+    evidence_file: Optional[str] = None
+    evidence_line: Optional[int] = None
+
+    search_terms_used: list[str] = Field(default_factory=list)
+    searches_run: int = 0
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.suggestion_type != "tech" and self.verification_status != "not_applicable":
+            raise ValueError("verification_status only applies to suggestion_type='tech'")
+        if self.verification_status in ("exists", "partial") and self.evidence_file is None:
+            raise ValueError("evidence_file is required when verification_status is exists/partial")
 
 
 class StageDelta(BaseModel):
@@ -247,7 +311,18 @@ class Snapshot(BaseModel):
 
 
 class RunState(BaseModel):
-    """The full state object threaded through the LangGraph pipeline."""
+    """The full state object threaded through the LangGraph pipeline.
+
+    extra="forbid" (decision #10): pydantic's own default (extra="ignore")
+    silently dropped journey/demo_mode/prev_window_start/prev_window_end/
+    failed_stage in a narrower, independently-drifted RunState during PR #3's
+    review - losing `journey` is the serious one, since it's the key that
+    resolves routing, so nothing downstream could re-derive where a finding
+    belonged. Silent loss is worse than a crash; forbid so the next contract
+    drift fails loudly instead.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     run_id: int
     journey: str = "pd_checkout"          # decision #4
@@ -263,6 +338,7 @@ class RunState(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     drilldown_trail: list[DrilldownStep] = Field(default_factory=list)
     code_gaps: list[CodeGap] = Field(default_factory=list)
+    suggestions: list[Suggestion] = Field(default_factory=list)  # decision #11
     trend_report: TrendReport = Field(default_factory=TrendReport)
     voc: Voc = Field(default_factory=Voc)
     prd_draft: Optional[str] = None
@@ -275,3 +351,6 @@ class RunState(BaseModel):
 
     def gaps_for(self, finding_rank: int) -> list[CodeGap]:
         return [g for g in self.code_gaps if g.finding_rank == finding_rank]
+
+    def suggestions_for(self, finding_rank: int) -> list[Suggestion]:
+        return [s for s in self.suggestions if s.finding_rank == finding_rank]

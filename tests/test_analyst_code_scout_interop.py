@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from app.agents.analyst import phase1
 from app.agents.analyst.analyst import run_analyst
 from app.agents.code_scout.assessor import StubCodeGapAssessor
 from app.agents.code_scout.node import code_scout_node
@@ -127,44 +126,43 @@ def test_every_confidence_literal_survives_the_seam():
 
 def test_journey_events_are_real_events_only(analyst_state):
     """Code Scout searches source for these, so an event the journey does not
-    actually emit sends it hunting for a string that cannot exist."""
+    actually emit sends it hunting for a string that cannot exist.
+
+    Derivation lives in app/agents/analyst/journey_events.py and is scoped to
+    the Fetcher's own ct_events, so this holds by construction — the point of
+    pinning it here is that it keeps holding if the derivation is rewritten.
+    """
     emitted = {e.event_name for e in analyst_state.snapshot.ct_events}
     warehouse = [f for f in analyst_state.findings if f.origin == "warehouse"]
     assert warehouse
 
     for finding in warehouse:
-        assert finding.journey_events, f"finding #{finding.rank} has no search seed"
-        assert set(finding.journey_events) <= emitted
+        assert set(finding.journey_events) <= emitted, finding.journey_events
+
+    # And it must actually fire on real data — an all-empty run would pass
+    # the subset check above while quietly restoring prose-splitting for
+    # every finding, which is the defect the field exists to prevent.
+    assert any(f.journey_events for f in warehouse)
 
 
-def test_configured_events_absent_from_the_snapshot_are_dropped(snapshot):
-    """Exercises the intersection directly, on the confirmed->delivered gap.
-
-    The pd_checkout gap the Analyst actually picks is created->confirmed,
-    whose configured events all happen to be present — so asserting on that
-    gap would pass even with the filter removed. This uses the one gap where
-    the config and the snapshot genuinely disagree: 'order_delivered' is
-    configured for the delivered stage and is not in the snapshot.
+def test_a_finding_with_no_event_overlap_still_gets_search_terms(analyst_state):
+    """Empty journey_events is a legitimate outcome, not a forced guess
+    (journey_events.py's `test_no_overlap_returns_empty` pins that choice).
+    What must not happen is Code Scout being left with nothing to search.
     """
-    cfg = yaml.safe_load((JOURNEY_DIR / "pd_checkout.yaml").read_text())
-    emitted = {e.event_name for e in snapshot.ct_events}
-    assert "order_delivered" in cfg["journey_events"]["delivered"]
-    assert "order_delivered" not in emitted
+    assessor = StubCodeGapAssessor()
+    without = [f for f in analyst_state.findings
+               if f.origin == "warehouse" and not f.journey_events]
+    if not without:
+        pytest.skip("this replay session has overlap on every warehouse finding")
 
-    events = phase1.events_for_gap(
-        {"from_stage": "confirmed", "to_stage": "delivered"},
-        cfg["journey_events"], snapshot.ct_events)
-
-    assert "order_delivered" not in events
-    assert events == ["order_placed", "order_abandoned"]
-
-
-def test_events_for_gap_is_empty_without_a_gap(snapshot):
-    cfg = yaml.safe_load((JOURNEY_DIR / "pd_checkout.yaml").read_text())
-    assert phase1.events_for_gap(None, cfg["journey_events"], snapshot.ct_events) == []
+    for finding in without:
+        terms = assessor.propose_search_terms(finding)
+        assert terms, f"finding #{finding.rank} would search for nothing"
 
 
 def test_voc_findings_carry_theme_terms_not_journey_events(analyst_state):
     for finding in [f for f in analyst_state.findings if f.origin == "voc"]:
         assert finding.journey_events == []
         assert finding.theme_search_terms
+        assert StubCodeGapAssessor().propose_search_terms(finding) == finding.theme_search_terms

@@ -31,17 +31,6 @@ artifact_reasons:          # re-creation artifacts, excluded from user-abandonme
   - "cs change payment method, new order will be created"
 reason_field: abandon_reason
 
-# Analytics event names observed while an order sits in each stage. The
-# Analyst attaches the events bounding a gap (from_stage + to_stage) to each
-# warehouse finding as Finding.journey_events, after intersecting with the
-# events actually present in the snapshot — so Code Scout is never handed an
-# event name this journey does not really emit. BA-owned; names must match
-# the CT event names the Fetcher pulls.
-journey_events:
-  created:   [product_view, cart_add, cart_view]
-  confirmed: [order_placed, order_abandoned]
-  delivered: [order_delivered]
-
 # Code Scout routing: category -> candidate repos (exact-match keys; Appx A #2)
 routing:
   pharmacy_checkout:

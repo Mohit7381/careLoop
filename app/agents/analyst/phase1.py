@@ -66,27 +66,6 @@ def largest_drop(table: list[dict]) -> Optional[dict]:
     return worst
 
 
-def events_for_gap(gap: Optional[dict], journey_events: dict,
-                   ct_events: list) -> list[str]:
-    """Analytics event names bounding a funnel gap (Appx A #11).
-
-    Deterministic, and deliberately conservative: an event is only returned
-    if the journey config lists it for one of the two stages AND the snapshot
-    actually contains it. Code Scout searches code with these, so handing it
-    an event this journey never emits would send it hunting for a string that
-    cannot exist.
-    """
-    if not gap:
-        return []
-    present = {e.event_name for e in ct_events}
-    out: list[str] = []
-    for stage in (gap.get("from_stage"), gap.get("to_stage")):
-        for name in journey_events.get(stage, []) or []:
-            if name in present and name not in out:
-                out.append(name)
-    return out
-
-
 def cluster_reasons(reasons: list[ReasonRow], artifact_reasons: list[str]) -> dict:
     """Case-normalized reason clusters, with re-creation artifacts split out."""
     artifacts_norm = {normalize_reason(a) for a in artifact_reasons}
