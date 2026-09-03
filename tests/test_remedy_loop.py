@@ -214,3 +214,22 @@ def test_unrecognised_statuses_do_not_get_guessed_into_a_verdict():
     assert normalise_status("no_matching_code_found") == "absent"
     assert normalise_status("partial_evidence_found") == "partial"
     assert normalise_status("code_found") == "exists"
+
+
+def test_negation_beats_the_word_it_negates():
+    """Token matching alone read "no_notification_found" as EXISTS, because
+    "found" is in the token set — the worst direction to be wrong in, and a
+    very plausible thing for the verifier to say when the search was for a
+    notification call in an abandon path."""
+    from app.agents.code_scout.remedy_loop import normalise_status
+
+    for negated in ("no_notification_found", "not_present_in_path", "never_called",
+                    "not_wired_in", "not_invoked", "cannot_be_found", "not_used"):
+        assert normalise_status(negated) == "absent", negated
+
+    for affirmed in ("code_exists_elsewhere", "capability_present", "wired_in",
+                     "invoked_from_abandon", "already_implemented"):
+        assert normalise_status(affirmed) == "exists", affirmed
+
+    # Negation with nothing to negate is still not a verdict.
+    assert normalise_status("no idea") is None

@@ -57,10 +57,22 @@ def normalise_status(raw: Any) -> Optional[str]:
     tokens = set(key.split("_"))
     if tokens & {"partial", "partially", "ambiguous", "related", "inconclusive"}:
         return "partial"
-    if tokens & {"absent", "missing", "none"} or key.startswith(("not_", "no_match", "no_result")):
+
+    # Negation has to win over the word it negates. "no_notification_found"
+    # means ABSENT, but a bare token check sees "found" and reports EXISTS —
+    # the worst possible direction to be wrong in, and a very plausible thing
+    # for the model to say when the search was for a notification call.
+    negated = bool(tokens & {"no", "not", "never", "without", "cannot"})
+    # Domain verbs count as status words: the verifier's real vocabulary for
+    # "the capability is in this path" is wired/invoked/called, not just
+    # exists/found. Without them "not_wired_in" degrades to unverified.
+    positive = tokens & {"exists", "exist", "found", "present", "implemented",
+                         "wired", "invoked", "called", "used", "configured"}
+    if tokens & {"absent", "missing"} or (negated and positive):
         return "absent"
-    if tokens & {"exists", "exist", "found", "present"}:
+    if positive and not negated:
         return "exists"
+    # Negation with nothing to negate ("no idea") is not a verdict.
     return None
 MAX_ITERATIONS = 2      # initial verify + one refinement
 SEARCH_BUDGET = 12      # total searches across all remedies
