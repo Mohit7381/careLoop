@@ -54,13 +54,15 @@ def send_report(run_id: int, report_summary: str, report_link: str, prd_link: Op
     settings = get_settings()
     required = [settings.garuda_base_url, settings.garuda_channel_id, settings.garuda_provider_id, settings.garuda_template_id, settings.garuda_destination]
     if not all(required):
-        logger.warning(
+        # Raise rather than silently return — callers (delivery_node,
+        # POST /deliver) must be able to tell "actually sent" from "skipped,
+        # not configured". A caller that wants a non-fatal skip catches
+        # GarudaDeliveryError itself (delivery_node already does).
+        raise GarudaDeliveryError(
             "Garuda not fully configured (base_url/channel_id/provider_id/template_id/destination) "
-            "— skipping delivery for run %s. See app/integrations/garuda_client.py for what's needed "
-            "and confirm GChat is even a supported Garuda channel.",
-            run_id,
+            "— see app/integrations/garuda_client.py for what's needed and confirm GChat is even a "
+            "supported Garuda channel."
         )
-        return
 
     payload = {
         "destinations": [

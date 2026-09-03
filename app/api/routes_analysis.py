@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.base import SessionLocal, get_session
 from app.db.models import AnalysisRun
+from app.integrations.garuda_client import GarudaDeliveryError, send_report
 from app.pipeline.runner import run_pipeline
-from app.schemas.api import CreateRunRequest, CreateRunResponse, RunDetailResponse
+from app.schemas.api import CreateRunRequest, CreateRunResponse, DeliverResponse, RunDetailResponse
 
 router = APIRouter(prefix="/v1/analysis", tags=["analysis"])
 
@@ -87,6 +88,11 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     return CreateRunResponse(run_id=run.id, status="queued")
 
 
+def _read_artifact(run: AnalysisRun, kind: str) -> str | None:
+    artifact = next((a for a in run.artifacts if a.kind == kind), None)
+    return Path(artifact.uri).read_text() if artifact else None
+
+
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
 async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDetailResponse:
     run = session.get(AnalysisRun, run_id)
@@ -126,8 +132,44 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
             }
             for f in run.findings
         ],
+        code_gaps=run.code_gaps,
+        voc=run.voc,
+        drilldown_trail=run.drilldown_trail,
         artifacts=[{"kind": a.kind, "uri": a.uri} for a in run.artifacts],
+        report_markdown=_read_artifact(run, "report_md"),
+        prd_markdown=_read_artifact(run, "prd_md"),
     )
+
+
+@router.post("/runs/{run_id}/deliver", response_model=DeliverResponse, dependencies=[Depends(require_app_token)])
+async def deliver_run(run_id: int, session: Session = Depends(get_session)) -> DeliverResponse:
+    """
+    The UI's Approve button — pipeline delivery is best-effort/automatic
+    (see delivery_node) and reflects nothing about human sign-off; this is
+    the explicit "a human clicked Approve" action the plan describes, and
+    it's the one real HTTP call the UI's Approve control had nothing to
+    hit (screen-2 review, Pritom).
+    """
+    run = session.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if run.status != "completed":
+        raise HTTPException(status_code=409, detail=f"run is '{run.status}', not completed — nothing to deliver yet")
+
+    report_md = _read_artifact(run, "report_md")
+    if report_md is None:
+        raise HTTPException(status_code=404, detail="no report generated for this run")
+
+    try:
+        send_report(
+            run_id=run.id,
+            report_summary=report_md[:500],
+            report_link=f"/v1/analysis/runs/{run.id}/report",
+            prd_link=f"/v1/analysis/runs/{run.id}" if _read_artifact(run, "prd_md") else None,
+        )
+        return DeliverResponse(run_id=run.id, delivered=True, detail="sent")
+    except GarudaDeliveryError as exc:
+        return DeliverResponse(run_id=run.id, delivered=False, detail=f"Garuda not configured or unreachable: {exc}")
 
 
 @router.get("/runs/{run_id}/report")

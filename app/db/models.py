@@ -22,6 +22,14 @@ class AnalysisRun(Base):
     failed_stage: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
+    # Panels the UI needs that don't warrant their own table (small, run-scoped,
+    # never queried independently): Code Scout's gaps, the VoC block, and the
+    # Analyst's drill-down trail. Was previously computed but never persisted —
+    # the API had nothing to serve for 4 of 6 UI panels (screen-2 review, Pritom).
+    code_gaps: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    voc: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    drilldown_trail: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=_utcnow, index=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=_utcnow, onupdate=_utcnow, index=True
