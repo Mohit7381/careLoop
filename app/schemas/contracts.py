@@ -153,6 +153,17 @@ class Remedy(BaseModel):
     searched_terms: list[str] = Field(default_factory=list)  # audit trail
     iterations: int = 0
 
+    def model_post_init(self, __context: Any) -> None:
+        # A verdict of exists/partial is a claim about specific source. If we
+        # cannot name the file, we have not earned the claim — the honest
+        # states are "absent" (searched, not found) or None (unverified).
+        # Adopted from Harshit's Suggestion model; the Remedy Loop's verify
+        # path was hardened to satisfy this rather than the reverse.
+        if self.status in ("exists", "partial") and not self.evidence_file:
+            raise ValueError(
+                f"evidence_file is required when status is {self.status!r}"
+            )
+
 
 class CodeGap(BaseModel):
     finding_rank: int

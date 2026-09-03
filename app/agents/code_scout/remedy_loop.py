@@ -49,12 +49,30 @@ def normalise_status(raw: Any) -> Optional[str]:
     key = str(raw).strip().lower().replace(" ", "_").replace("-", "_")
     if key in _STATUS_ALIASES:
         return _STATUS_ALIASES[key]
-    if "partial" in key or "ambigu" in key or "related" in key:
+    # Token matching, not substring: a bare `"not" in key` also fires on
+    # "notification", and `"no_" in key` turned the genuinely unparseable
+    # "no idea" into a confident ABSENT. Guessing a verdict from prose we do
+    # not recognise is exactly the failure mode the loop exists to avoid, so
+    # anything that is not clearly one of the three ends up unverified.
+    tokens = set(key.split("_"))
+    if tokens & {"partial", "partially", "ambiguous", "related", "inconclusive"}:
         return "partial"
-    if "not" in key or "absent" in key or "missing" in key or "no_" in key:
+
+    # Negation has to win over the word it negates. "no_notification_found"
+    # means ABSENT, but a bare token check sees "found" and reports EXISTS —
+    # the worst possible direction to be wrong in, and a very plausible thing
+    # for the model to say when the search was for a notification call.
+    negated = bool(tokens & {"no", "not", "never", "without", "cannot"})
+    # Domain verbs count as status words: the verifier's real vocabulary for
+    # "the capability is in this path" is wired/invoked/called, not just
+    # exists/found. Without them "not_wired_in" degrades to unverified.
+    positive = tokens & {"exists", "exist", "found", "present", "implemented",
+                         "wired", "invoked", "called", "used", "configured"}
+    if tokens & {"absent", "missing"} or (negated and positive):
         return "absent"
-    if "exist" in key or "found" in key or "present" in key:
+    if positive and not negated:
         return "exists"
+    # Negation with nothing to negate ("no idea") is not a verdict.
     return None
 MAX_ITERATIONS = 2      # initial verify + one refinement
 SEARCH_BUDGET = 12      # total searches across all remedies
@@ -125,9 +143,15 @@ def verify_remedy(llm: LLMCall, search_fn: SearchFn, remedy: Remedy,
             "budget_left": budget_left,
         })
         status = normalise_status(verdict.get("status"))
+        evidence_file = verdict.get("evidence_file") or None
+        if status in ("exists", "partial") and not evidence_file:
+            # "It exists" with no file to point at is an assertion, not
+            # evidence. Treat it as no verdict this round rather than
+            # recording a claim the report cannot substantiate.
+            status = None
         if status in ("exists", "partial"):
             remedy.status = status
-            remedy.evidence_file = verdict.get("evidence_file")
+            remedy.evidence_file = evidence_file
             remedy.evidence_line = verdict.get("evidence_line")
             remedy.evidence_snippet = (verdict.get("evidence_snippet") or "")[:800] or None
             if status == "exists" or iteration + 1 >= MAX_ITERATIONS:
@@ -150,8 +174,12 @@ def verify_remedy(llm: LLMCall, search_fn: SearchFn, remedy: Remedy,
                 continue
             remedy.status = "absent"
             return remedy, budget_left
-        else:                            # malformed verdict -> conservative
-            remedy.status = remedy.status or "partial"
+        else:
+            # Malformed / unrecognised verdict. Keep any verdict an earlier
+            # round already earned (monotonicity), but never invent one: a
+            # response we could not parse is not evidence of anything, so an
+            # unjudged remedy stays UNVERIFIED (status None) rather than
+            # being upgraded to "partial" with no file behind it.
             return remedy, budget_left
     # Loop ended without a verdict: only claim "absent" if we actually looked.
     if remedy.status is None and remedy.searched_terms:
