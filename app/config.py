@@ -14,13 +14,23 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./careloop.db"
     artifacts_dir: str = "./data/artifacts"
 
-    # sphere-platform LLM gateway (Analyst / Code Scout / Reporter / PRD use cases). Names
-    # verified 2026-09-03 against the real AI Studio project — Control Center project 7121
+    # sphere-platform LLM gateway (Analyst / Code Scout / Reporter / PRD use cases). Real
+    # endpoint confirmed 2026-09-03 via a live working curl (Krithik): POST
+    # {base_url}/v1/chat-ai/requests, header X-App-Token (not Authorization Bearer), body
+    # {use_case, service_type, params}. `params` values that are objects/arrays are passed as
+    # JSON-encoded STRINGS, not nested JSON — matches the insurance-co-pilot example exactly.
+    # Use case names verified against the real AI Studio project — Control Center project 7121
     # ("funnel-analysis"), 5 ACTIVE use cases, SPHERE_INPUT_SANITIZER + SPHERE_OUTPUT_SANITIZER
     # guardrails wired on all 5. https://controlcenter.stage.halodoc.com/ai-studio/prompt-management/projects/7121
-    # Only the base_url/api_key are still missing — the use cases themselves already exist.
-    sphere_platform_base_url: str = ""
-    sphere_platform_api_key: str = ""
+    # Stage base URL below is a real, confirmed value. `sphere_platform_app_token` and
+    # `sphere_platform_service_type` are still open — the token in the example curl belongs to
+    # a different use case/team (item_diagnosis_mapping / sphere-insurance) and won't
+    # necessarily authorize our project 7121 use cases; get our own from Nakul, who set up the
+    # AI Studio project. service_type is likely project-scoped too (confirm the exact string —
+    # possibly "funnel-analysis" to match the project name, but unverified).
+    sphere_platform_base_url: str = "http://sphere-platform.stage-k8s.halodoc.com"
+    sphere_platform_app_token: str = ""
+    sphere_platform_service_type: str = "funnel-analysis"  # confirmed via GET /api/v1/ai-studio/projects/7121/use-cases/search
     llm_use_case_funnel_dropoff: str = "funnel-hypothesis-generation"  # was "funnel-dropoff-analysis" — wrong name, fixed
     llm_use_case_code_gap: str = "code-gap-assessment"
     llm_use_case_trend_narrative: str = "trend-narrative"
