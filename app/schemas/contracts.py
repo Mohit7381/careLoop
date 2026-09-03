@@ -324,6 +324,11 @@ class RunScope(BaseModel):
 
     Every field is optional; an unscoped run leaves them all None and behaves
     exactly as before.
+
+    `dimensions` here names DRILL-DOWN CUTS (stock_status, item_count, ...) and
+    narrows what the Analyst explores — disjoint from RunState.requested_dimensions
+    below, which names ROUTING CATEGORIES (payments, consultation, ...) and is a
+    post-run filter on which findings surface. See routes_analysis.py's `_resolve`.
     """
 
     prompt: Optional[str] = None            # what the user actually typed
@@ -372,6 +377,15 @@ class RunState(BaseModel):
     failed_stage: Optional[str] = None    # no-silent-partial-success rule
 
     scope: RunScope = Field(default_factory=RunScope)
+    # Decision #13 - prompt-scoped analysis: a caller can ask for one or
+    # more routing categories instead of the full journey (POST /runs
+    # {"dimensions": ["payments"]}). Validated against the journey's own
+    # `routing:` keys at request time (routes_analysis.py), so an unknown
+    # category is refused before a run is ever created rather than silently
+    # producing zero findings. Applied as a post-filter in analyst_node -
+    # narrows what surfaces, not how the Analyst explores. Disjoint from
+    # scope.dimensions above (see RunScope's own docstring).
+    requested_dimensions: list[str] = Field(default_factory=list)
 
     snapshot: Snapshot = Field(default_factory=Snapshot)
     findings: list[Finding] = Field(default_factory=list)

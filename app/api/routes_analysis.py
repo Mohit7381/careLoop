@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.base import SessionLocal, get_session
 from app.db.models import AnalysisRun, RunArtifact
+from app.agents.scope_resolver import describe, pick_journey, resolve_scope
 from app.integrations.garuda_client import GarudaDeliveryError, send_report
+from app.journeys import all_journeys, load_journey
 from app.pipeline.prd_editor import apply_edit_instruction
 from app.pipeline.runner import run_pipeline
-from app.agents.scope_resolver import describe, pick_journey, resolve_scope
-from app.journeys import all_journeys, load_journey
 from app.schemas.api import (
     CreateRunRequest,
     CreateRunResponse,
@@ -24,8 +24,11 @@ from app.schemas.api import (
     ResolveScopeRequest,
     ResolveScopeResponse,
     RunDetailResponse,
+    ScopeChatRequest,
+    ScopeChatResponse,
 )
 from app.schemas.contracts import RunScope
+from app.scope_resolver import resolve_dimensions
 
 router = APIRouter(prefix="/v1/analysis", tags=["analysis"])
 
@@ -47,14 +50,15 @@ def _run_pipeline_in_new_session(
     run_id: int, window_start: str, window_end: str, demo_mode: bool,
     journey: str, prev_window_start: str | None, prev_window_end: str | None,
     scope: dict | None = None,
+    requested_dimensions: list[str] | None = None,
 ) -> None:
     """A background asyncio task needs its own DB session — never share one across threads/tasks."""
     session = SessionLocal()
     try:
         run_pipeline(
             session, run_id, window_start, window_end, demo_mode,
-            journey=journey, prev_window_start=prev_window_start,
-            prev_window_end=prev_window_end, scope=scope,
+            journey=journey, prev_window_start=prev_window_start, prev_window_end=prev_window_end,
+            scope=scope, requested_dimensions=requested_dimensions,
         )
     finally:
         session.close()
@@ -102,6 +106,44 @@ def _resolve(journey: str, prompt: str | None) -> RunScope:
     return resolve_scope(prompt, cfg, events, cfg["drilldown_dimensions"])
 
 
+def _validate_dimensions(journey: str, dimensions: list[str] | None) -> list[str]:
+    """
+    Prompt-scoped analysis (decision #13, contracts.py): `dimensions` names
+    routing categories from the journey's own `routing:` table (e.g.
+    "payments", "consultation") — not arbitrary strings. Refused here, at
+    request time, rather than silently running unscoped or producing a
+    confusing zero-findings run with no explanation of why.
+    """
+    if not dimensions:
+        return []
+    valid = set(load_journey(journey)["routing"].keys())
+    unknown = [d for d in dimensions if d not in valid]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": f"unknown dimension(s) for journey '{journey}': {', '.join(unknown)}",
+                "valid_dimensions": sorted(valid),
+            },
+        )
+    return dimensions
+
+
+@router.post("/scope/chat", response_model=ScopeChatResponse)
+async def scope_chat(body: ScopeChatRequest) -> ScopeChatResponse:
+    """
+    The "confirm with the user" half of prompt-scoped analysis (decision
+    #13): resolves free text ("analyze cart abandonment dropoff") to the
+    structured `dimensions` list POST /runs already accepts, WITHOUT
+    creating a run — a caller shows `reply`/`dimensions` back to the user
+    for confirmation, then calls POST /runs with the confirmed list. Never
+    mutates anything, so unlike the run-creation and PRD-chat-edit
+    endpoints this doesn't need the app token.
+    """
+    dimensions, reply = resolve_dimensions(body.journey, body.message)
+    return ScopeChatResponse(dimensions=dimensions, reply=reply, resolved=bool(dimensions))
+
+
 @router.post("/runs", response_model=CreateRunResponse, dependencies=[Depends(require_app_token)])
 async def create_run(body: CreateRunRequest, session: Session = Depends(get_session)) -> CreateRunResponse:
     settings = get_settings()
@@ -110,6 +152,11 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
         window_start, window_end = _default_window()
 
     journey, journey_hits = _pick_journey(body.journey, body.prompt)
+    # Validated against the RESOLVED journey, not body.journey — "auto" is not
+    # a real journey to load a routing table for, and a caller who names both
+    # a journey and dimensions still means those dimensions against whichever
+    # journey actually gets picked.
+    dimensions = _validate_dimensions(journey, body.dimensions)
     scope = _resolve(journey, body.prompt)
     if journey_hits:
         scope.matched_on.insert(0, f"journey:{journey} (via {', '.join(journey_hits[:3])})")
@@ -136,7 +183,7 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
         window_start=window_start,
         window_end=window_end,
         status="queued",
-        config={"dimensions": body.dimensions or [], "scope": scope.model_dump()},
+        config={"dimensions": dimensions, "scope": scope.model_dump()},
     )
     session.add(run)
     session.commit()
@@ -145,7 +192,7 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     asyncio.create_task(
         asyncio.to_thread(
             _run_pipeline_in_new_session, run.id, window_start, window_end, settings.demo_mode,
-            journey, body.prev_window_start, body.prev_window_end, scope.model_dump(),
+            journey, body.prev_window_start, body.prev_window_end, scope.model_dump(), dimensions,
         )
     )
 

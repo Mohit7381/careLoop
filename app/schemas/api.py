@@ -87,3 +87,14 @@ class PrdChatResponse(BaseModel):
     reply: str
     markdown: str
     applied: bool
+
+
+class ScopeChatRequest(BaseModel):
+    message: str
+    journey: str = "pd_checkout"
+
+
+class ScopeChatResponse(BaseModel):
+    dimensions: list[str]
+    reply: str
+    resolved: bool

@@ -88,6 +88,7 @@ def run_pipeline(
     prev_window_start: str | None = None,
     prev_window_end: str | None = None,
     scope: dict | None = None,
+    requested_dimensions: list[str] | None = None,
 ) -> None:
     """Synchronous — call via asyncio.to_thread from the API layer so the endpoint returns immediately."""
     run = session.get(AnalysisRun, run_id)
@@ -98,8 +99,8 @@ def run_pipeline(
     try:
         state = initial_state(
             run_id, window_start, window_end, demo_mode,
-            journey=journey, prev_window_start=prev_window_start,
-            prev_window_end=prev_window_end, scope=scope,
+            journey=journey, prev_window_start=prev_window_start, prev_window_end=prev_window_end,
+            scope=scope, requested_dimensions=requested_dimensions,
         )
         # Stream node by node so the run's status is persisted as each stage
         # finishes. invoke() only returned at the end, so a live run sat at

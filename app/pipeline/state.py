@@ -24,6 +24,7 @@ class GraphState(TypedDict, total=False):
     demo_mode: bool
     failed_stage: Optional[str]
     scope: dict[str, Any]
+    requested_dimensions: list[str]    # prompt-scoped analysis — decision #13 (routing-category filter)
 
     snapshot: dict[str, Any]           # Agent 1 (Fetcher) — Alief
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
@@ -49,6 +50,7 @@ def initial_state(
     prev_window_start: Optional[str] = None,
     prev_window_end: Optional[str] = None,
     scope: Optional[dict[str, Any]] = None,
+    requested_dimensions: Optional[list[str]] = None,
 ) -> GraphState:
     return GraphState(
         run_id=run_id,
@@ -61,6 +63,7 @@ def initial_state(
         demo_mode=demo_mode,
         failed_stage=None,
         scope=scope or {},
+        requested_dimensions=requested_dimensions or [],
         snapshot={},
         findings=[],
         drilldown_trail=[],
