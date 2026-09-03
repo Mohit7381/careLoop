@@ -183,3 +183,16 @@ async def get_run_report(run_id: int, session: Session = Depends(get_session)) -
         raise HTTPException(status_code=404, detail="report not generated yet for this run")
 
     return Path(report.uri).read_text()
+
+
+@router.get("/runs/{run_id}/prd")
+async def get_run_prd(run_id: int, session: Session = Depends(get_session)) -> str:
+    run = session.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    prd = next((a for a in run.artifacts if a.kind == "prd_md"), None)
+    if prd is None:
+        raise HTTPException(status_code=404, detail="no PRD drafted for this run's top finding yet")
+
+    return Path(prd.uri).read_text()
