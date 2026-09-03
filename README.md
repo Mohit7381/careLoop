@@ -49,7 +49,9 @@ The one step in the pipeline with no manual precedent — it connects a funnel f
 Computes period-over-period deltas (funnel, feature adoption, VoC theme trends), turns them into a short business narrative, then fills an 8-section PRD template from findings + code gaps + trends + VoC quotes (≤2 quotes, always labeled anecdotal). Stamped `DRAFT — needs human review`. Delivered to the UI and a GChat channel via Garuda; a human clicking Approve is what makes it real.
 
 ### UI
-A Claude Design prototype wired to `GET /v1/analysis/runs/{id}`, showing the pipeline stages lighting up in sequence, the drill-down trail playing live, the code-location "money moment," and the VoC "human moment."
+An Angular app wired to `GET /v1/analysis/runs/{id}`, showing the pipeline stages lighting up in sequence, the drill-down trail playing live, the code-location "money moment" with the Remedy Loop's verdicts, and the VoC "human moment" — plus a PRD drawer with a client-side `.docx` export.
+
+Lives at [`root/ui`](root/ui). Integrated against the API in this repo and verified end-to-end against it; its frozen fixture is a verbatim dump of a real `LLM_MODE=replay` run, so fixture and live render identical numbers through the same adapter. See [`root/ui/README.md`](root/ui/README.md) for how to run it and the open contract gaps.
 
 ## Current status
 

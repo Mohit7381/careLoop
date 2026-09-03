@@ -1,0 +1,23 @@
+<div class="trail">
+  <div class="trail-head">
+    <h3>How the agent found it</h3>
+    <span class="budget">queries used: <span class="num">{{ used() }}</span> / {{ budget() }}</span>
+  </div>
+
+  @for (row of rows(); track $index) {
+    @if ($index < visibleCount()) {
+      <div class="trow" [class.conclusion]="isConclusion(row)" [class.hit]="isHit(row, $index)">
+        <div class="tdot"></div>
+        <div>
+          <div class="tq mono">
+            @if (!isConclusion(row)) {
+              <span class="arrow">›</span>
+            }
+            {{ isConclusion(row) ? row.question : 'aggregate(dimension=' + row.dimension + ')' }}
+          </div>
+          <div class="tres">{{ row.note }}</div>
+        </div>
+      </div>
+    }
+  }
+</div>

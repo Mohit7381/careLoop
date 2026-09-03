@@ -1,0 +1,71 @@
+.usersay {
+  background: var(--voc-soft);
+  border: 1px solid color-mix(in srgb, var(--voc) 25%, transparent);
+  border-radius: 10px;
+  padding: 15px 17px;
+  margin-top: 11px;
+}
+
+.usersay h3 {
+  font-size: 12.5px;
+  color: var(--voc);
+  margin-bottom: 11px;
+  letter-spacing: 0.02em;
+}
+
+.quote {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid color-mix(in srgb, var(--voc) 18%, transparent);
+}
+
+.quote:first-of-type {
+  border-top: 0;
+}
+
+.qmeta {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+
+.stars {
+  color: var(--critical);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.qtext {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.qgloss {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-style: italic;
+  margin-top: 3px;
+}
+
+.qgloss.missing {
+  color: var(--warn);
+}
+
+.anecdotal {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--voc) 18%, transparent);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.anecdotal .warnlbl {
+  color: var(--voc);
+  font-weight: 600;
+}

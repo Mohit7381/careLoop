@@ -1,0 +1,115 @@
+.pipe {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 34px;
+}
+
+.stage {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px 13px;
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  transition:
+    border-color 0.3s,
+    background 0.3s,
+    opacity 0.3s;
+}
+
+.st-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  flex: none;
+  transition: background 0.3s;
+}
+
+.st-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  color: var(--ink-2);
+}
+
+.st-sum {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  line-height: 1.35;
+  margin-top: auto;
+}
+
+.stage.pending {
+  opacity: 0.5;
+}
+
+.stage.running {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.stage.running .dot {
+  background: var(--accent);
+  animation: pulse 1.15s ease-in-out infinite;
+}
+
+.stage.running .st-name {
+  color: var(--accent-ink);
+}
+
+.stage.done .dot {
+  background: var(--good);
+}
+
+.stage.done .st-name {
+  color: var(--ink);
+}
+
+.stage.failed {
+  border-color: var(--critical);
+  background: var(--critical-soft);
+}
+
+.stage.failed .dot {
+  background: var(--critical);
+}
+
+.stage.failed .st-name,
+.stage.failed .st-sum {
+  color: var(--critical);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage.running .dot {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .pipe {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

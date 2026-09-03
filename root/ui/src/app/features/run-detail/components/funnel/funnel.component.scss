@@ -1,0 +1,135 @@
+.funnel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 20px 22px;
+}
+
+.unitlbl {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+
+.unitlbl:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.frow {
+  display: grid;
+  grid-template-columns: 210px 1fr 128px;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 0;
+}
+
+.flabel {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.frow.terminal .flabel {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.fbar-track {
+  height: 26px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.fbar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 72%, var(--surface)) 100%);
+  border-radius: 4px;
+  transition: width 0.7s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+
+.fbar.g2 {
+  background: linear-gradient(90deg, var(--voc) 0%, color-mix(in srgb, var(--voc) 60%, var(--surface)) 100%);
+}
+
+.frow.terminal .fbar {
+  background: linear-gradient(90deg, var(--accent-ink) 0%, var(--accent) 100%);
+}
+
+.frow.terminal .fbar.g2 {
+  background: linear-gradient(90deg, var(--voc) 0%, color-mix(in srgb, var(--voc) 80%, var(--surface)) 100%);
+}
+
+.fval {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.fval small {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.leak {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  gap: 14px;
+  margin: 2px 0;
+}
+
+.leak-in {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  border-left: 3px solid var(--critical);
+  padding: 6px 0 6px 11px;
+  background: var(--critical-soft);
+  border-radius: 0 5px 5px 0;
+}
+
+.leak-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--critical);
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.leak-txt {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--critical);
+}
+
+.foot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+@media (max-width: 900px) {
+  .frow {
+    grid-template-columns: 150px 1fr 104px;
+  }
+  .leak {
+    grid-template-columns: 150px 1fr;
+  }
+}
