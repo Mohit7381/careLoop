@@ -45,7 +45,12 @@ def journey_events_for(finding: Finding, ct_events: list[CtEventRow]) -> list[st
     hypothesis_words = re.findall(r"[a-zA-Z]{4,}", finding.hypothesis)
     matches: list[str] = []
     for event in ct_events:
-        event_keywords = [w for w in event.event_name.split("_") if len(w) >= _MIN_STEM_LEN]
+        # Split on BOTH separators. Real CT names are dotted-and-underscored
+        # ("pharmacy.click.add_to_cart_button"); splitting on "_" alone leaves
+        # "pharmacy.click.add" as one token, so "cart" never surfaces and the
+        # cart events stop matching a cart hypothesis entirely.
+        event_keywords = [w for w in re.split(r"[._]", event.event_name)
+                          if len(w) >= _MIN_STEM_LEN]
         if any(_shares_stem(kw, hw) for kw in event_keywords for hw in hypothesis_words):
             matches.append(event.event_name)
     return matches
