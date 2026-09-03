@@ -4,10 +4,13 @@ Agent 2 — Analyst node wrapper. OWNER: Nakul (logic) / Mohit (wiring).
 Thin adapter: converts the orchestrator's dict GraphState to/from the
 pydantic RunState that app.agents.analyst.analyst.run_analyst speaks
 natively, and supplies the `llm` callable (sphere-platform in real mode,
-a scripted replay of the real verified golden run in demo_mode — no
-`fixtures/llm_replay/*` exist yet, so SphereClient(mode="replay") isn't
-runnable as-is; this scripted stand-in is what keeps demo_mode working
-end-to-end without live credentials).
+SphereClient(mode="replay") in demo_mode — a real recorded LLM session
+against the real fixture data, not a hand-written script: see
+fixtures/llm_replay/funnel-hypothesis-generation/{0..4}.json, 4
+drill-down turns landing on 5 real findings including the rx-gated
+30.0%-vs-39.0% one. Switched from a 2-turn hand-written stand-in per
+PR #1 review M2 — that script reproduced less than the real verified
+run already sitting in the tree.
 """
 import json
 from pathlib import Path
@@ -23,35 +26,8 @@ SPHERE_IDS_PATH = Path("fixtures/pd_checkout/sphere_ids.json")
 
 
 def _demo_llm() -> Any:
-    """
-    Scripted 2-turn replay of the real verified golden run (see
-    tests/test_analyst_node.py) — rx-gated orders confirm 30.0% vs 39.0%,
-    stage=pharmacy_checkout, confidence=high. Not a live LLM call.
-    """
-    script = iter(
-        [
-            {
-                "done": False,
-                "next_question": {
-                    "dimension": "consultation_required",
-                    "rationale": "rx gating vs the overall abandonment rate",
-                },
-            },
-            {
-                "done": True,
-                "findings": [
-                    {
-                        "hypothesis": "rx-gated orders confirm at 30.0% vs 39.0% non-rx (-9pp)",
-                        "stage": "pharmacy_checkout",
-                        "confidence": "high",
-                        "evidence": ["255293", "76641", "391898", "152981"],
-                        "confirm_via": "A/B a prescription-cart resume flow; watch rx confirm rate",
-                    }
-                ],
-            },
-        ]
-    )
-    return lambda ctx: next(script)
+    client = SphereClient(mode="replay")
+    return lambda ctx: client.call("funnel-hypothesis-generation", 0, ctx)
 
 
 def _sphere_llm() -> Any:

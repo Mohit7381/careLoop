@@ -35,14 +35,23 @@ def test_pipeline_runs_end_to_end_on_pd_fixtures():
 
 
 def test_golden_run_reproduces_the_real_pd_findings():
+    """
+    Uses SphereClient(mode="replay") — a real recorded session (4 drill-down
+    turns, fixtures/llm_replay/funnel-hypothesis-generation/) against real
+    fixture data, not a hand-written script (PR #1 review M2). Reproduces 3
+    warehouse findings (all pharmacy_checkout, the real drill-down chased
+    the created->confirmed gap through reason clusters, price bands, and the
+    rx-gated split) plus the 2 real VoC escalations.
+    """
     final_state = _run()
 
     findings = sorted(final_state["findings"], key=lambda f: f["rank"])
     warehouse = [f for f in findings if f["origin"] == "warehouse"]
     voc = [f for f in findings if f["origin"] == "voc"]
 
-    assert warehouse[0]["stage"] == "pharmacy_checkout"
-    assert warehouse[0]["confidence"] == "high"
+    assert len(warehouse) == 3
+    assert all(f["stage"] == "pharmacy_checkout" for f in warehouse)
+    assert all(f["confidence"] in ("high", "medium", "low") for f in warehouse)
     assert {f["theme"] for f in voc} == {"payment/refund", "consultation/doctor"}
 
     top_gap = next(g for g in final_state["code_gaps"] if g["finding_rank"] == warehouse[0]["rank"])
@@ -50,9 +59,16 @@ def test_golden_run_reproduces_the_real_pd_findings():
     assert top_gap["repo"] == "timor/oms"
 
 
-def test_delivered_stage_is_marked_maturing_not_naively_compared():
+def test_confirmed_stage_is_marked_maturing_not_delivered():
+    """
+    'confirmed' row IS the confirmed->delivered conversion rate, so it's the
+    one that's right-censored by a fresh window — not 'delivered' itself
+    (100%->100% by construction, flagging it changes nothing). Caught in
+    review (PR #1 B3): the original predicate tested the wrong row.
+    """
     final_state = _run()
 
     deltas = {d["stage"]: d for d in final_state["trend_report"]["deltas"]}
-    assert deltas["delivered"]["maturing"] is True
+    assert deltas["confirmed"]["maturing"] is True
+    assert deltas["delivered"]["maturing"] is False
     assert deltas["created"]["maturing"] is False

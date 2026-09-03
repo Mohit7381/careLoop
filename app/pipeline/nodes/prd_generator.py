@@ -57,23 +57,30 @@ def _collect_quotes(finding: Finding, per_finding_quotes: dict) -> list:
 
 def _remedies_block(gap: CodeGap) -> str:
     """
-    Appendix A #9: confirmed-ABSENT remedies become the PRD's proposed FRs;
-    EXISTING ones are surfaced so the PRD never proposes what's already
-    built; PARTIAL is flagged as needing a closer look.
+    Appendix A #9: ABSENT remedies become the PRD's proposed FRs; EXISTING
+    ones are surfaced so the PRD never proposes what's already built;
+    PARTIAL is flagged as needing a closer look. UNVERIFIED (status=None —
+    the loop never actually searched, e.g. budget ran out first) gets its
+    own honest label rather than being folded into "partial" — reviewed in
+    PR #1 B4: "confirmed missing" is the strongest claim available and it
+    was being attached to the verdict with the weakest support.
     """
     if not gap.remedies:
         return ""
     lines = ["\n\n**Remedy Loop verdicts (proposed fixes, verified against the code):**"]
     for r in gap.remedies:
+        n = len(r.searched_terms)
         if r.status == "absent":
-            lines.append(f"- **[FR candidate — confirmed missing]** {r.proposal}")
+            lines.append(f"- **[FR candidate — not found in {n} search{'es' if n != 1 else ''}]** {r.proposal}")
         elif r.status == "exists":
             lines.append(
                 f"- **[Already built — do not re-propose]** {r.proposal} "
                 f"(`{r.evidence_file}:{r.evidence_line}`)"
             )
-        else:
+        elif r.status == "partial":
             lines.append(f"- **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
+        else:
+            lines.append(f"- **[Unverified — no search ran, e.g. budget exhausted first]** {r.proposal}")
     return "\n".join(lines)
 
 

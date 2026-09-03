@@ -97,7 +97,17 @@ def _unwired_live_llm():
     return llm
 
 
+DEMO_REMEDIES_REPO = "timor/oms"  # the only repo the scripted verdicts below are actually about
+
+
 def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
+    """
+    demo_mode's scripted remedies are specific to the timor/oms abandon
+    mechanism — applying them to a gap in a different repo produced a
+    consultation gap citing an orders-repo file as evidence (review PR #1
+    M3). Only run the scripted loop for gaps in that repo; other repos get
+    no remedies in demo_mode rather than a mismatched one.
+    """
     settings = get_settings()
     llm = _demo_llm() if run_state.demo_mode else _unwired_live_llm()
     search_fn = _demo_search_fn() if run_state.demo_mode else _live_search_fn(settings)
@@ -106,6 +116,9 @@ def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
     out = []
     for gap in gaps:
         if not gap.mechanism_found:
+            out.append(gap)
+            continue
+        if run_state.demo_mode and gap.repo != DEMO_REMEDIES_REPO:
             out.append(gap)
             continue
         finding = findings_by_rank.get(gap.finding_rank)
