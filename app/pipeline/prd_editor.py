@@ -12,9 +12,9 @@ instead of hand-editing markdown. Two tiers:
     sphere use case (project 7121, use case 12870, template 21791: it receives
     original_markdown + instruction and returns prd_markdown + a one-line
     reply for the chat). The rewrite is accepted only if it is a complete
-    document, contains no corrupted control bytes the input didn't already
-    have (a live call was observed replacing em dashes / middle dots / stars
-    with stray control bytes — reproducible, cause unconfirmed, intermittent),
+    document, contains no corrupted control bytes (the model mangles non-ASCII
+    punctuation it has to copy — see _ASCII_PUNCT — so it is sent an ASCII copy
+    and untouched lines are restored from the original afterwards),
     and every number it cites was already in the document or the instruction
     — the same evidence gate the generator uses — and the DRAFT banner is
     ours, re-inserted if the model dropped it. When no model is available
@@ -40,6 +40,58 @@ MIN_REVISION_CHARS = 200          # anything shorter is a truncated or empty dra
 # guardrail or transport), but the fix has to live here regardless: never ship visibly-corrupted
 # prose just because the length/number checks below don't catch it.
 _BAD_CONTROL_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+# Cause, confirmed from a Langfuse trace on 2026-09-05 (run 11, "how was this problem
+# identified"): every corrupted byte is the LOW BYTE of the code point the model was
+# reproducing — em dash U+2014 -> \x14, en dash U+2013 -> \x13, and the multiplication
+# sign U+00D7 came back as a mangled "\u00d" escape. gpt-5-mini under strict JSON-schema
+# output writes broken \uXXXX escapes for non-ASCII characters it has to copy verbatim.
+# Our PRD generator puts "—", "–" and "×" into every document (banner, date range,
+# cross-tabs), so every free-text edit had to reproduce them and was rejected above.
+# Fix, in three parts: (1) hand the model an ASCII-only copy of the document so it has
+# nothing non-ASCII to reproduce; (2) after the call, put the original line back for every
+# line the model returned unchanged (same letters and digits), which restores our own
+# punctuation in untouched sections; (3) repair the two known low-byte corruptions in text
+# the model wrote itself, and still reject anything else that is unrepairable.
+_ASCII_PUNCT = {
+    "\u2014": "-", "\u2013": "-", "\u2012": "-", "\u2212": "-",     # dashes, minus
+    "\u00d7": "x", "\u00b7": "-", "\u2022": "-", "\u00b1": "+/-",   # times, middle dot, bullet, plus-minus
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',     # curly quotes
+    "\u2026": "...", "\u2192": "->", "\u2248": "~", "\u00a0": " ",  # ellipsis, arrow, approx, nbsp
+}
+_ASCII_TABLE = str.maketrans(_ASCII_PUNCT)
+_LOW_BYTE_REPAIR = str.maketrans({"\x14": "\u2014", "\x13": "\u2013"})
+_KEY_RE = re.compile(r"[^A-Za-z0-9]+")
+# A mangled escape leaks one hex digit next to the control byte ("\\u00d7" -> "\\x00" + "d"),
+# so the digit riding on a control byte is dropped before a line is keyed.
+_CTRL_WITH_HEX_RE = re.compile(r"[\x00-\x1f\x7f][0-9a-fA-F]?")
+
+
+def to_ascii(text: str) -> str:
+    """The copy of the document the model sees: same words and numbers, ASCII punctuation."""
+    return text.translate(_ASCII_TABLE)
+
+
+def _key(line: str) -> str:
+    return _KEY_RE.sub("", _CTRL_WITH_HEX_RE.sub("", line))
+
+
+def restore_untouched_lines(original: str, revised: str) -> str:
+    """Every revised line whose letters and digits match exactly one original line is
+    that line, returned through the model — take ours back, punctuation included. Lines
+    the model actually wrote (or ambiguous ones such as blank lines) are left alone."""
+    by_key: dict[str, Optional[str]] = {}
+    for ln in original.split("\n"):
+        k = _key(ln)
+        if k:
+            by_key[k] = None if k in by_key else ln          # None marks a duplicate key
+    out = []
+    # split("\n"), not splitlines(): a corrupted "\r" (the x-sign's mangled escape) sits
+    # INSIDE a line and must not be treated as a line break.
+    for ln in revised.split("\n"):
+        orig = by_key.get(_key(ln)) if _key(ln) else None
+        out.append(orig if orig is not None else ln)
+    return "\n".join(out)
 
 
 @dataclass
@@ -94,7 +146,7 @@ def apply_edit_instruction(markdown: str, message: str, llm: Optional[LLMCall] =
 def revise_with_llm(llm: LLMCall, markdown: str, instruction: str) -> EditResult:
     """One revision call. Returns applied=False with the reason on any failure;
     the caller decides what to do with the document then."""
-    inputs = {"original_markdown": markdown, "instruction": instruction}
+    inputs = {"original_markdown": to_ascii(markdown), "instruction": instruction}
     try:
         out = llm({"edit_inputs": inputs})
     except Exception as exc:                                   # network, sphere FAILED, bad JSON
@@ -105,6 +157,7 @@ def revise_with_llm(llm: LLMCall, markdown: str, instruction: str) -> EditResult
     if len(body) < MIN_REVISION_CHARS:
         return EditResult(markdown, "the model returned an empty or truncated document", applied=False)
 
+    body = restore_untouched_lines(markdown, body).translate(_LOW_BYTE_REPAIR)
     bad_chars = set(_BAD_CONTROL_CHARS.findall(body)) - set(_BAD_CONTROL_CHARS.findall(markdown))
     if bad_chars:
         logger.warning("prd-chat-edit returned corrupted control bytes %s — rejected",
