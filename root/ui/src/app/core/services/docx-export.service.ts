@@ -54,7 +54,7 @@ export class DocxExportService {
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
 
-    const filename = `CareLoop_PRD_run${run.run_id}_${prd.title.replace(/\W+/g, '_')}.docx`;
+    const filename = `CareLoop_suggestions_run${run.run_id}_${prd.title.replace(/\W+/g, '_')}.docx`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

@@ -63,7 +63,7 @@ function buildSubtitle(run: RunState, gap: CodeGap | undefined): string {
   const ranks = run.findings.map((f) => `#${f.rank}`).join(', ');
   const remedies = run.code_gaps.reduce((n, g) => n + (g.remedies?.length ?? 0), 0);
   const gapPart = gap ? `${gap.repo} ${gap.file}:${gap.line}` : 'no mechanism pinned';
-  return `Product Requirements Document · cites finding ${ranks} · ${gapPart} · ${remedies} remedy verdict(s)`;
+  return `Agent suggestions · cites finding ${ranks} · ${gapPart} · ${remedies} remedy verdict(s)`;
 }
 
 function buildOverview(top: Finding | undefined, gap: CodeGap | undefined): string {

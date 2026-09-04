@@ -45,7 +45,7 @@ const nextId = () => `s${++seq}`;
  *  by accident. */
 export function parsePrd(markdown: string): PrdDoc {
   const lines = (markdown ?? '').split('\n');
-  const title = (lines.find((l) => l.startsWith('# ')) ?? '# Product Requirements Document').replace(/^#\s+/, '');
+  const title = (lines.find((l) => l.startsWith('# ')) ?? '# Agent suggestions').replace(/^#\s+/, '');
 
   const preamble: string[] = [];
   const sections: PrdSection[] = [];
