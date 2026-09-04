@@ -29,7 +29,12 @@ def suggestion_node(state: GraphState) -> GraphState:
     run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     settings = get_settings()
 
-    if state.get("demo_mode", True):
+    # Same gate as every other node: LIVE_LLM=true means real sphere + GitLab
+    # even over the frozen fixture. This node checked demo_mode alone, so a
+    # live run (runs 16-22) shipped the scripted demo suggestions under a live
+    # header while the Analyst, Code Scout and PRD were real.
+    from app.integrations.sphere import _live_llm_wanted
+    if not _live_llm_wanted(state.get("demo_mode", True)):
         search_client = FixtureExploreSearchClient(FIXTURES_DIR)
         assessor = StubFeatureSuggestionAssessor()
     else:
