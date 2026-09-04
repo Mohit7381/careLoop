@@ -69,7 +69,9 @@
 }
 .dtab.active {
   border-color: var(--accent);
-  color: var(--accent);
+  /* --accent-ink, not --accent: the brand crimson is 4.26:1 on
+     --accent-soft, and this label is 11.5px. */
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 .dtab-edited {

@@ -1,43 +1,18 @@
-/* Halodoc website palette, scoped to this screen.
- *
- * Values are lifted from web-apps/magneto/halodoc-website-frontend on
- * master — src/styles/_color.scss ($primary, $secondary, $light-gray-4,
- * $light-gray-6, $gray-100, $dark-gray-0) and base/_typography.scss
- * (Inter; headings 700 / line-height 1.1). They live here rather than in
- * global styles.scss on purpose: the run-detail screen keeps CareLoop's
- * own teal-on-dark palette, so this must not leak past this component.
- *
- * The tokens sit on :host, not on .wrap — custom properties inherit
- * downward only, so defining them on the child left :host's own
- * background unresolved and the shell's dark --ground showed through
- * behind the page. */
+/* The Halodoc palette now lives in global styles.scss, so this screen
+ * uses the same tokens as everything else — the scoped --hd-* set that
+ * was here existed only while the dashboard was the one light screen. */
 :host {
-  --hd-primary: #e0004d;
-  --hd-primary-ink: #b8003f;
-  --hd-ink: #111111;
-  --hd-ink-2: #53565a;
-  --hd-ink-3: #999999;
-  --hd-line: #dedede;
-  --hd-line-soft: #f0f0f0;
-  --hd-ground: #f8f9fa;
-  --hd-surface: #ffffff;
-  --hd-good: #2d6548;
-  --hd-good-soft: #e8f2ec;
-  --hd-good-line: #bcd7c9;
-
-  --hd-font: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-
   display: block;
-  background: var(--hd-ground);
-  color: var(--hd-ink);
+  background: var(--ground);
+  color: var(--ink);
 }
 
 .wrap {
   max-width: 1180px;
   margin: 0 auto;
   padding: 36px 28px;
-  font-family: var(--hd-font);
-  color: var(--hd-ink);
+  font-family: var(--font-sans);
+  color: var(--ink);
 }
 
 .head {
@@ -60,14 +35,14 @@
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: var(--hd-ink);
+  color: var(--ink);
 }
 
 .sub {
   margin: 0;
   font-size: 14px;
   line-height: 1.45;
-  color: var(--hd-ink-2);
+  color: var(--ink-2);
 }
 
 .head-actions {
@@ -82,9 +57,9 @@
   gap: 8px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--hd-ink-2);
-  background: var(--hd-surface);
-  border: 1px solid var(--hd-line);
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 9px 12px;
   font-variant-numeric: tabular-nums;
@@ -95,7 +70,7 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: var(--hd-good);
+  background: var(--good);
   flex-shrink: 0;
 }
 
@@ -106,22 +81,22 @@
   line-height: 1;
   border-radius: 4px;
   padding: 14px 20px;
-  border: 1px solid var(--hd-line);
-  background: var(--hd-surface);
-  color: var(--hd-ink);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .btn-primary {
-  background: var(--hd-primary);
-  border-color: var(--hd-primary);
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--hd-primary-ink);
-  border-color: var(--hd-primary-ink);
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
 }
 
 .btn:disabled {
@@ -130,7 +105,7 @@
 }
 
 .btn:focus-visible {
-  outline: 2px solid var(--hd-primary);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -146,14 +121,14 @@
   font-weight: 600;
   line-height: 1.1;
   letter-spacing: 0.02em;
-  color: var(--hd-ink-2);
+  color: var(--ink-2);
 }
 
 .tablewrap {
   overflow-x: auto;
-  border: 1px solid var(--hd-line);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--hd-surface);
+  background: var(--surface);
 }
 
 table {
@@ -168,17 +143,17 @@ th {
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--hd-ink-3);
+  color: var(--ink-3);
   padding: 13px 20px;
-  background: var(--hd-ground);
-  border-bottom: 1px solid var(--hd-line);
+  background: var(--ground);
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 
 td {
   padding: 18px 20px;
-  color: var(--hd-ink-2);
-  border-bottom: 1px solid var(--hd-line);
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--line);
 }
 
 tbody tr:last-child td {
@@ -190,20 +165,20 @@ tbody tr:last-child td {
 }
 
 .row:hover td {
-  background: #fafafa;
+  background: var(--surface-2);
 }
 
 .row:focus-visible {
-  outline: 2px solid var(--hd-primary);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
 .c-run {
-  color: var(--hd-ink);
+  color: var(--ink);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  border-left: 3px solid var(--hd-primary);
+  border-left: 3px solid var(--accent);
 }
 
 .c-window,
@@ -213,17 +188,17 @@ tbody tr:last-child td {
 }
 
 .c-time {
-  color: var(--hd-ink-3);
+  color: var(--ink-3);
 }
 
 .c-finding {
-  color: var(--hd-ink);
+  color: var(--ink);
   max-width: 46ch;
   line-height: 1.45;
 }
 
 .c-count {
-  color: var(--hd-ink);
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -240,31 +215,31 @@ tbody tr:last-child td {
   text-transform: uppercase;
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--hd-good-soft);
-  color: var(--hd-good);
-  border: 1px solid var(--hd-good-line);
+  background: var(--good-soft);
+  color: var(--good);
+  border: 1px solid color-mix(in srgb, var(--good) 30%, transparent);
   white-space: nowrap;
 }
 
 .pill.analyzing {
-  background: #fdeaf1;
-  color: var(--hd-primary-ink);
-  border-color: #f5bed2;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .pill.failed {
-  background: #fdecea;
-  color: #b3261e;
-  border-color: #f2c3bf;
+  background: var(--critical-soft);
+  color: var(--critical);
+  border-color: color-mix(in srgb, var(--critical) 30%, transparent);
 }
 
 .create-error {
   margin: 0 0 16px;
   padding: 11px 14px;
   border-radius: 4px;
-  background: #fdecea;
-  border: 1px solid #f2c3bf;
-  color: #b3261e;
+  background: var(--critical-soft);
+  border: 1px solid color-mix(in srgb, var(--critical) 30%, transparent);
+  color: var(--critical);
   font-size: 13px;
 }
 
@@ -324,9 +299,9 @@ tbody tr:last-child td {
       'time time time';
     align-items: center;
     gap: 6px 10px;
-    background: var(--hd-surface);
-    border: 1px solid var(--hd-line);
-    border-left: 3px solid var(--hd-primary);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
     border-radius: 8px;
     padding: 16px;
     margin-bottom: 10px;
@@ -353,7 +328,7 @@ tbody tr:last-child td {
     text-align: right;
     font-size: 11.5px;
     font-weight: 400;
-    color: var(--hd-ink-3);
+    color: var(--ink-3);
   }
 
   /* The column header is hidden at this width, so the number has to say
@@ -375,7 +350,7 @@ tbody tr:last-child td {
     font-size: 11.5px;
     margin-top: 6px;
     padding-top: 12px;
-    border-top: 1px solid var(--hd-line-soft);
+    border-top: 1px solid var(--line);
   }
 
   .c-time {

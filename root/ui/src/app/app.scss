@@ -29,15 +29,11 @@
   display: none;
 }
 
-/* Paints the area the dashboard does not cover, so the page ground runs
- * to the bottom of the viewport on a short run list. */
-.shell-main-hd {
-  background: #f8f9fa;
+/* Paints the area a short page does not cover, so the ground runs to the
+ * bottom of the viewport. */
+.shell-main {
+  background: var(--ground);
 }
-
-/* Halodoc-palette variant of the shell, applied only while the runs
- * dashboard is the active route (App.lightShell). The run-detail screen
- * keeps CareLoop's own dark topbar, so the two must not share styles. */
 
 .topbar {
   position: sticky;
@@ -78,31 +74,4 @@
 .brand-sub {
   font-size: 12px;
   color: var(--ink-3);
-}
-
-/* Halodoc-palette variant of the shell, applied only while the runs
- * dashboard is the active route (App.lightShell). The run-detail screen
- * keeps CareLoop's own dark topbar, so the two must not share styles. */
-.topbar-hd {
-  background: #ffffff;
-  border-bottom-color: #dedede;
-  backdrop-filter: none;
-  font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-}
-
-.topbar-hd .topbar-in {
-  padding: 16px 28px;
-}
-
-.topbar-hd .brand-mark {
-  color: #111111;
-  line-height: 1.1;
-}
-
-.topbar-hd .brand-mark .accent {
-  color: #e0004d;
-}
-
-.topbar-hd .brand-sub {
-  color: #999999;
 }
