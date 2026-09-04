@@ -80,9 +80,15 @@ def main() -> int:
     print("\nPATCH (creates a snapshot; does NOT activate it)...")
     call(BASE, "PATCH", {"system_message": system_message.replace(OLD, NEW, 1)})
 
+    # The versions endpoint returns {"result": [...]} — not a bare list, and not
+    # under "data"/"versions". Guessing that shape cost a half-applied run: the
+    # PATCH had already created the snapshot when the parse blew up, leaving v6
+    # authored but unpromoted.
     versions = call(f"{BASE}/versions")
-    rows = versions if isinstance(versions, list) else (
-        versions.get("data") or versions.get("versions") or [])
+    rows = versions["result"] if isinstance(versions, dict) else versions
+    if not rows:
+        print("ABORT: /versions returned nothing; snapshot may exist unpromoted.")
+        return 1
     latest = max(int(v["version"]) for v in rows)
     print(f"  versions: {sorted(int(v['version']) for v in rows)} -> promoting {latest}")
 

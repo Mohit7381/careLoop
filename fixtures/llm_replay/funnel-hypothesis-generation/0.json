@@ -1,44 +1,8 @@
 {
  "done": false,
- "findings": [
-  {
-   "stage": "created->confirmed",
-   "evidence": [
-    "created 647191",
-    "confirmed 229622",
-    "lost: 417569",
-    "share_of_prev: 0.6452"
-   ],
-   "segments": [
-    "all"
-   ],
-   "confidence": "high",
-   "hypothesis": "Most of the funnel loss is concentrated at the created\u2192confirmed step (large absolute and relative drop).",
-   "confirm_via": "Run a targeted experiment to reduce friction at checkout (e.g., simplified flow or proactive messaging) and measure lift in created\u2192confirmed conversion vs control."
-  },
-  {
-   "stage": "created->confirmed",
-   "evidence": [
-    "user_total: 199417",
-    "artifact_total: 42107",
-    "artifact_share: 0.1743",
-    "user abandon the cart: 111993",
-    "user clicked back: 83517",
-    "items unavailable: 3907",
-    "address changed: 35111",
-    "add items: 6996"
-   ],
-   "segments": [
-    "user_reasons",
-    "artifact_reasons"
-   ],
-   "confidence": "medium",
-   "hypothesis": "Among recorded reasons, user-driven behaviors (e.g., 'user abandon the cart' and 'user clicked back') account for the majority of explained losses; artifacts (address changes, stock issues) account for a smaller portion (artifact_share: 0.1743). However, the recorded reasons (user_total + artifact_total = 199,417 + 42,107 = 241,524) cover only part of the total lost (417,569), so substantial loss remains unexplained by these clusters.",
-   "confirm_via": "Drill down by a rate-bearing dimension (e.g., consultation_required) to see whether confirm rates differ strongly by that dimension. To test causality later, run experiments such as: (a) instrumenting targeted reminders for carts with high abandonment signals and measuring created\u2192confirmed lift; (b) for segments that require consultation, randomize an instant consult/auto-confirm flow and measure conversion."
-  }
- ],
+ "findings": null,
  "next_question": {
   "dimension": "consultation_required",
-  "rationale": "consultation_required is a rate-bearing dimension not yet tried (listed in rate_bearing_not_yet_tried). The top gap (created\u2192confirmed lost: 417,569) is large and recorded reasons only explain part of it (user_total: 199,417; artifact_total: 42,107). Orders that require consultation often have systemic delays or extra steps that could materially lower confirmation rates \u2014 drilling on consultation_required is high-value to partition the unexplained loss and guide experiments."
+  "rationale": "This is a rate-bearing dimension (listed in rate_bearing_dimensions) and is untried. Rate-bearing cuts can reveal segments with systematically lower created\u2192confirmed conversion; testing 'consultation_required' first is most likely to show a segment-level conversion gap we can act on. Budget_remaining is sufficient to run this cut."
  }
 }

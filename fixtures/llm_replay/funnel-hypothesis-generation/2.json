@@ -1,43 +1,8 @@
 {
  "done": false,
- "findings": [
-  {
-   "stage": "created->confirmed (top gap)",
-   "evidence": [
-    "top_gap.lost: 417569",
-    "top_gap.share_of_prev: 0.6452",
-    "phase1.funnel stage=created count=647191",
-    "phase1.funnel stage=confirmed count=229622",
-    "phase1.funnel stage=confirmed conversion_from_previous=0.3548",
-    "phase1.reason_clusters user_total: 199417",
-    "phase1.reason_clusters artifact_total: 42107",
-    "phase1.reason_clusters artifact_share: 0.1743"
-   ],
-   "segments": [
-    "orders without recorded user_reasons or artifact_reasons"
-   ],
-   "confidence": "medium",
-   "hypothesis": "A large portion of the top gap (lost: 417569) is unexplained by the recorded reason clusters (user_total: 199417 + artifact_total: 42107). The unexplained remainder appears concentrated in orders that did not surface a close-loop reason in the current artifacts/reason buckets; likely contributors include inventory/stock signals, item-count or price friction, or other upstream UX/validation delays.",
-   "confirm_via": "Drill a rate-bearing dimension that plausibly maps to missing signals (stock_status or item_count). If stock_status shows much lower confirmation rates for out-of-stock/backordered items, that would partition this unexplained loss. Alternatively run an experiment that surfaces inventory status earlier and measure confirmed rate lift."
-  },
-  {
-   "stage": "created->confirmed (consultation split)",
-   "evidence": [
-    "consultation_required rx_gated entered: 255293 converted: 76641 rate: 0.3002",
-    "consultation_required non_rx entered: 391898 converted: 152981 rate: 0.3904",
-    "phase1.funnel stage=confirmed count=229622"
-   ],
-   "segments": [
-    "rx_gated",
-    "non_rx"
-   ],
-   "confidence": "medium",
-   "hypothesis": "Orders flagged rx_gated have materially lower confirmation (rate: 0.3002) than non_rx (rate: 0.3904). That ~9 percentage-point gap means rx_gated contributes disproportionately to the top gap and could explain a non-trivial share of the 417569 lost orders.",
-   "confirm_via": "Run a targeted experiment to reduce rx-gated friction (e.g., pre-validate Rx or asynchronous clinic confirmation) and measure confirmed-rate change for rx_gated; or drill further (stock_status / item_count) within rx_gated vs non_rx to see if other covariates explain the gap."
-  }
- ],
+ "findings": null,
  "next_question": {
-  "dimension": "stock_status",
-  "rationale": "stock_status is a rate-bearing dimension not yet tried (listed in rate_bearing_not_yet_tried) and plausibly maps to the unexplained loss: 'items unavailable' appears in user_reasons (3907) and artifact-level issues exist (artifact_total: 42107). Drilling stock_status can partition confirmation rates for in-stock vs backordered/out-of-stock items and either attribute unexplained losses to inventory problems or rule that out before spending budget on other cuts."
+  "dimension": "item_count",
+  "rationale": "Two rate-bearing cuts remain untried (hour_of_day, item_count). I recommend cutting by item_count next because it can reveal whether baskets of certain sizes systematically convert worse \u2014 which would interact with the stock_status and consultation_required gaps we already see and point to an operational fix (e.g., better handling of single-item RX orders or multi-item fulfillment). Evidence: top gap is from created->confirmed with lost=417569 (share_of_prev=0.6452) and funnel shows created=647191 -> confirmed=229622 (conversion_from_previous=0.3548). Consultation_required already shows a meaningful gap (rx_gated: entered=255293, converted=76641, rate=0.3002 vs non_rx: entered=391898, converted=152981, rate=0.3904). stock_status shows extremely low conversion for unfulfilled/partially-fulfilled baskets (has_unfulfilled_item: entered=19728, converted=1831, rate=0.0928; has_partially_fulfilled_item: entered=2191, converted=16, rate=0.0073), suggesting fulfillment issues tied to items in the basket. Cutting by item_count should help determine if low-conversion segments are concentrated in particular basket sizes (e.g., single-item RX vs multi-item orders), which is more actionable than hour_of_day for addressing fulfillment/consultation interactions."
  }
 }
