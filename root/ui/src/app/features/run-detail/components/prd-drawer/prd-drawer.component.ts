@@ -66,13 +66,28 @@ export class PrdDrawerComponent {
     this.view.set('list');
   }
 
-  /** Section bodies are markdown. Read mode renders it; edit mode shows the
-   *  source in a textarea. Rendering was lost when section editing landed —
-   *  the read branch printed the raw source, so `**bold**` and backticks
-   *  showed literally. renderPrdMarkdown escapes before it converts, so this
-   *  is safe to bind with [innerHTML]. */
-  sectionHtml(body: string): string {
-    return renderPrdMarkdown(body);
+  /**
+   * Section bodies are markdown. Read mode renders it; edit mode shows the
+   * source in a textarea. Rendering was lost when section editing landed —
+   * the read branch printed the raw source, so `**bold**` and backticks
+   * showed literally. renderPrdMarkdown escapes before it converts, so this
+   * is safe to bind with [innerHTML].
+   *
+   * Rendered once per document rather than per template pass: bound as a
+   * bare method it re-ran every regex in renderPrdMarkdown for every
+   * section on each change-detection cycle, including on every keystroke
+   * in the chat box.
+   */
+  private readonly sectionHtmlById = computed<Record<string, string>>(() => {
+    const d = this.doc();
+    if (!d) return {};
+    const out: Record<string, string> = {};
+    for (const section of d.sections) out[section.id] = renderPrdMarkdown(section.body);
+    return out;
+  });
+
+  sectionHtml(id: string): string {
+    return this.sectionHtmlById()[id] ?? '';
   }
 
   readonly prdRanks = computed<number[]>(() => {
@@ -140,6 +155,14 @@ export class PrdDrawerComponent {
     // edit landing means the sections on screen belong to a different
     // document, so in-progress local edits are dropped rather than silently
     // re-attached to other content.
+    // The card list is the drawer's entry point when there is more than one
+    // PRD, so opening it always lands there rather than resuming whichever
+    // document was last read — which would also survive a switch to a
+    // different run.
+    effect(() => {
+      if (this.open()) this.view.set('list');
+    });
+
     effect(() => {
       const md = this.activeSummary()?.markdown ?? this.run().prd_draft;
       this.doc.set(md?.trim() ? parsePrd(md) : null);

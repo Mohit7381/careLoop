@@ -85,7 +85,7 @@
             <textarea class="secbody" rows="6" [value]="s.body"
                       (input)="onSectionInput(s, $any($event.target).value)"></textarea>
           } @else {
-            <div class="secbody-read" [innerHTML]="sectionHtml(s.body)"></div>
+            <div class="secbody-read" [innerHTML]="sectionHtml(s.id)"></div>
           }
         </section>
       }
