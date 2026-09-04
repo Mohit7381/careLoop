@@ -101,3 +101,19 @@ def test_the_journey_is_picked_from_the_prompt():
     # "payment" alone decides nothing — both journeys have a payment step
     assert pick_journey("why are payments failing", js)[0] == "pd_checkout"      # default
     assert pick_journey("", js) == ("pd_checkout", [])
+
+
+def test_the_journey_word_does_not_name_a_dimension():
+    """"consultations" must pick the consultation journey without also pinning
+    the drill-down to `consultation_trigger` — that cut is the weakest one and
+    the prompt never mentioned triggers."""
+    from app.journeys import load_journey
+    cfg = load_journey("consultation")
+    events = list((cfg.get("event_stage") or {}).keys())
+    s = resolve_scope("why do consultations get abandoned before the doctor joins",
+                      cfg, events, cfg["drilldown_dimensions"])
+    assert "consultation_trigger" not in s.dimensions
+    assert (s.from_stage, s.to_stage) == ("created", "confirmed")
+    # the alias still works when a user actually means it
+    s2 = resolve_scope("compare instant versus erx-driven consults", cfg, events, cfg["drilldown_dimensions"])
+    assert "consultation_trigger" in s2.dimensions

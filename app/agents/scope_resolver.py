@@ -113,9 +113,15 @@ def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
     # --- dimensions the user named, by name or by how people actually say it ---
     aliases: dict[str, list[str]] = journey_cfg.get("dimension_aliases") or {}
     lowered = (prompt or "").lower()
+    # A dimension is not "named" by a word that merely names the journey.
+    # "why do consultations get abandoned" matched consultation_trigger on the
+    # token "consultation" and pinned the whole drill-down to the weakest cut.
+    journey_words = {k.lower() for k in (journey_cfg.get("journey_keywords") or [])}
     for dim in available_dimensions:
         hit = None
-        if _overlaps(_label_tokens(dim), words):
+        dim_tokens = {t for t in _label_tokens(dim)
+                      if not any(_shares_stem(t, jw) for jw in journey_words if len(jw) >= _MIN_TOKEN)}
+        if _overlaps(dim_tokens, words):
             hit = dim
         else:
             for alias in aliases.get(dim, []):
