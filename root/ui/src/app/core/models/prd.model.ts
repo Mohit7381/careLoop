@@ -131,7 +131,9 @@ export function renderPrdMarkdown(md: string): string {
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/`([^`]+)`/g, '<code>$1</code>');
 
-  const isRow = (l: string) => /^\s*\|.*\|\s*$/.test(l);
+  /* Any line that opens with a pipe is a table row — the model sometimes
+     drops the closing pipe on a long row, and cells() already tolerates it. */
+  const isRow = (l: string) => /^\s*\|/.test(l);
   const isRule = (l: string) => /^\s*\|[\s:|-]+\|\s*$/.test(l);
   const cells = (l: string) =>
     l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
@@ -208,6 +210,14 @@ export function renderPrdMarkdown(md: string): string {
       lines[i].trim() &&
       !/^(#{1,4}\s|\s*[-*]\s|\s*>|\s*\|)/.test(lines[i])
     ) {
+      para.push(inline(lines[i]));
+      i++;
+    }
+    /* Progress guard: a line that no branch above claimed (e.g. a stray
+       pipe or list-like line) must still be consumed, otherwise this loop
+       never advances and the tab hangs — that is exactly what a truncated
+       table row in a live PRD did (run 44, finding #3). */
+    if (!para.length) {
       para.push(inline(lines[i]));
       i++;
     }
