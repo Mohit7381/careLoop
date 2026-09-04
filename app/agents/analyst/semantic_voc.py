@@ -29,7 +29,8 @@ from typing import Any, Callable, Optional
 
 logger = logging.getLogger("careloop.semantic_voc")
 
-BATCH_SIZE = 40          # keeps each call well inside the context and the output schema small
+BATCH_SIZE = 20          # 40 ran 50-75 s per call and the ingress in front of sphere cuts at ~60 s
+                         # (our log: HTTP 504; sphere's log: SUCCESS at 74 s). 20 keeps calls ~20-35 s.
 MAX_TEXT_CHARS = 400     # reviews are short; this only guards a pathological one
 NEGATIVE_MAX_SCORE = 2   # mirrors phase3_voc: only these are ever bucketed into themes
 PARALLEL_BATCHES = 3     # sphere calls for 21688 run ~45 s each; three in flight is polite

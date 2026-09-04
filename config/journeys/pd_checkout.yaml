@@ -68,6 +68,22 @@ dimension_aliases:
   pd_category:           [category, categories, product type]
   delivery_outcome:      [delivery, delivered, cancelled, courier]
 
+# Code Scout search seeds. Analytics event names (pharmacy.click.add_to_cart_button)
+# and segment labels (3_to_5_items) exist in the app and the warehouse, never in
+# backend Java — a live run searched timor/oms for six of them and got zero hits.
+# These are terms that DO appear in the owning repos, each one verified against
+# GitLab blob search on 2026-09-04 (hit counts in comments). Add more only after
+# checking; an unverified hint burns a search turn on nothing.
+code_hints:
+  by_stage:                       # the routing category a finding lands in
+    pharmacy_checkout: [abandon, abandonOrder, timeToAbandon]   # 6 / 6 / 3 in timor/oms
+    payments:          [timeout]                                # 6 in scrooge/payment-service
+    consultation:      [session, abandon]                       # 14 / — in bintan/consultation
+  by_dimension:                   # the drill-down cut a finding cites
+    item_count:            [CartItem, quantity]                 # 7 / 2 in timor/oms
+    consultation_required: [erx, prescription]                  # 11 / 6 in timor/oms
+    stock_status:          [stock]                              # 1 in timor/oms
+
 # Code Scout routing: category -> candidate repos (exact-match keys; Appx A #2)
 routing:
   pharmacy_checkout:
