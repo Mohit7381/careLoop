@@ -131,6 +131,8 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
                   voc_signals: Optional[list[dict]] = None,
                   top_strength: Optional[dict] = None,
                   positive_voc_signals: Optional[list[dict]] = None,
+                  user_question: Optional[str] = None,
+                  user_intent: str = "diagnosis",
                   ) -> tuple[list[Finding], list[DrilldownStep], list[GrowthIdea]]:
     trail: list[DrilldownStep] = []
     findings: list[Finding] = []
@@ -165,6 +167,14 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             # strength instead of only ever reacting to top_gap.
             "top_strength": top_strength or {},
             "positive_voc_signals": positive_voc_signals or [],
+            # The reviewer's own words and how the resolver read them (2026-09-04).
+            # CONTEXT ONLY: they steer which cuts to prioritise and which growth
+            # ideas to propose; they are never evidence, and the evidence gate
+            # does not add anything from them to `shown`. Before this the model
+            # never saw the question at all, so "how can I increase transactions"
+            # and "why do users abandon" produced the same analysis.
+            "user_question": user_question or "",
+            "user_intent": user_intent,
         }
         out = llm(ctx)
         if out.get("findings"):

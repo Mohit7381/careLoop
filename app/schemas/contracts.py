@@ -442,6 +442,10 @@ class RunScope(BaseModel):
     dimensions: list[str] = Field(default_factory=list)   # restrict the drill-down
     review_days: Optional[int] = None       # "the last 10-15 days of reviews"
     matched_on: list[str] = Field(default_factory=list)   # why the resolver chose this
+    # "diagnosis" (why do users drop off — the default) or "growth" (how do we get
+    # more transactions). Resolved from the wording, deterministically; it never
+    # changes which numbers the model sees, only what it is asked to prioritise.
+    intent: str = "diagnosis"
     unresolved: list[str] = Field(default_factory=list)   # asked for, could not honour
 
     def is_scoped(self) -> bool:
