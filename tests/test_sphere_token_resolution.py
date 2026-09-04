@@ -12,7 +12,8 @@ from app.integrations import sphere
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch, tmp_path):
-    for k in ("SPHERE_APP_TOKEN", "SPHERE_PLATFORM_APP_TOKEN", "SPHERE_PLATFORM_API_KEY"):
+    for k in ("SPHERE_APP_TOKEN", "SPHERE_PLATFORM_APP_TOKEN", "SPHERE_PLATFORM_API_KEY",
+              "SPHERE_BASE_URL", "SPHERE_PLATFORM_BASE_URL"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.chdir(tmp_path)               # no real .env in reach
     get_settings.cache_clear()
@@ -43,3 +44,22 @@ def test_dotenv_file_is_read_when_nothing_is_exported(tmp_path):
 
 def test_unset_is_an_honest_empty_string():
     assert sphere._app_token() == ""
+
+
+# ---- host resolution follows the same rule ---------------------------------
+
+def test_empty_base_url_in_env_falls_back_to_the_stage_default(monkeypatch):
+    monkeypatch.setenv("SPHERE_PLATFORM_BASE_URL", "")
+    assert sphere._base_url() == "http://sphere-platform.stage-k8s.halodoc.com"
+
+
+def test_the_dotenv_base_url_name_is_honoured(tmp_path):
+    (tmp_path / ".env").write_text("SPHERE_PLATFORM_BASE_URL=http://sphere.example.test/\n")
+    assert sphere._base_url() == "http://sphere.example.test"
+
+
+def test_shell_override_wins_over_dotenv(monkeypatch, tmp_path):
+    (tmp_path / ".env").write_text("SPHERE_PLATFORM_BASE_URL=http://from-dotenv\n")
+    monkeypatch.setenv("SPHERE_BASE_URL", "http://from-shell")
+    assert sphere._base_url() == "http://from-shell"
+
