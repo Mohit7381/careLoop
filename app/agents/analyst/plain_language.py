@@ -66,6 +66,10 @@ def humanise_evidence(raw: str, stage_labels: Optional[dict] = None,
     The model sometimes cites several rows in one string
     ('phase1 funnel: {...}, {...}: 0.6'); each object is translated and they
     are joined with '; ' so a stage count is never attributed to the wrong stage."""
+    # a reason cluster cited as '"abandoned by system": 54015' — the key IS the reason
+    m = re.fullmatch(r'\s*"([^"]+)"\s*:\s*(-?\d[\d,]*\.?\d*)\s*', raw)
+    if m and not m.group(1).replace("_", "").isalnum():
+        return f"{_n(m.group(2))} left with the reason '{m.group(1)}'"
     objs = _OBJ.findall(raw)
     if len(objs) > 1:
         parts = [humanise_evidence(o, stage_labels, dimension_labels, dimension) for o in objs]

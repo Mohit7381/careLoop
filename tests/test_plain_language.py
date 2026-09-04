@@ -66,3 +66,9 @@ def test_several_rows_in_one_string_are_translated_one_by_one():
     assert humanise_evidence(raw, CFG["stage_labels"]) == \
         "226,615 people requested a consultation; 139,104 people paid and confirmed (60.0% of the previous step)"
 
+
+def test_a_quoted_reason_with_a_count_reads_as_a_reason():
+    assert humanise_evidence('"abandoned by system": 54015') == "54,015 left with the reason 'abandoned by system'"
+    assert humanise_evidence('"abandoned from the patient selection screen": 4134') == \
+        "4,134 left with the reason 'abandoned from the patient selection screen'"
+

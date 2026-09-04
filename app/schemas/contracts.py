@@ -97,8 +97,9 @@ class SegmentFilter(BaseModel):
 
 class EvidenceItem(BaseModel):
     type: str  # "snapshot" | "drilldown"
-    metric: str
+    metric: str                      # what the model cited, verbatim (audit trail)
     value: float
+    label: Optional[str] = None      # the same fact in plain words, for people (2026-09-04)
 
 
 class Finding(BaseModel):
