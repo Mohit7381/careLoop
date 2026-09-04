@@ -481,27 +481,31 @@ tr:last-child td {
   margin-bottom: 2px;
 }
 
-/* Section bodies are rendered markdown now, not raw source in a <pre>. */
+/* Section bodies are rendered markdown now, not raw source in a <pre>.
+   The inner elements come from [innerHTML], so they never carry this
+   component's _ngcontent attribute and plain descendant selectors do not
+   match them — hence ::ng-deep. Without it every rule below is inert and
+   the quotes fall back to the UA's 40px-indented blockquote. */
 .secbody-read {
   font-size: 13px;
   line-height: 1.6;
   color: var(--ink-2);
 }
 
-.secbody-read p {
+:host ::ng-deep .secbody-read p {
   margin: 0 0 8px;
 }
 
-.secbody-read p:last-child {
+:host ::ng-deep .secbody-read p:last-child {
   margin-bottom: 0;
 }
 
-.secbody-read strong {
+:host ::ng-deep .secbody-read strong {
   color: var(--ink);
   font-weight: 600;
 }
 
-.secbody-read code {
+:host ::ng-deep .secbody-read code {
   font-family: var(--font-mono);
   font-size: 11.5px;
   background: var(--surface-2);
@@ -510,18 +514,34 @@ tr:last-child td {
   padding: 1px 4px;
 }
 
-.secbody-read ul {
+:host ::ng-deep .secbody-read ul {
   margin: 0 0 8px;
   padding-left: 18px;
 }
 
-.secbody-read li {
+:host ::ng-deep .secbody-read li {
   margin-bottom: 4px;
 }
 
-.secbody-read blockquote {
-  margin: 0 0 8px;
-  padding-left: 12px;
+/* Review quotes. Each is its own blockquote (one per `> ` line), so they
+   stack tightly rather than sitting 47px apart under UA margins. */
+:host ::ng-deep .secbody-read blockquote {
+  margin: 0 0 6px;
+  padding: 6px 0 6px 12px;
   border-left: 2px solid var(--line-strong);
-  color: var(--ink-3);
+  color: var(--ink-2);
+}
+
+:host ::ng-deep .secbody-read blockquote:last-child {
+  margin-bottom: 0;
+}
+
+:host ::ng-deep .secbody-read h2,
+:host ::ng-deep .secbody-read h3,
+:host ::ng-deep .secbody-read h4,
+:host ::ng-deep .secbody-read h5 {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 12px 0 6px;
 }
