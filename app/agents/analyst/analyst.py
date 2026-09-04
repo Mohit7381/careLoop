@@ -6,6 +6,8 @@ writes state.findings / state.drilldown_trail / state.voc. Fails loudly:
 any exception marks the run failed with failed_stage="analyzing" upstream.
 """
 import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -15,12 +17,36 @@ from app.agents.analyst.journey_events import journey_events_for
 from app.agents.analyst.phase2 import run_drilldown
 from app.agents.analyst import phase3_voc
 from app.agents.analyst.phase3_voc import corroborate, correlate_with_llm, run_voc
-from app.agents.analyst.semantic_voc import classify_reviews
+from app.agents.analyst.semantic_voc import POSITIVE_MIN_SCORE, classify_reviews
 from app.agents.analyst.validator import collect_numbers, filter_findings
 from app.journeys import load_journey
 from app.schemas.contracts import RunState, validate_routing_stage
 
+logger = logging.getLogger(__name__)
+
 FIXTURES = Path("fixtures")
+
+# PR #22 review (Nakul): on the fixture corpus, 499 of 600 reviews score >= 4
+# - 25 batches at BATCH_SIZE=20, 5 sequential rounds at PARALLEL_BATCHES=5,
+# ~200s, dwarfing the ~40s (1 round) the complaint pass has always cost.
+# Running the two passes concurrently (below) stopped them ADDING, but the
+# positive pass's own 5-round cost was still the Analyst's new critical path.
+# Capping the sample to the most-recent reviews - plenty to ground a growth
+# idea - brings it to the same 1-round scale as the complaint pass.
+MAX_POSITIVE_SAMPLE = 60
+
+
+def _score(review: dict) -> int:
+    try:
+        return int(review.get("score", 5))
+    except (TypeError, ValueError):
+        return 5
+
+
+def _most_recent_positive(reviews: list[dict], limit: int = MAX_POSITIVE_SAMPLE) -> list[dict]:
+    positive = [r for r in reviews if _score(r) >= POSITIVE_MIN_SCORE]
+    positive.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
+    return positive[:limit]
 
 
 def _default_routing_for_gap(gap: dict, journey_cfg: dict) -> str:
@@ -64,6 +90,9 @@ def run_analyst(state: RunState,
                 f"journey's funnel; analysed the largest drop instead")
     if gap is None:
         gap = phase1.largest_drop(table)
+    # The mirror of `gap`: the best-converting transition, decided the same
+    # deterministic way — growth_ideas' positive funnel grounding (2026-09-04).
+    top_strength = phase1.strongest_stage(table)
     clusters = phase1.cluster_reasons(state.snapshot.reasons, cfg["artifact_reasons"])
     summary = {"funnel": table, "reason_clusters": clusters,
                "caveats": phase1.censoring_caveats(cfg["stages"], cfg.get("maturing_stages") or [])}
@@ -75,18 +104,60 @@ def run_analyst(state: RunState,
     # findings, so they are re-ranked once the drill-down is done.
     voc_findings: list = []
     voc = None
+    positive_voc_signals: list = []
     if reviews is None and state.demo_mode:
         rv_path = FIXTURES / state.journey / "reviews_scrubbed.json"
         reviews = json.loads(rv_path.read_text()) if rv_path.exists() else []
     if reviews:
         reviews, window_meta = phase3_voc.filter_by_days(reviews, state.scope.review_days)
-        themes_per_review, voc_meta = classify_reviews(
-            voc_llm, reviews, cfg["voc"]["themes"], phase3_voc.classify_review,
-            scope_hint=state.scope.prompt)
+        positive_themes_cfg = cfg["voc"].get("positive_themes") or []
+        # Sampled, not the full positive set - see MAX_POSITIVE_SAMPLE above
+        # (PR #22 review: 499 of 600 reviews on the fixture score >= 4, which
+        # is 5x the complaint pass's own batch count for a signal that only
+        # grounds an optional growth idea, never a Finding).
+        positive_sample = _most_recent_positive(reviews) if positive_themes_cfg else []
+
+        # Negative and positive classification are fully independent (different
+        # taxonomies, different score bands, and now different-sized inputs) -
+        # run them CONCURRENTLY rather than sequentially, so the optional pass
+        # never adds to the mandatory one's wall-clock time.
+        def _classify_negative():
+            return classify_reviews(voc_llm, reviews, cfg["voc"]["themes"], phase3_voc.classify_review,
+                                    scope_hint=state.scope.prompt)
+
+        def _classify_positive():
+            if not positive_sample:
+                return [], {}
+            return classify_reviews(voc_llm, positive_sample, positive_themes_cfg, phase3_voc.classify_review,
+                                    scope_hint=state.scope.prompt, polarity="positive")
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            negative_future = pool.submit(_classify_negative)
+            positive_future = pool.submit(_classify_positive)
+            themes_per_review, voc_meta = negative_future.result()
+            # PR #22 review (Nakul): praise classification is grounding for
+            # growth_ideas, never load-bearing - it must never take the
+            # mandatory complaint pass and the whole funnel analysis down
+            # with it. classify_reviews() already guards each SPHERE BATCH
+            # internally; this guards everything else that can go wrong
+            # around it (a malformed positive_themes_cfg entry, for example).
+            try:
+                positive_per_review, _positive_meta = positive_future.result()
+            except Exception as exc:
+                logger.warning("positive VoC pass failed (%s) — continuing without praise signals", exc)
+                positive_per_review, _positive_meta = [], {}
+
         voc_findings, voc = run_voc(reviews, cfg["voc"], 1,
                                     themes_per_review=themes_per_review,
                                     extra_meta={**window_meta,
                                                 "classifier": voc_meta["classifier"]})
+        # Praise reviews (2026-09-04): the mirror of the complaint pass above.
+        # Never escalates into a Finding — see phase3_voc.run_positive_voc —
+        # this exists purely as growth_ideas' second real grounding source
+        # (what users already love), alongside top_strength.
+        if positive_sample:
+            positive_voc_signals = phase3_voc.run_positive_voc(
+                positive_sample, positive_themes_cfg, themes_per_review=positive_per_review)
     voc_signals = [{"theme": t["theme"], "count": t["count"], "escalated": t["escalated"]}
                    for t in (voc.themes if voc else []) if t["theme"] != "unmapped"]
 
@@ -105,9 +176,10 @@ def run_analyst(state: RunState,
         if wanted:
             whitelist = wanted
     tool = AggregateTool(cohort_cuts or {}, whitelist)
-    findings, trail = run_drilldown(
+    findings, trail, growth_ideas = run_drilldown(
         llm, tool, gap or {}, summary, routing_keys,
-        _default_routing_for_gap(gap or {}, cfg), voc_signals=voc_signals)
+        _default_routing_for_gap(gap or {}, cfg), voc_signals=voc_signals,
+        top_strength=top_strength, positive_voc_signals=positive_voc_signals)
 
     # ---- evidence gate (accepts every number the model was shown) ----
     shown = collect_numbers(summary) | collect_numbers(gap or {})
@@ -136,5 +208,7 @@ def run_analyst(state: RunState,
     state.findings = kept + voc_findings
     state.findings_rejected = rejected
     state.drilldown_trail = trail
+    state.growth_ideas = growth_ideas
+    state.top_gap_to_stage = (gap or {}).get("to_stage")
     state.status = "scanning_code"
     return state

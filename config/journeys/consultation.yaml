@@ -117,3 +117,23 @@ voc:
       routing_stage: payments
       search_terms: [pricing, fee, late_night_fee]
       keywords: [mahal, harga, "biaya admin", biaya]
+
+  # Praise taxonomy (2026-09-04) — see pd_checkout.yaml's own comment for
+  # what this is for. First-draft, mirror-imaged from the complaint taxonomy
+  # above — tune against real review data.
+  positive_themes:
+    - name: great_doctor_experience
+      routing_stage: consultation
+      keywords: [ramah, membantu, jelas, sabar, profesional]
+    - name: fast_response
+      routing_stage: consultation
+      keywords: ["cepat direspon", "langsung dijawab", "tidak lama menunggu"]
+    - name: reliable_app
+      routing_stage: consultation
+      keywords: [lancar, stabil, "tidak error"]
+    - name: helpful_support
+      routing_stage: re_engagement
+      keywords: ["customer service", "cs ", responsif]
+    - name: good_value
+      routing_stage: payments
+      keywords: [murah, worth, terjangkau]

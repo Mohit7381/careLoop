@@ -22,7 +22,7 @@ from app.agents.evidence_gate import unsupported_numbers
 from app.config import get_settings
 from app.integrations.sphere import make_use_case_llm
 from app.pipeline.state import GraphState
-from app.schemas.contracts import CodeGap, Finding, RunState, Suggestion, TrendReport, VocQuote
+from app.schemas.contracts import CodeGap, Finding, RunState, ShippedFix, Suggestion, TrendReport, VocQuote
 
 logger = logging.getLogger("careloop.prd")
 LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
@@ -71,7 +71,16 @@ def _collect_quotes(finding: Finding, per_finding_quotes: dict) -> list:
 SUGGESTION_TYPE_LABELS = {"tech": "Tech", "business": "Business", "process": "Process"}
 
 
-def _requirements_block(gap: Optional[CodeGap], suggestions: list[Suggestion]) -> str:
+def _shipped_fix_for(evidence_file: Optional[str], evidence_line: Optional[int],
+                     shipped: list[ShippedFix]) -> Optional[ShippedFix]:
+    return next(
+        (sf for sf in shipped if sf.evidence_file == evidence_file and sf.evidence_line == evidence_line),
+        None,
+    )
+
+
+def _requirements_block(gap: Optional[CodeGap], suggestions: list[Suggestion],
+                        shipped: list[ShippedFix] = ()) -> str:
     """
     Functional requirements, numbered FR-N across BOTH sources in one list —
     a business/process suggestion is just as valid a requirement as a code
@@ -86,6 +95,13 @@ def _requirements_block(gap: Optional[CodeGap], suggestions: list[Suggestion]) -
     first) gets its own honest label rather than folding into "partial"
     (PR #1 B4: "confirmed missing" is the strongest claim available and it
     was being attached to the verdict with the weakest support).
+
+    Closed-loop impact (2026-09-04): an EXISTING remedy that also matches a
+    ShippedFix (its evidence line's commit landed after this run's baseline
+    — see app.agents.code_scout.impact) is labelled SHIPPED instead, with
+    the commit and — when Reporter found a comparable delta — the measured
+    impact, so a PRD for an already-resolved finding says so plainly rather
+    than reading identically to a finding nobody has touched yet.
 
     Suggestions (tech/business/process, contracts.py decision #11) follow,
     continuing the same FR-N sequence, each labelled with its type and
@@ -103,10 +119,24 @@ def _requirements_block(gap: Optional[CodeGap], suggestions: list[Suggestion]) -
             if r.status == "absent":
                 lines.append(f"- {tag} **[FR candidate — not found in {searched} search{'es' if searched != 1 else ''}]** {r.proposal}")
             elif r.status == "exists":
-                lines.append(
-                    f"- {tag} **[Already built — do not re-propose]** {r.proposal} "
-                    f"(`{r.evidence_file}:{r.evidence_line}`)"
-                )
+                sf = _shipped_fix_for(r.evidence_file, r.evidence_line, shipped)
+                if sf is None:
+                    lines.append(
+                        f"- {tag} **[Already built — do not re-propose]** {r.proposal} "
+                        f"(`{r.evidence_file}:{r.evidence_line}`)"
+                    )
+                else:
+                    impact = (
+                        f" Measured impact: {sf.metric_name} {sf.previous_value}{sf.metric_unit} → "
+                        f"{sf.current_value}{sf.metric_unit} "
+                        f"({'+' if sf.pct_change >= 0 else ''}{sf.pct_change}%)."
+                        if sf.metric_name is not None else " Impact not yet measurable — no comparable baseline."
+                    )
+                    lines.append(
+                        f"- {tag} **[Shipped — do not re-propose]** {r.proposal} "
+                        f"(`{r.evidence_file}:{r.evidence_line}`, commit `{sf.commit.short_sha}` "
+                        f"by {sf.commit.author} on {sf.commit.date}).{impact}"
+                    )
             elif r.status == "partial":
                 lines.append(f"- {tag} **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
             else:
@@ -142,6 +172,7 @@ def _render_prd_llm_stub(
     run_id: int,
     window_start: str,
     window_end: str,
+    shipped: list[ShippedFix] = (),
 ) -> tuple[str, str]:
     template = TEMPLATE_PATH.read_text()
     gap = gaps[0] if gaps else None
@@ -160,10 +191,16 @@ def _render_prd_llm_stub(
     segment_desc = ", ".join(f"{s.dimension}={s.value}" for s in finding.segments) or "all"
     background = f"Routing category `{finding.stage}` (segments: {segment_desc}). Trend context: {trend.narrative}"
 
-    requirements = _requirements_block(gap, suggestions)
+    finding_shipped = [sf for sf in shipped if sf.finding_rank == finding.rank]
+    requirements = _requirements_block(gap, suggestions, shipped)
 
     if gap and gap.mechanism_found:
         goals = f"Close the `{gap.gap_class}` gap at `{gap.repo}/{gap.file}:{gap.line}` without regressing existing behaviour."
+        if finding_shipped:
+            goals = (
+                "A fix for this finding has already SHIPPED (see the Remedy Loop verdicts below) — "
+                "goals below apply only to whatever remains unaddressed. " + goals
+            )
         solution = (
             f"{GAP_CLASS_SOLUTION_HINTS[gap.gap_class]}\n\n"
             f"**Gap statement:** {gap.gap_statement}\n\n"
@@ -201,6 +238,13 @@ def _render_prd_llm_stub(
         f"Stage conversion for routing category `{finding.stage}` moves within ±2pp of the Power BI baseline "
         f"post-fix; no regression in adjacent stages."
     )
+    for sf in finding_shipped:
+        if sf.metric_name is not None:
+            success_metrics += (
+                f" Already measured: {sf.metric_name} moved {sf.previous_value}{sf.metric_unit} → "
+                f"{sf.current_value}{sf.metric_unit} ({'+' if sf.pct_change >= 0 else ''}{sf.pct_change}%) "
+                f"since commit `{sf.commit.short_sha}` ({sf.commit.date})."
+            )
     open_questions = "- " + finding.confirm_via
     if finding.confidence == "low":
         open_questions += f"\n- Hypothesis confidence is only '{finding.confidence}' — treat as unconfirmed."
@@ -226,7 +270,7 @@ def _render_prd_llm_stub(
     return title, body
 
 
-def _prd_inputs(finding, gaps, suggestions, trend, quotes, run_id, window_start, window_end) -> dict:
+def _prd_inputs(finding, gaps, suggestions, trend, quotes, run_id, window_start, window_end, shipped=()) -> dict:
     """Exactly what the drafting model is allowed to know.
 
     Remedy verdicts and suggestions are passed as structured `status`/
@@ -236,8 +280,17 @@ def _prd_inputs(finding, gaps, suggestions, trend, quotes, run_id, window_start,
     upgraded by writing more confidently — which is the failure this
     pipeline has corrected twice already ("confirmed missing" on an
     unsearched remedy).
+
+    `shipped_fixes` is new (2026-09-04, closed-loop impact) and additive: a
+    caller/template that doesn't know this key can ignore it exactly as it
+    already ignores any other input it wasn't told to use — the evidence
+    gate (`unsupported_numbers`) still rejects any number the model writes
+    that isn't traceable to one of these inputs, shipped-fix numbers
+    included, so an old prompt degrades safely rather than being able to
+    invent an impact figure.
     """
     gap = gaps[0] if gaps else None
+    finding_shipped = [sf for sf in shipped if sf.finding_rank == finding.rank]
     return {
         "run_id": run_id,
         "window": {"start": window_start, "end": window_end},
@@ -265,6 +318,16 @@ def _prd_inputs(finding, gaps, suggestions, trend, quotes, run_id, window_start,
         "trend_narrative": trend.narrative,
         "anecdotal_quotes": [{"text": getattr(q, "text", str(q)),
                               "rating": getattr(q, "rating", None)} for q in quotes[:2]],
+        "shipped_fixes": [
+            {
+                "remedy_proposal": sf.remedy_proposal, "evidence_file": sf.evidence_file,
+                "commit_sha": sf.commit.short_sha, "commit_date": sf.commit.date,
+                "metric_name": sf.metric_name, "metric_unit": sf.metric_unit,
+                "previous_value": sf.previous_value, "current_value": sf.current_value,
+                "pct_change": sf.pct_change,
+            }
+            for sf in finding_shipped
+        ],
         "rules": [
             "Every number must come from these inputs. Do not compute new totals.",
             "Express targets relatively ('recover 5% of X'), never as an invented absolute count.",
@@ -274,6 +337,12 @@ def _prd_inputs(finding, gaps, suggestions, trend, quotes, run_id, window_start,
             "Format each of the eight sections as a markdown heading: '## 1. Overview', "
             "'## 2. Goals & Success Metrics', and so on. Functional requirements are list "
             "items beginning '- FR-1:', '- FR-2:'.",
+            "If shipped_fixes is non-empty, this finding's fix has ALREADY SHIPPED: do not write it "
+            "as a new functional requirement. Instead, Section 4 (Goals) must say it already shipped "
+            "(citing commit_sha/commit_date) and Section 7 (Success Metrics) must cite its measured "
+            "impact verbatim from metric_name/previous_value/current_value/pct_change when those are "
+            "not null — never invent or rephrase the numbers, and never claim measured impact when "
+            "metric_name is null (say impact is not yet measurable instead).",
         ],
     }
 
@@ -352,11 +421,13 @@ def _draft_for(finding: Finding, run_state: RunState, llm: Optional[LLMCall]) ->
         run_id=run_state.run_id,
         window_start=run_state.window_start,
         window_end=run_state.window_end,
+        shipped=run_state.shipped_fixes,
     )
     body, source = "", "deterministic"
     if llm is not None:
         inputs = _prd_inputs(finding, gaps, suggestions, run_state.trend_report, quotes,
-                             run_state.run_id, run_state.window_start, run_state.window_end)
+                             run_state.run_id, run_state.window_start, run_state.window_end,
+                             shipped=run_state.shipped_fixes)
         body, source = _render_prd_llm(llm, inputs)
         if body:
             body = _with_draft_banner(body, run_state.run_id, run_state.window_start,

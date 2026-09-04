@@ -36,7 +36,7 @@ def test_happy_path_two_cuts_then_done(cohort_cuts, journey_cfg):
             "evidence": ["255293", "76641", "0.300"],
             "confirm_via": "A/B a rx-cart resume nudge and compare confirm rates"}]},
     ])
-    findings, trail = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout")
+    findings, trail, _ = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout")
     assert [t.dimension for t in trail][:2] == ["pd_category", "consultation_required"]
     assert findings and findings[0].stage == "pharmacy_checkout"
     assert any(abs(e.value - 255293) < 1 for e in findings[0].evidence)
@@ -46,7 +46,7 @@ def test_budget_stops_a_never_done_llm(cohort_cuts, journey_cfg):
     tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
     llm = lambda ctx: {"done": False,
                        "next_question": {"dimension": "price_band", "rationale": "again"}}
-    findings, trail = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout", budget=10)
+    findings, trail, _ = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout", budget=10)
     assert len(trail) == 10  # hard stop
     assert findings == []
 
@@ -57,7 +57,7 @@ def test_non_whitelisted_dimension_recorded_as_rejected(cohort_cuts, journey_cfg
         {"done": False, "next_question": {"dimension": "user_phone", "rationale": "bad"}},
         {"done": True, "findings": []},
     ])
-    _, trail = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout")
+    _, trail, _ = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout")
     assert trail[0].note == "rejected: not whitelisted"
     assert trail[0].result_rows == []
 
@@ -68,7 +68,7 @@ def test_unknown_llm_stage_falls_back_to_routing_for_gap(cohort_cuts, journey_cf
         "hypothesis": "h", "stage": "created→confirmed",  # funnel stage, not routing key
         "confidence": "medium", "evidence": ["647191"],
         "confirm_via": "run the confirming experiment on the gap"}]}])
-    findings, _ = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout")
+    findings, _, _ = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout")
     assert findings[0].stage == "pharmacy_checkout"
 
 
@@ -106,7 +106,7 @@ def test_run_cannot_conclude_with_a_rate_bearing_dimension_untried(cohort_cuts, 
     tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
     eager_to_finish = lambda ctx: {"done": True, "findings": []}
 
-    _, trail = run_drilldown(eager_to_finish, tool, GAP, {}, ROUTING, "pharmacy_checkout")
+    _, trail, _ = run_drilldown(eager_to_finish, tool, GAP, {}, ROUTING, "pharmacy_checkout")
 
     tried = {t.dimension for t in trail}
     assert set(tool.rate_bearing_dimensions) <= tried, (
@@ -118,7 +118,7 @@ def test_run_cannot_conclude_with_a_rate_bearing_dimension_untried(cohort_cuts, 
 def test_the_floor_respects_the_budget(cohort_cuts, journey_cfg):
     """It is a floor on exploration, not a licence to exceed the hard budget."""
     tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
-    _, trail = run_drilldown(lambda ctx: {"done": True, "findings": []},
+    _, trail, _ = run_drilldown(lambda ctx: {"done": True, "findings": []},
                              tool, GAP, {}, ROUTING, "pharmacy_checkout", budget=2)
     assert len(trail) <= 2
 
@@ -128,7 +128,7 @@ def test_the_floor_does_not_re_query_what_the_model_already_covered(cohort_cuts,
     tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
     script = [{"done": False, "next_question": {"dimension": d, "rationale": "r"}}
               for d in tool.rate_bearing_dimensions] + [{"done": True, "findings": []}]
-    _, trail = run_drilldown(make_llm(script), tool, GAP, {}, ROUTING, "pharmacy_checkout")
+    _, trail, _ = run_drilldown(make_llm(script), tool, GAP, {}, ROUTING, "pharmacy_checkout")
     assert len(trail) == len(tool.rate_bearing_dimensions)
     assert not any("exploration floor" in t.question for t in trail)
 
@@ -142,7 +142,7 @@ def test_two_dimensions_in_one_turn_both_land_in_the_trail(cohort_cuts, journey_
                                           "also_dimension": "consultation_required"}},
         {"done": True, "findings": []},
     ])
-    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+    _, trail, _ = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
                              GAP, {}, ROUTING, "pharmacy_checkout", budget=10)
     assert [s.dimension for s in trail[:2]] == ["pd_category", "consultation_required"]
     assert trail[1].question.startswith("second cut this turn")
@@ -154,7 +154,7 @@ def test_a_second_dimension_that_was_already_tried_or_repeats_the_first_is_ignor
         {"done": False, "next_question": {"dimension": "consultation_required", "rationale": "b", "also_dimension": "pd_category"}},
         {"done": True, "findings": []},
     ])
-    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+    _, trail, _ = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
                              GAP, {}, ROUTING, "pharmacy_checkout", budget=10)
     assert [s.dimension for s in trail[:2]] == ["pd_category", "consultation_required"]
     assert len({s.dimension for s in trail}) == len(trail)        # no dimension cut twice
@@ -163,6 +163,6 @@ def test_a_second_dimension_that_was_already_tried_or_repeats_the_first_is_ignor
 def test_pairs_never_exceed_the_budget(cohort_cuts, journey_cfg):
     llm = make_llm([{"done": False, "next_question": {"dimension": "pd_category", "rationale": "a",
                                                        "also_dimension": "consultation_required"}}] * 5)
-    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+    _, trail, _ = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
                              GAP, {}, ROUTING, "pharmacy_checkout", budget=3)
     assert len(trail) == 3

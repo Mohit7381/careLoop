@@ -66,6 +66,27 @@ def largest_drop(table: list[dict]) -> Optional[dict]:
     return worst
 
 
+def strongest_stage(table: list[dict]) -> Optional[dict]:
+    """The best-CONVERTING adjacent stage transition — the mirror of
+    largest_drop(). Growth ideas (Analyst phase 2, 2026-09-04) need a real,
+    deterministic positive number to build on, not just the biggest loss:
+    this names where the funnel already works well, so a new feature can be
+    proposed as an extension of a proven strength rather than only ever
+    reacting to what's broken. Decided before any LLM runs, exactly like
+    largest_drop() — the model analyses it, never picks or disputes it."""
+    best = None
+    for prev, cur in zip(table, table[1:]):
+        if not prev["count"]:
+            continue
+        rate = round(cur["count"] / prev["count"], 4)
+        if best is None or rate > best["conversion_rate"]:
+            best = {
+                "from_stage": prev["stage"], "to_stage": cur["stage"],
+                "converted": cur["count"], "conversion_rate": rate,
+            }
+    return best
+
+
 def gap_for_transition(table: list[dict], from_stage: str, to_stage: str) -> Optional[dict]:
     """The same shape largest_drop returns, for a transition the user asked for.
 

@@ -32,7 +32,12 @@ from urllib.error import URLError
 import requests
 
 from app.agents.code_scout.assessor import SpherePlatformCodeGapAssessor, StubCodeGapAssessor
+from app.agents.code_scout.commit_history_client import (
+    FixtureCommitHistoryClient,
+    LiveGitlabCommitHistoryClient,
+)
 from app.agents.code_scout.errors import CodeScoutExternalError
+from app.agents.code_scout.impact import detect_shipped_fixes
 from app.agents.code_scout.node import code_scout_node as _code_scout_node
 from app.agents.code_scout.remedy_loop import run_remedy_loop
 from app.agents.code_scout.routing import repos_for_stage
@@ -226,12 +231,24 @@ def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
     return out
 
 
+def _commit_client(live: bool, settings) -> Any:
+    if live:
+        return LiveGitlabCommitHistoryClient(host=settings.gitlab_base_url, token=settings.gitlab_read_token)
+    # Demo mode: none of today's scripted _DEMO_REMEDIES verify "exists" (two
+    # absent, one partial — nothing has shipped yet in that fixed scenario),
+    # so an empty fixture client correctly detects nothing rather than
+    # fabricating a match. See commit_history_client.scripted_commit for how
+    # a future demo scenario would populate this.
+    return FixtureCommitHistoryClient()
+
+
 def code_scout_node(state: GraphState) -> GraphState:
     run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     settings = get_settings()
 
     from app.integrations.sphere import _live_llm_wanted
-    if not _live_llm_wanted(state.get("demo_mode", True)):
+    live = _live_llm_wanted(state.get("demo_mode", True))
+    if not live:
         search_client = FixtureSearchClient(FIXTURES_DIR)
         assessor = StubCodeGapAssessor()
     else:
@@ -241,4 +258,18 @@ def code_scout_node(state: GraphState) -> GraphState:
     result = _code_scout_node(run_state, search_client=search_client, assessor=assessor)
     gaps_with_remedies = _run_remedies(run_state, result["code_gaps"])
 
-    return {**state, "status": "reporting", "code_gaps": [g.model_dump() for g in gaps_with_remedies]}
+    # Phase 4 (2026-09-04): closed-loop impact — detect fixes that have
+    # actually shipped since this run's baseline, off the remedies just
+    # verified above. Additive to state["shipped_fixes"] across runs isn't
+    # needed here: each run's gaps are re-verified from scratch, so this
+    # list is this run's own findings, not an accumulating log.
+    shipped = detect_shipped_fixes(
+        gaps_with_remedies, run_state.findings, _commit_client(live, settings),
+        window_start=run_state.window_start, prev_window_end=run_state.prev_window_end,
+    )
+
+    return {
+        **state, "status": "reporting",
+        "code_gaps": [g.model_dump() for g in gaps_with_remedies],
+        "shipped_fixes": [s.model_dump() for s in shipped],
+    }
