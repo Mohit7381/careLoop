@@ -107,6 +107,10 @@
         </tbody>
       </table>
     </div>
+  } @else if (loadingHistory()) {
+    <div class="empty">
+      <p class="empty-title">Loading run history…</p>
+    </div>
   } @else {
     <div class="empty">
       <p class="empty-title">No analyses yet</p>

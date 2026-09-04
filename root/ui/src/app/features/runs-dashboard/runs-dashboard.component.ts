@@ -1,8 +1,8 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { ResolvedScope, RunService } from '../../core/services/run.service';
+import { ResolvedScope, RunService, RunSummary } from '../../core/services/run.service';
 
 interface RunRow {
   id: number;
@@ -22,9 +22,12 @@ const IN_FLIGHT = new Set(['queued', 'fetching', 'analyzing', 'scanning_code', '
 /**
  * Screen 1 — ask a question, get a run.
  *
- * The table starts EMPTY. A row is a question somebody actually asked, so
- * seeding it with a fixture row would put an analysis on screen that nobody
- * requested — and on a dashboard, a row reads as a fact.
+ * The table loads real run history from GET /runs on open (newest first) —
+ * every run is already sitting in analysis_runs regardless of which tab or
+ * session created it, so a reload or a fresh tab must show the same history,
+ * not an empty table until you ask something new. A row still only ever
+ * reads as a fact: history rows come straight from the backend the same as
+ * a freshly-created one does, never a client-side fixture.
  *
  * Submitting resolves the prompt first and shows the reading back before
  * anything runs. Scope resolution is deterministic and cheap, so confirming
@@ -37,13 +40,14 @@ const IN_FLIGHT = new Set(['queued', 'fetching', 'analyzing', 'scanning_code', '
   templateUrl: './runs-dashboard.component.html',
   styleUrl: './runs-dashboard.component.scss',
 })
-export class RunsDashboardComponent {
+export class RunsDashboardComponent implements OnInit {
   private readonly runService = inject(RunService);
   private readonly router = inject(Router);
 
   readonly prompt = signal('');
   readonly resolving = signal(false);
   readonly creating = signal(false);
+  readonly loadingHistory = signal(true);
   readonly preview = signal<ResolvedScope | null>(null);
   readonly error = signal<string | null>(null);
   readonly rows = signal<RunRow[]>([]);
@@ -59,6 +63,32 @@ export class RunsDashboardComponent {
     'why do orders with unfulfilled items fail, last 10-15 days of reviews',
     'why do consultations get abandoned before the doctor joins',
   ];
+
+  async ngOnInit(): Promise<void> {
+    const summaries = await this.runService.listRuns();
+    this.loadingHistory.set(false);
+    if (!summaries.length) return;
+
+    this.rows.set(summaries.map((s) => this.toRow(s)));
+    for (const s of summaries) {
+      if (IN_FLIGHT.has(s.status)) this.track(s.run_id);
+    }
+  }
+
+  private toRow(s: RunSummary): RunRow {
+    const status = (IN_FLIGHT.has(s.status) ? 'analyzing' : s.status) as RunRow['status'];
+    return {
+      id: s.run_id,
+      journey: s.journey,
+      prompt: s.prompt ?? null,
+      scopeSummary: s.scope_summary ?? '',
+      window: `${s.window_start} → ${s.window_end}`,
+      status,
+      topFinding: s.top_finding ?? (status === 'analyzing' ? 'Analysing…' : '—'),
+      findingsCount: s.findings_count,
+      timestamp: s.created_at.slice(0, 16).replace('T', ' '),
+    };
+  }
 
   useExample(text: string): void {
     this.prompt.set(text);

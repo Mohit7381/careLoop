@@ -77,6 +77,16 @@ def test_a_rewrite_that_invents_a_number_is_rejected_and_flagged():
     assert "Reviewer request (unresolved):** add a target" in result.markdown
 
 
+def test_a_rewrite_with_corrupted_control_bytes_is_rejected_and_flagged():
+    """A live call was observed returning prose where em dashes / middle dots
+    / stars had been replaced by stray control bytes — must not ship that
+    just because it's long enough and cites no invented numbers."""
+    corrupted = REVISED[:-1] + " and a corrupted byte: \x14 right there.\n"
+    result = apply_edit_instruction(SAMPLE, "make this more exciting", _llm_returning(corrupted))
+    assert not result.applied
+    assert "corrupted characters" in result.reply
+
+
 def test_a_failed_model_call_falls_back_honestly():
     def boom(ctx):
         raise RuntimeError("sphere FAILED")

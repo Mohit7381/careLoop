@@ -12,12 +12,15 @@ instead of hand-editing markdown. Two tiers:
     sphere use case (project 7121, use case 12870, template 21791: it receives
     original_markdown + instruction and returns prd_markdown + a one-line
     reply for the chat). The rewrite is accepted only if it is a complete
-    document and every number it cites was already in the document or the
-    instruction — the same evidence gate the generator uses — and the DRAFT
-    banner is ours, re-inserted if the model dropped it. When no model is
-    available (demo mode without LIVE_LLM) or the draft is rejected, the
-    request is appended to Open Questions as a flagged item and the reply
-    says exactly why, rather than pretending an edit was made.
+    document, contains no corrupted control bytes the input didn't already
+    have (a live call was observed replacing em dashes / middle dots / stars
+    with stray control bytes — reproducible, cause unconfirmed, intermittent),
+    and every number it cites was already in the document or the instruction
+    — the same evidence gate the generator uses — and the DRAFT banner is
+    ours, re-inserted if the model dropped it. When no model is available
+    (demo mode without LIVE_LLM) or the draft is rejected, the request is
+    appended to Open Questions as a flagged item and the reply says exactly
+    why, rather than pretending an edit was made.
 """
 import logging
 import re
@@ -30,6 +33,13 @@ logger = logging.getLogger("careloop.prd_editor")
 LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
 
 MIN_REVISION_CHARS = 200          # anything shorter is a truncated or empty draft
+# A live call returned prose where every em dash / middle dot / star / plus-minus sign had
+# been replaced by a single control byte (e.g. em-dash "—" -> "\x14") — reproduced against the
+# real prd-chat-edit endpoint 2026-09-04, not a local encoding bug (this repo's own read/write
+# round-trips UTF-8 correctly; confirmed by direct test). Cause not confirmed (sphere-side
+# guardrail or transport), but the fix has to live here regardless: never ship visibly-corrupted
+# prose just because the length/number checks below don't catch it.
+_BAD_CONTROL_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 @dataclass
@@ -94,6 +104,12 @@ def revise_with_llm(llm: LLMCall, markdown: str, instruction: str) -> EditResult
     body = (out.get("prd_markdown") or "").strip()
     if len(body) < MIN_REVISION_CHARS:
         return EditResult(markdown, "the model returned an empty or truncated document", applied=False)
+
+    bad_chars = set(_BAD_CONTROL_CHARS.findall(body)) - set(_BAD_CONTROL_CHARS.findall(markdown))
+    if bad_chars:
+        logger.warning("prd-chat-edit returned corrupted control bytes %s — rejected",
+                        [hex(ord(c)) for c in bad_chars])
+        return EditResult(markdown, "the rewrite came back with corrupted characters", applied=False)
 
     invented = unsupported_numbers(body, inputs)
     if invented:

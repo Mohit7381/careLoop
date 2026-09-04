@@ -19,12 +19,12 @@ SPHERE_BASE = os.environ.get("SPHERE_BASE_URL", "http://sphere-platform.stage-k8
 # replied "analysis_context is empty" and the run produced zero findings with
 # no error anywhere. call() now refuses a mismatched key instead.
 TEMPLATE_PARAM: dict[str, str] = {
-    "prd-chat-edit": "edit_inputs",
     "funnel-hypothesis-generation": "analysis_context",
     "voc-theme-classification":     "reviews_batch",
     "code-gap-assessment":          "code_context",
     "trend-narrative":              "delta_table",
     "prd-generation":               "prd_inputs",
+    "prd-chat-edit":                "edit_inputs",  # provisioned 2026-09-04, use_case_id 12870
 }
 
 
@@ -54,7 +54,8 @@ _TERMINAL_FAILURE_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
 # and GET /v1/chat-ai/requests/{id} on that id then reports status=INIT with no
 # data, so the poll path below can never complete a request the create call did
 # not. The create timeout therefore has to cover the full model call. 15 s cut
-# off every real call in run 11 (Analyst + all five VoC batches: "timed out").
+# off every real call in run 11 (Analyst + all five VoC batches: "timed out") —
+# and independently cut off a real PRD-sized prd-chat-edit request the same way.
 # The ingress in front of sphere closes held connections at ~60 s, so anything
 # past that is the ingress's 504, not ours — keep individual calls small instead.
 CREATE_TIMEOUT_S = 75
@@ -80,7 +81,13 @@ def _app_token() -> str:
     sphere_platform_app_token in settings, SPHERE_PLATFORM_API_KEY in
     .env.example) and a module-level read of only the first meant a token
     placed in .env never reached this client. Resolved lazily so the API
-    server picks it up from .env without an exported shell variable.
+    server picks it up from .env without an exported shell variable — but
+    that alone wasn't enough: Settings.sphere_platform_app_token had no
+    alias onto SPHERE_PLATFORM_API_KEY, the name .env.example actually
+    documents, so a real key placed under that name was still silently
+    never read (get_settings().sphere_platform_app_token stayed "" and
+    every live call went out unauthenticated). Fixed in app/config.py via
+    validation_alias, confirmed live 2026-09-04.
     """
     tok = os.environ.get("SPHERE_APP_TOKEN", "")
     if tok:

@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,7 +35,17 @@ class Settings(BaseSettings):
     # AI Studio project. service_type is likely project-scoped too (confirm the exact string —
     # possibly "funnel-analysis" to match the project name, but unverified).
     sphere_platform_base_url: str = "http://sphere-platform.stage-k8s.halodoc.com"
-    sphere_platform_app_token: str = ""
+    # .env.example documents this secret as SPHERE_PLATFORM_API_KEY, but this field's
+    # name would make pydantic-settings look for SPHERE_PLATFORM_APP_TOKEN instead — a
+    # real .env carrying the documented name was silently never read, so every live
+    # sphere call went out with an empty token and failed as an auth error, not a
+    # config error. Confirmed live 2026-09-04: a real key in .env under the documented
+    # name produced token_set=False from get_settings() until this alias was added.
+    # AliasChoices keeps the field's own name too, in case anything exports it directly.
+    sphere_platform_app_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("SPHERE_PLATFORM_API_KEY", "sphere_platform_app_token"),
+    )
     sphere_platform_service_type: str = "funnel-analysis"  # confirmed via GET /api/v1/ai-studio/projects/7121/use-cases/search
     llm_use_case_funnel_dropoff: str = "funnel-hypothesis-generation"  # was "funnel-dropoff-analysis" — wrong name, fixed
     llm_use_case_code_gap: str = "code-gap-assessment"
@@ -46,6 +57,10 @@ class Settings(BaseSettings):
     # would be a 6th. Needs the same AI Studio setup code-gap-assessment got before
     # _sphere_llm() in pipeline/nodes/analyst.py can look up its template_id.
     llm_use_case_voc_correlation: str = "voc-funnel-correlation"
+    # Provisioned 2026-09-04 as project 7121's 6th use case (use_case_id 12870,
+    # template_id 21791, single placeholder {edit_inputs} -> {prd_markdown, reply}
+    # output_schema) — see fixtures/pd_checkout/sphere_ids.json.
+    llm_use_case_prd_chat_edit: str = "prd-chat-edit"
 
     # Metabase (read-only, Fetcher / Alief)
     metabase_base_url: str = ""

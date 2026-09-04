@@ -25,6 +25,28 @@ class CreateRunResponse(BaseModel):
     journey: Optional[str] = None
 
 
+class RunSummary(BaseModel):
+    """One row of run history — deliberately NOT the full RunDetailResponse.
+    A list of runs is scanned, not read; the detail page is one click away
+    for anything more than status/journey/top-finding."""
+
+    run_id: int
+    journey: str
+    window_start: str
+    window_end: str
+    status: RunStatus
+    failed_stage: Optional[str] = None
+    prompt: Optional[str] = None
+    scope_summary: Optional[str] = None
+    findings_count: int
+    top_finding: Optional[str] = None
+    created_at: str
+
+
+class RunListResponse(BaseModel):
+    runs: list[RunSummary]
+
+
 class ResolveScopeRequest(BaseModel):
     journey: str = "auto"      # "auto" picks the journey from the prompt's vocabulary
     prompt: str

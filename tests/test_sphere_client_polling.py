@@ -80,6 +80,7 @@ def test_create_waits_for_the_model_but_polls_stay_short(mock_urlopen, mock_slee
 
     create, *polls = mock_urlopen.call_args_list
     assert create.kwargs["timeout"] >= 60
+    assert polls, "expected at least one poll call"
     for call in polls:
         assert call.kwargs["timeout"] <= 15
 
