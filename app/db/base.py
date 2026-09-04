@@ -18,8 +18,17 @@ def init_db() -> None:
     from app.db import models  # noqa: F401  (register models on Base.metadata)
 
     Base.metadata.create_all(bind=engine)
+    # create_all never alters an existing table, so every column added to a
+    # model after its table already existed in someone's local careloop.db
+    # needs a manual backfill here until a real migration tool lands.
     _ensure_column("analysis_runs", "findings_rejected", "JSON NOT NULL DEFAULT '[]'")
-    _backfill_drop_off_finding_columns()
+    _ensure_column("analysis_runs", "suggestions", "JSON NOT NULL DEFAULT '[]'")
+    _ensure_column("drop_off_findings", "journey_events", "TEXT NOT NULL DEFAULT '[]'")
+    _ensure_column("drop_off_findings", "drilldown_ref", "TEXT")
+    _ensure_column("drop_off_findings", "theme", "VARCHAR(128)")
+    _ensure_column("drop_off_findings", "theme_search_terms", "TEXT NOT NULL DEFAULT '[]'")
+    _ensure_column("drop_off_findings", "review_count", "INTEGER")
+    _ensure_column("drop_off_findings", "top_quotes", "TEXT NOT NULL DEFAULT '[]'")
 
 
 def _ensure_column(table: str, column: str, ddl_type: str) -> None:
@@ -31,36 +40,6 @@ def _ensure_column(table: str, column: str, ddl_type: str) -> None:
         return
     with engine.begin() as conn:
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
-
-
-def _backfill_drop_off_finding_columns() -> None:
-    """
-    create_all() only creates missing TABLES, not columns added to an
-    existing table's model — there's no Alembic here, just create_all,
-    which is fine until a table's shape changes under it. drop_off_findings
-    picked up 6 columns (journey_events, drilldown_ref, theme,
-    theme_search_terms, review_count, top_quotes) after runs already
-    existed on the old 8-column shape, so existing local DBs need these
-    added in place rather than losing prior run data to a fresh create_all.
-    Sqlite-only: no other backend is in use for this project.
-    """
-    if not settings.database_url.startswith("sqlite"):
-        return
-    additions = {
-        "journey_events": "TEXT NOT NULL DEFAULT '[]'",
-        "drilldown_ref": "TEXT",
-        "theme": "VARCHAR(128)",
-        "theme_search_terms": "TEXT NOT NULL DEFAULT '[]'",
-        "review_count": "INTEGER",
-        "top_quotes": "TEXT NOT NULL DEFAULT '[]'",
-    }
-    with engine.connect() as conn:
-        existing = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(drop_off_findings)")}
-        for column, ddl_type in additions.items():
-            if column in existing:
-                continue
-            conn.exec_driver_sql(f"ALTER TABLE drop_off_findings ADD COLUMN {column} {ddl_type}")
-        conn.commit()
 
 
 def get_session():

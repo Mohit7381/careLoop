@@ -277,6 +277,7 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
             for f in run.findings
         ],
         code_gaps=run.code_gaps,
+        suggestions=run.suggestions,
         voc=run.voc,
         drilldown_trail=run.drilldown_trail,
         findings_rejected=run.findings_rejected or [],
