@@ -32,7 +32,8 @@ logger = logging.getLogger("careloop.semantic_voc")
 BATCH_SIZE = 20          # 40 ran 50-75 s per call and the ingress in front of sphere cuts at ~60 s
                          # (our log: HTTP 504; sphere's log: SUCCESS at 74 s). 20 keeps calls ~20-35 s.
 MAX_TEXT_CHARS = 400     # reviews are short; this only guards a pathological one
-NEGATIVE_MAX_SCORE = 2   # mirrors phase3_voc: only these are ever bucketed into themes
+NEGATIVE_MAX_SCORE = 2   # mirrors phase3_voc: only these are ever bucketed into complaint themes
+POSITIVE_MIN_SCORE = 4   # mirrors phase3_voc.run_positive_voc: only these are bucketed into praise themes
 PARALLEL_BATCHES = 5     # 92 negatives = 5 batches of 20; five in flight is one round (~40 s) instead of two
 
 LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
@@ -47,18 +48,30 @@ def _score(review: dict) -> int:
 
 def classify_reviews(llm: Optional[LLMCall], reviews: list[dict], themes_cfg: list[dict],
                      lexical_fallback: Callable[[str, list[dict]], str],
-                     scope_hint: Optional[str] = None) -> tuple[list[str], dict]:
+                     scope_hint: Optional[str] = None, *,
+                     polarity: str = "negative") -> tuple[list[str], dict]:
     """Returns (theme per review, meta). Order matches `reviews`.
 
     `scope_hint` is the user's own words when the run is scoped. It biases which
     theme a genuinely ambiguous review lands in; it cannot invent a theme,
     because the taxonomy is closed and anything outside it is 'unmapped'.
+
+    `polarity` (2026-09-04): "negative" classifies complaint reviews against
+    the journey's complaint taxonomy (the original, only behaviour this
+    function had); "positive" classifies PRAISE reviews (score >=
+    POSITIVE_MIN_SCORE) against a separate praise taxonomy instead — what
+    users already love, so growth ideas can build on a proven strength
+    instead of only ever reacting to complaints. Same batching/threading/
+    fallback machinery either way; only the score filter and the taxonomy
+    passed in differ. The sphere payload carries `polarity` so the shared
+    prompt (voc-theme-classification) can apply the right framing (identify
+    the complaint vs. identify the praise) without needing two use cases.
     """
     taxonomy = [{"name": t["name"], "routing_stage": t["routing_stage"],
                  "examples": t.get("keywords", [])[:6]} for t in themes_cfg]
     out: list[str] = [""] * len(reviews)
     meta = {"classifier": "semantic", "batches": 0, "fallback_batches": 0,
-            "glosses": {}, "matched_phrases": {}}
+            "glosses": {}, "matched_phrases": {}, "polarity": polarity}
 
     if llm is None:
         return [lexical_fallback(r.get("text", ""), themes_cfg) for r in reviews], \
@@ -66,20 +79,23 @@ def classify_reviews(llm: Optional[LLMCall], reviews: list[dict], themes_cfg: li
 
     valid = {t["name"] for t in themes_cfg} | {"unmapped"}
 
-    # Only negative reviews are ever bucketed into themes (phase3_voc), so
-    # classifying the rest is pure cost. First live run sent all 600 in 15
-    # batches at ~45 s each — eleven minutes, 6.5x the necessary work. Positive
-    # reviews get "unmapped", which is exactly what run_voc does with them.
-    negative_idx = [i for i, r in enumerate(reviews)
-                    if _score(r) <= NEGATIVE_MAX_SCORE]
+    # Only reviews of the requested polarity are ever bucketed into themes
+    # (phase3_voc), so classifying the rest is pure cost. First live run sent
+    # all 600 in 15 batches at ~45 s each — eleven minutes, 6.5x the necessary
+    # work. Everything outside the polarity's score band gets "unmapped".
+    if polarity == "positive":
+        selected_idx = [i for i, r in enumerate(reviews) if _score(r) >= POSITIVE_MIN_SCORE]
+    else:
+        selected_idx = [i for i, r in enumerate(reviews) if _score(r) <= NEGATIVE_MAX_SCORE]
     for i, r in enumerate(reviews):
-        if i not in set(negative_idx):
+        if i not in set(selected_idx):
             out[i] = "unmapped"
-    meta["reviews_sent_to_llm"] = len(negative_idx)
+    meta["reviews_sent_to_llm"] = len(selected_idx)
 
     def _run_batch(batch_idx: list[int]) -> tuple[list[int], dict]:
         payload = {
             "taxonomy": taxonomy,
+            "polarity": polarity,
             "scope_hint": scope_hint or "",
             "reviews": [{"review_id": str(i),
                          "text": (reviews[i].get("text") or "")[:MAX_TEXT_CHARS],
@@ -93,7 +109,7 @@ def classify_reviews(llm: Optional[LLMCall], reviews: list[dict], themes_cfg: li
                            batch_idx[:1], exc)
             return batch_idx, {}
 
-    batches = [negative_idx[i:i + BATCH_SIZE] for i in range(0, len(negative_idx), BATCH_SIZE)]
+    batches = [selected_idx[i:i + BATCH_SIZE] for i in range(0, len(selected_idx), BATCH_SIZE)]
     meta["batches"] = len(batches)
     with ThreadPoolExecutor(max_workers=PARALLEL_BATCHES) as pool:
         results = list(pool.map(_run_batch, batches))

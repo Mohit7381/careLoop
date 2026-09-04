@@ -144,3 +144,26 @@ voc:
       routing_stage: pharmacy_checkout
       search_terms: [pricing, fee, delivery_fee]
       keywords: [mahal, harga, ongkir, "biaya admin"]
+
+  # Praise taxonomy (2026-09-04) — the mirror of `themes` above, for POSITIVE
+  # reviews (score >= 4). Never escalates into a Finding (a compliment is not
+  # a drop-off); exists purely as grounding for growth_ideas (Analyst phase
+  # 2) — what users already love, so a new feature can build on a proven
+  # strength instead of a guess. First-draft, mirror-imaged from the
+  # complaint taxonomy above — tune against real review data.
+  positive_themes:
+    - name: fast_delivery
+      routing_stage: delivery
+      keywords: [cepat, kilat, ontime, "tepat waktu"]
+    - name: easy_checkout
+      routing_stage: pharmacy_checkout
+      keywords: [mudah, praktis, simpel, gampang]
+    - name: reliable_app
+      routing_stage: pharmacy_checkout
+      keywords: [lancar, stabil, "tidak error"]
+    - name: good_value
+      routing_stage: pharmacy_checkout
+      keywords: [murah, worth, diskon, hemat]
+    - name: helpful_support
+      routing_stage: re_engagement
+      keywords: ["customer service", "cs ", ramah, membantu, responsif]

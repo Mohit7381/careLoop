@@ -19,6 +19,7 @@ from typing import Any, Callable, Optional
 from app.schemas.contracts import Finding, Voc, VocQuote
 
 NEGATIVE_MAX_SCORE = 2
+POSITIVE_MIN_SCORE = 4  # mirrors semantic_voc.POSITIVE_MIN_SCORE
 
 
 def classify_review(text: str, themes: list[dict]) -> str:
@@ -108,6 +109,41 @@ def run_voc(reviews: list[dict], journey_voc_cfg: dict, next_rank: int,
                      text=q.get("text", "")[:300], theme=name) for q in top]
         rank += 1
     return findings, voc
+
+
+def run_positive_voc(reviews: list[dict], positive_themes_cfg: list[dict],
+                     themes_per_review: Optional[list[str]] = None) -> list[dict]:
+    """Buckets PRAISE reviews (score >= POSITIVE_MIN_SCORE) into praise
+    themes — the mirror of run_voc(), for GROWTH rather than diagnosis
+    (2026-09-04). Unlike run_voc(), this never escalates into a Finding: a
+    compliment is not a drop-off to route to Code Scout. It exists purely as
+    grounding for the Analyst's growth_ideas step (phase2.py) — what users
+    already love, so a new feature can be proposed as an extension of a
+    proven strength instead of a guess. Same "single primary theme, priority
+    order, closed taxonomy" discipline as run_voc(), just with no escalation
+    threshold or routed Finding at the end.
+    """
+    by_theme_cfg = {t["name"]: t for t in positive_themes_cfg}
+    assigned = list(themes_per_review) if themes_per_review else None
+    positives, pos_themes = [], []
+    for i, r in enumerate(reviews):
+        if r.get("score", 0) < POSITIVE_MIN_SCORE:
+            continue
+        positives.append(r)
+        pos_themes.append(assigned[i] if assigned and i < len(assigned)
+                          else classify_review(r.get("text", ""), positive_themes_cfg))
+
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for r, theme in zip(positives, pos_themes):
+        buckets[theme if theme in by_theme_cfg or theme == "unmapped" else "unmapped"].append(r)
+
+    return [
+        {"theme": name, "count": len(items),
+         "sample_quotes": [f"[{q.get('score')}★ {str(q.get('at', ''))[:10]}] {q.get('text', '')[:180]}"
+                           for q in items[:3]]}
+        for name, items in sorted(buckets.items(), key=lambda kv: -len(kv[1]))
+        if name != "unmapped"
+    ]
 
 
 CORROBORATION_FLOOR = 5  # fewer matching reviews than this is noise, not corroboration

@@ -82,6 +82,41 @@ def test_a_malformed_growth_idea_is_dropped_not_crashed_on(cohort_cuts, journey_
     assert growth_ideas == []
 
 
+def test_a_positive_review_idea_citing_an_invented_count_is_dropped(cohort_cuts, journey_cfg):
+    """The evidence gate applies equally to positive_review ideas — a count
+    that was never actually shown in positive_voc_signals is not evidence."""
+    tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
+    llm = _make_llm([
+        {"done": True, "findings": [], "growth_ideas": [
+            {"title": "t", "description": "d", "rationale": "r", "inspiration": "positive_review",
+             "evidence": ["999999 positive reviews"]},
+        ]},
+    ])
+
+    _, trail, growth_ideas = run_drilldown(
+        llm, tool, GAP, {}, ROUTING, "pharmacy_checkout",
+        positive_voc_signals=[{"theme": "fast_delivery", "count": 42}])
+
+    assert growth_ideas == []
+
+
+def test_a_positive_review_idea_citing_a_real_count_is_kept(cohort_cuts, journey_cfg):
+    tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
+    llm = _make_llm([
+        {"done": True, "findings": [], "growth_ideas": [
+            {"title": "t", "description": "d", "rationale": "r", "inspiration": "positive_review",
+             "evidence": ["42 positive reviews praise fast_delivery"]},
+        ]},
+    ])
+
+    _, trail, growth_ideas = run_drilldown(
+        llm, tool, GAP, {}, ROUTING, "pharmacy_checkout",
+        positive_voc_signals=[{"theme": "fast_delivery", "count": 42}])
+
+    assert len(growth_ideas) == 1
+    assert growth_ideas[0].inspiration == "positive_review"
+
+
 def test_growth_ideas_are_never_parsed_on_a_non_concluding_turn(cohort_cuts, journey_cfg):
     """A stray growth_ideas key on a mid-run turn (done=False) must not leak
     through — the prompt is told never to send it, but the parser should not

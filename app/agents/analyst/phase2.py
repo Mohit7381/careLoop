@@ -15,6 +15,7 @@ from typing import Optional, Any, Callable
 _NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 from app.agents.analyst.aggregate_tool import AggregateTool
+from app.agents.analyst.validator import collect_numbers
 from app.schemas.contracts import DrilldownStep, Finding, GrowthIdea
 
 logger = logging.getLogger(__name__)
@@ -42,20 +43,39 @@ def _parse_findings(raw: list[dict], journey_routing_keys: list[str],
     return findings
 
 
-def _parse_growth_ideas(raw: list[dict]) -> list[GrowthIdea]:
-    """Only ever populated on the concluding turn (see run_drilldown). A
-    malformed entry — missing fields, or the wrong evidence/inspiration
-    pairing GrowthIdea.model_post_init enforces — is dropped rather than
-    aborting the whole run over one idea, matching this pipeline's usual
-    per-item resilience."""
+def _traces(value: float, shown: set[float]) -> bool:
+    """Same spirit as validator.py's _same_number, kept local and simpler
+    (growth ideas don't have a Snapshot/trail object to check rates against,
+    just the flat set of numbers the model's own ctx already contained)."""
+    return any(abs(value - k) <= max(0.5, abs(k) * 0.001) for k in shown)
+
+
+def _parse_growth_ideas(raw: list[dict], shown: set[float]) -> list[GrowthIdea]:
+    """Only ever populated on the concluding turn (see run_drilldown).
+
+    Two gates, same as a real Finding: GrowthIdea.model_post_init enforces
+    the evidence/inspiration pairing (a malformed one is dropped, never
+    aborting the whole run); on top of that, a funnel_data or positive_review
+    idea whose cited number cannot be traced to `shown` — everything the
+    model's own ctx this turn actually contained — is dropped too. Without
+    this second gate a growth idea could cite a plausible-looking but
+    invented number and nothing would catch it, unlike a real Finding which
+    always goes through validator.filter_findings.
+    """
     ideas = []
     for g in raw or []:
         inspiration = g.get("inspiration")
         evidence = (
             [{"type": "drilldown", "metric": str(e)[:120], "value": _num(e)}
              for e in (g.get("evidence") or []) if _num(e) is not None]
-            if inspiration == "funnel_data" else []
+            if inspiration in ("funnel_data", "positive_review") else []
         )
+        if inspiration in ("funnel_data", "positive_review"):
+            untraced = [e["value"] for e in evidence if not _traces(e["value"], shown)]
+            if untraced or not evidence:
+                logger.warning("dropping growth idea %r — evidence not traceable to shown data: %s",
+                               g.get("title"), untraced or "no numeric evidence given")
+                continue
         try:
             ideas.append(GrowthIdea(
                 title=g.get("title", ""),
@@ -109,6 +129,8 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
                   phase1_summary: dict, journey_routing_keys: list[str],
                   routing_for_gap: str, budget: int = BUDGET,
                   voc_signals: Optional[list[dict]] = None,
+                  top_strength: Optional[dict] = None,
+                  positive_voc_signals: Optional[list[dict]] = None,
                   ) -> tuple[list[Finding], list[DrilldownStep], list[GrowthIdea]]:
     trail: list[DrilldownStep] = []
     findings: list[Finding] = []
@@ -130,9 +152,19 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             "budget_remaining": budget - len(trail),
             # Review themes, classified BEFORE the drill-down so the model can
             # use them to choose a cut. Context only: the evidence gate never
-            # adds these counts to `shown`, so a finding that cites one is
-            # rejected — funnel magnitudes stay warehouse-sourced.
+            # adds these counts to `shown` for FINDINGS, so a finding that
+            # cites one is rejected — funnel magnitudes stay warehouse-sourced.
+            # (growth_ideas' own gate below is different: a positive_review
+            # idea IS allowed to cite these counts — see that gate's docstring.)
             "voc_signals": voc_signals or [],
+            # The two POSITIVE grounding sources for growth_ideas (2026-09-04):
+            # top_strength is largest_drop()'s mirror (best-converting
+            # transition); positive_voc_signals is run_positive_voc()'s praise
+            # theme counts. Both real, deterministic/classified numbers — never
+            # invented by this call — so growth ideas can build on a proven
+            # strength instead of only ever reacting to top_gap.
+            "top_strength": top_strength or {},
+            "positive_voc_signals": positive_voc_signals or [],
         }
         out = llm(ctx)
         if out.get("findings"):
@@ -140,9 +172,15 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
         # Growth ideas are only meaningful once the run has actually
         # concluded (the prompt is told never to send them otherwise), but
         # parse defensively off `done` rather than trusting that a stray
-        # mid-run growth_ideas key never arrives.
+        # mid-run growth_ideas key never arrives. `shown` is everything this
+        # turn's own ctx contained — the growth-idea evidence gate (see
+        # _parse_growth_ideas) checks against exactly this, the same
+        # "only what the model was actually shown" rule Findings get.
         if out.get("done") and out.get("growth_ideas"):
-            growth_ideas = _parse_growth_ideas(out["growth_ideas"])
+            shown = (collect_numbers(top_gap) | collect_numbers(phase1_summary)
+                    | collect_numbers(ctx["drilldown_trail"]) | collect_numbers(voc_signals or [])
+                    | collect_numbers(top_strength or {}) | collect_numbers(positive_voc_signals or []))
+            growth_ideas = _parse_growth_ideas(out["growth_ideas"], shown)
 
         if len(trail) >= budget:
             break

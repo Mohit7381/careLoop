@@ -300,20 +300,27 @@ def _suggestions_section(suggestions: list[Suggestion]) -> str:
 
 # ------------------------------------------------------------------ node ---
 
+_GROWTH_IDEA_INSPIRATION_TAGS = {
+    "funnel_data": "grounded in this run's own funnel data",
+    "positive_review": "grounded in this run's own positive reviews",
+    "industry_pattern": "general industry pattern, not Halodoc-specific data",
+}
+
+
 def _growth_ideas_section(ideas: list[GrowthIdea]) -> str:
     if not ideas:
         return "## 6. Growth Ideas\n\n_none proposed this run_\n\n**Summary:** none.\n"
     lines = []
     for g in ideas:
-        tag = "grounded in this run's data" if g.inspiration == "funnel_data" else "general industry pattern, not Halodoc-specific data"
+        tag = _GROWTH_IDEA_INSPIRATION_TAGS[g.inspiration]
         target = f" [{g.target_stage}]" if g.target_stage else ""
         lines.append(f"- **{g.title}**{target} _({tag})_ — {g.description} {g.rationale}")
-    funnel_grounded = sum(1 for g in ideas if g.inspiration == "funnel_data")
+    grounded = sum(1 for g in ideas if g.inspiration != "industry_pattern")
     return f"""## 6. Growth Ideas
 
 {chr(10).join(lines)}
 
-**Summary:** {len(ideas)} idea(s) proposed, {funnel_grounded} grounded in this run's own data.
+**Summary:** {len(ideas)} idea(s) proposed, {grounded} grounded in this run's own data (funnel or reviews).
 """
 
 

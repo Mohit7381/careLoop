@@ -64,6 +64,9 @@ def run_analyst(state: RunState,
                 f"journey's funnel; analysed the largest drop instead")
     if gap is None:
         gap = phase1.largest_drop(table)
+    # The mirror of `gap`: the best-converting transition, decided the same
+    # deterministic way — growth_ideas' positive funnel grounding (2026-09-04).
+    top_strength = phase1.strongest_stage(table)
     clusters = phase1.cluster_reasons(state.snapshot.reasons, cfg["artifact_reasons"])
     summary = {"funnel": table, "reason_clusters": clusters,
                "caveats": phase1.censoring_caveats(cfg["stages"], cfg.get("maturing_stages") or [])}
@@ -75,6 +78,7 @@ def run_analyst(state: RunState,
     # findings, so they are re-ranked once the drill-down is done.
     voc_findings: list = []
     voc = None
+    positive_voc_signals: list = []
     if reviews is None and state.demo_mode:
         rv_path = FIXTURES / state.journey / "reviews_scrubbed.json"
         reviews = json.loads(rv_path.read_text()) if rv_path.exists() else []
@@ -87,6 +91,17 @@ def run_analyst(state: RunState,
                                     themes_per_review=themes_per_review,
                                     extra_meta={**window_meta,
                                                 "classifier": voc_meta["classifier"]})
+        # Praise reviews (2026-09-04): the mirror of the complaint pass above.
+        # Never escalates into a Finding — see phase3_voc.run_positive_voc —
+        # this exists purely as growth_ideas' second real grounding source
+        # (what users already love), alongside top_strength.
+        positive_themes_cfg = cfg["voc"].get("positive_themes") or []
+        if positive_themes_cfg:
+            positive_per_review, _positive_meta = classify_reviews(
+                voc_llm, reviews, positive_themes_cfg, phase3_voc.classify_review,
+                scope_hint=state.scope.prompt, polarity="positive")
+            positive_voc_signals = phase3_voc.run_positive_voc(
+                reviews, positive_themes_cfg, themes_per_review=positive_per_review)
     voc_signals = [{"theme": t["theme"], "count": t["count"], "escalated": t["escalated"]}
                    for t in (voc.themes if voc else []) if t["theme"] != "unmapped"]
 
@@ -107,7 +122,8 @@ def run_analyst(state: RunState,
     tool = AggregateTool(cohort_cuts or {}, whitelist)
     findings, trail, growth_ideas = run_drilldown(
         llm, tool, gap or {}, summary, routing_keys,
-        _default_routing_for_gap(gap or {}, cfg), voc_signals=voc_signals)
+        _default_routing_for_gap(gap or {}, cfg), voc_signals=voc_signals,
+        top_strength=top_strength, positive_voc_signals=positive_voc_signals)
 
     # ---- evidence gate (accepts every number the model was shown) ----
     shown = collect_numbers(summary) | collect_numbers(gap or {})

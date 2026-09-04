@@ -142,7 +142,7 @@ class Finding(BaseModel):
         return len(self.evidence) > 0
 
 
-GrowthIdeaInspiration = Literal["funnel_data", "industry_pattern"]
+GrowthIdeaInspiration = Literal["funnel_data", "positive_review", "industry_pattern"]
 
 
 class GrowthIdea(BaseModel):
@@ -150,16 +150,23 @@ class GrowthIdea(BaseModel):
     GROWING transactions — distinct from Finding, which diagnoses a loss.
     Produced only on the drill-down's concluding turn, alongside findings.
 
-    inspiration="funnel_data": grounded in a specific number the model was
-    shown this run — evidence is required and held to the exact same
-    verbatim-citation discipline as Finding.evidence.
-    inspiration="industry_pattern": grounded in the model's own general
-    knowledge of digital health / e-commerce / fintech products, NOT a live
-    web search (this pipeline has no browsing tool) — evidence must stay
-    empty, and the prompt is the enforcement point for "never fabricate a
-    source"; this model only enforces the two inspirations stay mutually
-    exclusive on the evidence field, since a fabricated citation cannot be
-    told apart from a real one by shape alone.
+    Three inspirations, in decreasing order of grounding:
+    "funnel_data": a specific funnel number the model was shown this run —
+      either top_gap (what's broken) or top_strength / a drilldown_trail row
+      (what already converts well, so an idea can build on a proven part of
+      the funnel instead of only reacting to the loss). Evidence is required
+      and held to the same verbatim-citation discipline as Finding.evidence.
+    "positive_review": a positive_voc_signals theme count — what users
+      already praise in reviews (2026-09-04: the VoC pipeline classifies
+      POSITIVE reviews, not just complaints, for exactly this). Evidence is
+      required the same way.
+    "industry_pattern": the model's own general knowledge of digital health /
+      e-commerce / fintech products, NOT a live web search (this pipeline has
+      no browsing tool) — evidence must stay empty; the prompt is the
+      enforcement point for "never fabricate a source". This model only
+      enforces that evidence-or-not tracks the inspiration, since a
+      fabricated citation cannot be told apart from a real one by shape
+      alone.
     """
 
     title: str
@@ -170,8 +177,8 @@ class GrowthIdea(BaseModel):
     evidence: list[EvidenceItem] = Field(default_factory=list)
 
     def model_post_init(self, __context: Any) -> None:
-        if self.inspiration == "funnel_data" and not self.evidence:
-            raise ValueError("a funnel_data growth idea needs at least one evidence item")
+        if self.inspiration in ("funnel_data", "positive_review") and not self.evidence:
+            raise ValueError(f"a {self.inspiration} growth idea needs at least one evidence item")
         if self.inspiration == "industry_pattern" and self.evidence:
             raise ValueError(
                 "an industry_pattern growth idea must carry no evidence — it is not "

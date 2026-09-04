@@ -77,8 +77,22 @@ def test_report_includes_growth_ideas_and_labels_their_inspiration():
     assert "## Growth ideas" in report
     assert "One-tap saved payment method" in report
     assert "general industry pattern, not Halodoc-specific data" in report
-    assert "grounded in this run's data" in report
+    assert "grounded in this run's own funnel data" in report
     assert "[pharmacy_checkout]" in report
+
+
+def test_report_labels_a_positive_review_grounded_idea_correctly():
+    state = initial_state(run_id=1, window_start="2026-08-01", window_end="2026-08-30", demo_mode=True)
+    state["growth_ideas"] = [
+        {"title": "Highlight fast delivery at checkout", "description": "Show an ETA badge.",
+         "rationale": "8 positive reviews already praise fast delivery.", "inspiration": "positive_review",
+         "target_stage": None, "evidence": [{"type": "drilldown", "metric": "count", "value": 8.0}]},
+    ]
+    result = report_writer_node(state)
+    report = result["artifacts"][-1]["content"]
+
+    assert "grounded in this run's own positive reviews" in report
+    assert "general industry pattern" not in report
 
 
 def test_report_is_honest_when_no_growth_ideas_proposed():
