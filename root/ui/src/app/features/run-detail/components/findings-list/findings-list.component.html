@@ -28,12 +28,12 @@
       <app-drilldown-trail [rows]="drilldownTrail()" [visibleCount]="trailVisibleCount()" />
     }
     @if (hasQuotes(f.rank)) {
-      <app-voc-panel [voc]="voc()" [findingRank]="f.rank" [theme]="f.theme ?? null" />
+      <app-voc-panel [voc]="voc()" [findingRank]="f.rank" [module]="f.stage" />
     }
   }
 
   <!-- Quotes belonging to USER-REPORTED findings, whose cards are hidden. -->
   @for (f of quoteOnly(); track f.rank) {
-    <app-voc-panel [voc]="voc()" [findingRank]="f.rank" [theme]="f.theme ?? null" />
+    <app-voc-panel [voc]="voc()" [findingRank]="f.rank" [module]="f.stage" />
   }
 </div>

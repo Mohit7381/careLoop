@@ -49,3 +49,20 @@
   margin-top: 3px;
 }
 
+
+/* Names the journey stage these reviews came from. Two escalated themes
+   put two of these panels side by side, and with the USER-REPORTED cards
+   hidden this label is the only thing telling them apart. */
+.vmod {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--voc);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--voc) 30%, transparent);
+  border-radius: 999px;
+  padding: 2px 9px;
+  vertical-align: middle;
+}

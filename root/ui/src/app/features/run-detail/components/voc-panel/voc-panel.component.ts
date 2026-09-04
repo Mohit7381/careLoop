@@ -19,9 +19,14 @@ export class VocPanelComponent {
    *  (4 and 5 on a real run), so a hardcoded 1 rendered an empty panel on
    *  every live run. Now passed from the finding it sits under. */
   readonly findingRank = input.required<number>();
-  /** The theme this finding escalated on — drives the source line, instead of
-   *  the previously hardcoded 'payment/refund'. */
-  readonly theme = input<string | null>(null);
+  /**
+   * Which part of the journey these reviews came from — the finding's own
+   * `stage`. A run escalates more than one VoC theme, so two of these panels
+   * can sit next to each other; without a label they read as the same
+   * section repeated. `Finding.theme` would be the finer-grained name but
+   * the backend returns it null, while `stage` is always populated.
+   */
+  readonly module = input<string | null>(null);
 
   readonly quotes = computed<QuoteView[]>(() => {
     const raw = this.voc().per_finding_quotes[String(this.findingRank())] ?? [];

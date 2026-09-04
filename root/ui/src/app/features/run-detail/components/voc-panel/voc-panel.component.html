@@ -1,6 +1,11 @@
 @if (quotes().length) {
   <div class="usersay">
-    <h3>Users say</h3>
+    <h3>
+      Users say
+      @if (module()) {
+        <span class="vmod">{{ module() }}</span>
+      }
+    </h3>
     @for (q of quotes(); track q.text) {
       <div class="quote">
         <div class="qmeta mono">
