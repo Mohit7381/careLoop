@@ -50,20 +50,23 @@ def _run_pipeline_in_new_session(
         session.close()
 
 
-def _resolve(journey: str, prompt: str | None, dimensions: list[str] | None) -> RunScope:
+def _resolve(journey: str, prompt: str | None) -> RunScope:
     """Resolve a prompt against the journey's own vocabulary.
 
-    Explicit `dimensions` win over anything inferred from the prompt — an API
-    caller that names them is being specific on purpose.
+    `CreateRunRequest.dimensions` is deliberately NOT folded in here. That
+    field names ROUTING CATEGORIES (payments, consultation, ...) and is a
+    post-run filter on which findings surface — Mohit's PR #9. `scope.dimensions`
+    names DRILL-DOWN CUTS (stock_status, item_count, ...) and narrows what the
+    Analyst explores. The two vocabularies are disjoint, so copying one into the
+    other either 422s at his validator or empties the AggregateTool whitelist.
+    A caller can use both: scope the run from the entry page, then filter the
+    report to a category.
     """
+    if not prompt:
+        return RunScope()
     cfg = load_journey(journey)
     events = list((cfg.get("event_stage") or {}).keys())
-    scope = resolve_scope(prompt or "", cfg, events, cfg["drilldown_dimensions"]) \
-        if prompt else RunScope()
-    if dimensions:
-        scope.dimensions = list(dimensions)
-        scope.matched_on.append("dimensions: given explicitly")
-    return scope
+    return resolve_scope(prompt, cfg, events, cfg["drilldown_dimensions"])
 
 
 @router.post("/runs", response_model=CreateRunResponse, dependencies=[Depends(require_app_token)])
@@ -89,7 +92,7 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
             detail={"message": "a run for this window is already in progress", "run_id": existing.id},
         )
 
-    scope = _resolve(body.journey, body.prompt, body.dimensions)
+    scope = _resolve(body.journey, body.prompt)
     run = AnalysisRun(
         journey=body.journey,
         window_start=window_start,
@@ -120,7 +123,7 @@ def resolve_scope_only(body: ResolveScopeRequest) -> ResolveScopeResponse:
     Resolution is deliberately deterministic and cheap, so the UI can confirm
     the reading with the user before spending a run on a misinterpretation.
     """
-    scope = _resolve(body.journey, body.prompt, None)
+    scope = _resolve(body.journey, body.prompt)
     return ResolveScopeResponse(scope=scope.model_dump(), summary=describe(scope),
                                 matched_on=scope.matched_on, unresolved=scope.unresolved)
 

@@ -11,6 +11,8 @@ class CreateRunRequest(BaseModel):
     window_end: Optional[str] = None
     prev_window_start: Optional[str] = None
     prev_window_end: Optional[str] = None
+    # Routing categories (payments, consultation, ...) — a post-run filter on
+    # which findings surface. NOT drill-down cuts; those come from `prompt`.
     dimensions: Optional[list[str]] = None
     prompt: Optional[str] = None   # free text; resolved into a RunScope before the run
 

@@ -69,3 +69,24 @@ def test_the_summary_is_something_a_human_can_reject():
     s = _resolve("why are users dropping off after adding items to cart, last 10 days")
     text = describe(s)
     assert "created to confirmed" in text and "last 10 days" in text
+
+
+def test_routing_categories_and_drilldown_cuts_are_disjoint_vocabularies():
+    """Two fields, two meanings — and they must stay apart.
+
+    `CreateRunRequest.dimensions` names routing categories (payments,
+    consultation, ...) and filters which findings SURFACE after the run — PR #9.
+    `RunScope.dimensions` names drill-down cuts (stock_status, item_count, ...)
+    and narrows what the Analyst EXPLORES — this branch. The vocabularies share
+    no members, so copying one into the other either 422s at the category
+    validator or empties the AggregateTool whitelist. This pins both facts.
+    """
+    routing = set(CFG["routing"])
+    cuts = set(DIMS)
+    assert routing.isdisjoint(cuts), routing & cuts
+
+    # A category never leaks into the scope's drill-down list ...
+    s = _resolve("check why users are dropping off during the payments")
+    assert not (set(s.dimensions) & routing)
+    # ... and everything the scope does put there is a real cut.
+    assert set(s.dimensions) <= cuts
