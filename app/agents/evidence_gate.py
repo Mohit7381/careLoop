@@ -27,12 +27,41 @@ STRUCTURAL_MAX = 20.0
 
 _DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _LABELLED = re.compile(r"\b(?:FR|NFR|OQ|G)-?\d+\b", re.I)
-_NUMBER = re.compile(r"-?\d[\d,]*\.?\d*")
+# Not preceded by a word character: "p95", "v2" and "utf8" are identifiers, not
+# magnitudes — the same glued-digits rule the Analyst's evidence extractor uses.
+_NUMBER = re.compile(r"(?<![\w.])-?\d[\d,]*\.?\d*")
+
+# Numbers that are not claims about the data, however large: HTTP status codes
+# ("result: 200/400", "HTTP 200 OK", "returns 404"), and any value carrying a
+# unit of time, size, rate or percent ("p95 under 200 ms", "50 KB", "95%").
+# A live PRD draft was refused in its entirety for "result: 200/400" in its
+# API-contract section. A bare count ("200 orders") is still a claim.
+_STATUS_CODES = re.compile(
+    r"(?:\b(?:HTTP|status(?:\s+code)?|result|returns?|responds?\s+with)\s*:?\s*)?"
+    r"\b[1-5]\d{2}(?:\s*/\s*[1-5]\d{2})+\b"                 # 200/400, 200/404/500
+    r"|\b(?:HTTP|status(?:\s+code)?|result|returns?|responds?\s+with)\s*:?\s*[1-5]\d{2}\b"
+    r"|\b[1-5]\d{2}\s+(?:OK|Created|Accepted|No Content|Bad Request|Unauthorized|Forbidden|"
+    r"Not Found|Conflict|Unprocessable|Too Many Requests|Internal Server Error)\b",
+    re.I,
+)
+_WITH_UNIT = re.compile(
+    r"-?\d[\d,]*\.?\d*\s*(?:ms|msec|milliseconds?|s|sec|seconds?|min|minutes?|h|hrs?|hours?|"
+    r"d|days?|wks?|weeks?|px|kb|mb|gb|tb|rps|qps|tps|req/s|%|pp|x)(?=$|[^\w])",
+    re.I,
+)
+
+
+def _strip_non_claims(text: str) -> str:
+    text = _DATE.sub(" ", text or "")
+    text = _LABELLED.sub(" ", text)
+    text = _STATUS_CODES.sub(" ", text)
+    text = _WITH_UNIT.sub(" ", text)
+    return text
 
 
 def numbers_in_text(text: str) -> set[float]:
-    """Every number a reader would see as a magnitude."""
-    stripped = _LABELLED.sub(" ", _DATE.sub(" ", text or ""))
+    """Every number a reader would see as a claim about the data."""
+    stripped = _strip_non_claims(text)
     out: set[float] = set()
     for raw in _NUMBER.findall(stripped):
         try:

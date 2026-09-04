@@ -53,3 +53,16 @@ def test_numbers_inside_shown_strings_are_shown_numbers():
     assert unsupported_numbers(text, inputs) == []
     # ...and a number that appears nowhere, string or leaf, is still caught
     assert unsupported_numbers("this will recover 3,400 orders", inputs) == [3400.0]
+
+
+def test_status_codes_and_units_are_not_claims_but_bare_counts_are():
+    """Run 8's model-written PRD was refused in full for 'result: 200/400' in
+    its API-contract section. Real PRDs are full of such numbers."""
+    inputs = {"lost": 417569}
+    ok = ("POST /v1/checkout/abandon-reason — result: 200/400. Returns 404 when unknown. "
+          "HTTP 200 OK. p95 latency under 200 ms, payload below 50 KB, 95% of sessions, "
+          "retry after 30 seconds, 2 hours, 3 days, a 1.5x uplift, +2.5pp.")
+    assert unsupported_numbers(ok, inputs) == []
+    # ...while an invented magnitude with no unit is still caught
+    assert unsupported_numbers("this will recover 200 orders a day", inputs) == [200.0]
+    assert unsupported_numbers("about 3,400 confirmations", inputs) == [3400.0]
