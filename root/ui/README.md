@@ -8,6 +8,15 @@ Angular implementation of Screens 1–3 (Runs dashboard, Run detail, PRD draft) 
 - **Screen 2 — Run detail** (`features/run-detail`): the main screen. Pipeline tracker (4 stages) → funnel → findings (ranked, origin-badged) → drill-down trail + "Users say" nested under finding #1 → Code Scout panel (Rev 3: grouped by finding, tech/business/process suggestions, each independently verified).
 - **Suggestions panel** (`features/run-detail/components/suggestions-panel`): Agent 3's generative output, grouped by finding and badged by `suggestion_type`, so a business or process idea never reads as a code fix. All five `verification_status` values render distinct copy — in particular `not_applicable` ("nothing to verify — not a code change", the expected state for a process idea) is not conflated with `unverified` ("not checked against the code").
 - **Screen 3 — PRD drawer** (`features/run-detail/components/prd-drawer`): renders the backend's real `prd_markdown`, split into editable sections. **Edit** turns each section into an in-place editor with the same layout; sections can be added, reordered, deleted and reverted. Falls back to a structured view built from findings + code_gaps only when a run has no `prd_markdown`. Footer is **Edit** and **Download .docx** (exports whatever is on screen, edits included). The GChat delivery button was removed; `RunService.deliver()` remains as an API client with no caller.
+
+**Two edit modes, side by side.** They answer different questions and are deliberately not interchangeable:
+
+| | How | Verified? | Works on |
+|---|---|---|---|
+| **Ask for a change** (chat) | `POST /runs/{id}/prd/{rank}/chat` — the backend makes the edit and re-checks it | yes | live runs only |
+| **Edit** (sections) | direct in-place editing of the markdown | **no** | fixture and live |
+
+Chat is better at *"is this already built?"*; section editing is better at *"reword this and drop that."* A typed section keeps an `EDITED/ADDED BY YOU · UNVERIFIED` badge and the banner spells out the difference, so a typed requirement is never mistaken for one that came back through the Remedy Loop. A `●` on a rank tab means the **backend** marked that PRD edited.
 - **Human edits never look like agent output.** An edited or added section is badged `EDITED/ADDED BY YOU · UNVERIFIED`, tinted, and counted in a banner saying the changes are not verified against the code. Agent requirements carry a Remedy Loop verdict; typed ones carry none, and nothing in the UI promotes one to the other. Edits are session-only — `POST /v1/analysis/runs/{id}/prd/revisions` does not exist, so a reload restores the generated document.
 - **Demo playback** (`core/services/demo-playback.service.ts`): the "Replay run" animation — hard-coded timer beats, not real backend progress, so every rehearsal runs identically. Ported from the original HTML prototype.
 - **`.docx` export** (`core/services/docx-export.service.ts`): builds a real OOXML `.docx` in-browser via JSZip — no backend endpoint, no round-trip.
