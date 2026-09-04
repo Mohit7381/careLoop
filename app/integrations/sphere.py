@@ -70,7 +70,13 @@ def _app_token() -> str:
     sphere_platform_app_token in settings, SPHERE_PLATFORM_API_KEY in
     .env.example) and a module-level read of only the first meant a token
     placed in .env never reached this client. Resolved lazily so the API
-    server picks it up from .env without an exported shell variable.
+    server picks it up from .env without an exported shell variable — but
+    that alone wasn't enough: Settings.sphere_platform_app_token had no
+    alias onto SPHERE_PLATFORM_API_KEY, the name .env.example actually
+    documents, so a real key placed under that name was still silently
+    never read (get_settings().sphere_platform_app_token stayed "" and
+    every live call went out unauthenticated). Fixed in app/config.py via
+    validation_alias, confirmed live 2026-09-04.
     """
     tok = os.environ.get("SPHERE_APP_TOKEN", "")
     if tok:
