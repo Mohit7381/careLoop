@@ -271,6 +271,17 @@ tr:last-child td {
   opacity: 0.6;
 }
 
+/* The chat sits between the scrolling body and the footer rather than at
+   the end of the PRD. As the last child of .dbody it was ~1300px below the
+   fold on a full draft, so the one affordance for asking the agent to
+   change something was the hardest thing in the drawer to find. */
+.dchat {
+  flex-shrink: 0;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
 .dfoot {
   padding: 14px 22px;
   border-top: 1px solid var(--line);
@@ -299,6 +310,14 @@ tr:last-child td {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
+  color: #fff;
+}
+.btn:hover:not([disabled]) {
+  background: var(--surface-2);
+}
+.btn-primary:hover:not([disabled]) {
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
   color: #fff;
 }
 

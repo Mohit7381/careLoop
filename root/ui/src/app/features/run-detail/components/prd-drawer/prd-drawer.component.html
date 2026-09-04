@@ -126,40 +126,40 @@
         </div>
       </div>
     }
+  </div>
 
-    <!-- Chat editing: asks the backend to make the change and re-verify it.
-         The other half of the pair — typed section edits above are direct
-         but unverified; this one is checked but indirect. -->
-    <div class="dsec dchat">
-      <h3>Ask for a change</h3>
-      @if (!chatAvailable()) {
-        <p class="dchat-hint">
-          Chat editing needs a live run — this is a fixture PRD, so there's nothing on the backend to
-          edit. You can still edit sections directly above.
-        </p>
-      } @else {
-        @if (chatLog().length) {
-          <div class="dchat-log">
-            @for (m of chatLog(); track $index) {
-              <div class="dchat-msg" [class.assistant]="m.role === 'assistant'">{{ m.text }}</div>
-            }
-          </div>
-        }
-        <form class="dchat-form" (submit)="$event.preventDefault(); sendChat()">
-          <input
-            class="dchat-input"
-            type="text"
-            placeholder="e.g. &quot;title: Rescue rx-gated checkout&quot; or &quot;remove FR-2&quot;"
-            [value]="chatInput()"
-            (input)="chatInput.set($any($event.target).value)"
-            [disabled]="chatBusy()"
-          />
-          <button class="btn" type="submit" [disabled]="chatBusy() || !chatInput().trim()">
-            {{ chatBusy() ? 'Sending…' : 'Send' }}
-          </button>
-        </form>
+  <!-- Chat editing: asks the backend to make the change and re-verify it.
+       The other half of the pair — typed section edits above are direct
+       but unverified; this one is checked but indirect. -->
+  <div class="dsec dchat">
+    <h3>Ask for a change</h3>
+    @if (!chatAvailable()) {
+      <p class="dchat-hint">
+        Chat editing needs a live run — this is a fixture PRD, so there's nothing on the backend to
+        edit. You can still edit sections directly above.
+      </p>
+    } @else {
+      @if (chatLog().length) {
+        <div class="dchat-log">
+          @for (m of chatLog(); track $index) {
+            <div class="dchat-msg" [class.assistant]="m.role === 'assistant'">{{ m.text }}</div>
+          }
+        </div>
       }
-    </div>
+      <form class="dchat-form" (submit)="$event.preventDefault(); sendChat()">
+        <input
+          class="dchat-input"
+          type="text"
+          placeholder="e.g. &quot;title: Rescue rx-gated checkout&quot; or &quot;remove FR-2&quot;"
+          [value]="chatInput()"
+          (input)="chatInput.set($any($event.target).value)"
+          [disabled]="chatBusy()"
+        />
+        <button class="btn" type="submit" [disabled]="chatBusy() || !chatInput().trim()">
+          {{ chatBusy() ? 'Sending…' : 'Send' }}
+        </button>
+      </form>
+    }
   </div>
 
   <div class="dfoot">
