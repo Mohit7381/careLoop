@@ -40,3 +40,13 @@ def test_the_model_sees_the_question_as_context_only():
     assert seen["user_question"] == "how can i increase transactions by 25 percent"
     assert seen["user_intent"] == "growth"
     assert 25 not in {v for v in seen.get("top_gap", {}).values() if isinstance(v, (int, float))}
+
+
+def test_the_journey_word_does_not_match_every_event():
+    cfg = load_journey("consultation"); events = list((cfg.get("event_stage") or {}).keys())
+    s = resolve_scope("how can i increase transactions on consultations", cfg, events, cfg["drilldown_dimensions"])
+    assert not [m for m in s.matched_on if m.startswith("event:")]
+    # a real event word still matches
+    s = resolve_scope("why do users leave on the consultation payment page", cfg, events, cfg["drilldown_dimensions"])
+    assert "event:consultation.view.payment_page" in s.matched_on
+

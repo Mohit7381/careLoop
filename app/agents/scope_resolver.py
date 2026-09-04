@@ -23,6 +23,9 @@ from app.schemas.contracts import RunScope
 
 _MIN_TOKEN = 4
 _STOP = {
+    # "transactions" is the generic object of a growth question, not a reference
+    # to the backend.transaction_* events — it must not anchor a stage.
+    "transaction", "transactions",
     "want", "data", "analysis", "why", "the", "for", "are", "users", "user",
     "dropping", "drop", "dropped", "after", "before", "from", "into", "with",
     "show", "give", "run", "please", "them", "this", "that", "what", "where",
@@ -170,7 +173,16 @@ def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
     # Events are the richer vocabulary: "adding items to cart" matches
     # pharmacy.click.add_to_cart_button long before it matches any stage name.
     event_stage = journey_cfg.get("event_stage") or {}
-    hit_events = [e for e in ct_event_names if _overlaps(_label_tokens(e), words)]
+    # An event is not "named" by the namespace every event of this journey
+    # carries ("consultation" in consultation.view.payment_page): "how can I
+    # increase transactions on consultations" matched all 19 consultation.*
+    # events on that token and the confirm box showed twenty chips that said
+    # nothing. Only tokens shared by (nearly) every event are stripped, so
+    # "cart" in pharmacy.click.add_to_cart_button still anchors a stage.
+    token_sets = [_label_tokens(e) for e in ct_event_names]
+    namespace = {t for t in set().union(*token_sets)
+                 if sum(t in ts for ts in token_sets) >= 0.8 * len(token_sets)} if token_sets else set()
+    hit_events = [e for e, ts in zip(ct_event_names, token_sets) if _overlaps(ts - namespace, words)]
     for ev in hit_events:
         scope.matched_on.append(f"event:{ev}")
 
