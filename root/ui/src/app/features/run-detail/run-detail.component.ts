@@ -12,8 +12,8 @@ import { PrdDrawerComponent } from './components/prd-drawer/prd-drawer.component
 
 /**
  * Screen 2 — Run detail. The demo's main screen: every beat in the 5-minute
- * script (pipeline tracker → funnel → findings → drill-down trail →
- * "Users say" → code scout → PRD) renders here.
+ * script (pipeline tracker → funnel → findings → "Users say" → code scout
+ * → PRD) renders here.
  *
  * Loads at rest (fixture, everything visible) so a stage failure never
  * leaves the screen empty — press "Replay run" for the timed animation.
@@ -34,7 +34,6 @@ export class RunDetailComponent {
   readonly run = this.runService.run;
   readonly stages = this.runService.stages;
   readonly reveal = this.runService.reveal;
-  readonly trailVisibleCount = this.runService.trailVisibleCount;
   readonly source = this.runService.source;
   readonly liveError = this.runService.liveError;
 
