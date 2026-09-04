@@ -119,3 +119,16 @@ def test_the_model_is_never_given_room_to_restate_a_verdict(pipeline_state):
         assert all(r["status"] in ("exists", "absent", "partial", None)
                    for r in gap["remedies"])
     assert any("never restate an absent remedy" in r for r in seen["inputs"]["rules"])
+
+
+def test_bare_numbered_sections_become_markdown_headings():
+    """Run 8's model draft titled sections '1 Overview (What / Problem ...)'
+    with no markdown marker; the PRD drawer showed them as paragraphs."""
+    from app.pipeline.nodes.prd_generator import normalise_headings
+    raw = "1 Overview (What / Problem / Users / Out of Scope)\n\nWhat\n- Reduce friction.\n\n2 Goals & Success Metrics\n\n- FR-1: do a thing"
+    out = normalise_headings(raw)
+    assert "## 1. Overview (What / Problem / Users / Out of Scope)" in out
+    assert "## 2. Goals & Success Metrics" in out
+    assert "- FR-1: do a thing" in out                      # list items untouched
+    already = "## 1. Overview\n\n2 Not a heading here"
+    assert normalise_headings(already) == already          # drafts with headings are left alone

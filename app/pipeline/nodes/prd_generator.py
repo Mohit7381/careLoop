@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Union
 
 import logging
+import re
 from typing import Any, Callable, Optional
 
 from app.agents.evidence_gate import unsupported_numbers
@@ -212,6 +213,9 @@ def _prd_inputs(finding, gaps, trend, quotes, run_id, window_start, window_end) 
             "Express targets relatively ('recover 5% of X'), never as an invented absolute count.",
             "A remedy's status is given; never restate an absent remedy as confirmed or built.",
             "No angle brackets anywhere in the output.",
+            "Format each of the eight sections as a markdown heading: '## 1. Overview', "
+            "'## 2. Goals & Success Metrics', and so on. Functional requirements are list "
+            "items beginning '- FR-1:', '- FR-2:'.",
         ],
     }
 
@@ -233,7 +237,28 @@ def _render_prd_llm(llm: LLMCall, inputs: dict) -> tuple[str, str]:
     if invented:
         logger.warning("prd-generation cited ungrounded numbers %s — deterministic PRD", invented)
         return "", f"ungrounded_numbers:{invented}"
-    return body, "llm"
+    return normalise_headings(body), "llm"
+
+
+_BARE_SECTION = re.compile(r"^\s*(\d{1,2})[.)]?\s+([A-Z][^\n]{2,80})$")
+
+
+def normalise_headings(body: str) -> str:
+    """Make the eight sections render as headings.
+
+    Run 8's model-written draft titled its sections "1 Overview (What /
+    Problem / Users / Out of Scope)" with no markdown marker, so the PRD
+    drawer rendered them as plain paragraphs. If the draft has no ## headings
+    at all, a line that is just a section number and a title becomes one.
+    Drafts that already use markdown headings are left alone.
+    """
+    if re.search(r"^##\s", body, re.M):
+        return body
+    out = []
+    for line in body.splitlines():
+        m = _BARE_SECTION.match(line)
+        out.append(f"## {m.group(1)}. {m.group(2).strip()}" if m else line)
+    return "\n".join(out)
 
 
 def _with_draft_banner(body: str, run_id: int, window_start: str, window_end: str,
