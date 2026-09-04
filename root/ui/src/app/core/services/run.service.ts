@@ -4,7 +4,7 @@ import { EMPTY, Subscription, firstValueFrom, timer } from 'rxjs';
 import { catchError, switchMap, tap, timeout } from 'rxjs/operators';
 
 import { RUN_47_RESPONSE } from '../fixtures/run-47.fixture';
-import { RunDetailResponse, RunState, RunStatus, SnapshotRow } from '../models/run-state';
+import { RunDetailResponse, RunState, RunStatus, SnapshotRow, Voc } from '../models/run-state';
 import { environment } from '../../../environments/environment';
 
 export type StageKey = 'fetch' | 'analyze' | 'code' | 'prd';
@@ -138,7 +138,16 @@ function toRunState(r: RunDetailResponse): RunState {
     drilldown_trail: r.drilldown_trail ?? [],
     code_gaps: r.code_gaps ?? [],
     trend_report: { deltas: [], adoption: [], voc_theme_deltas: [], narrative: '' },
-    voc: r.voc,
+    // An in-flight run has voc: {} — no reviews_meta, no themes. Fill the shape
+    // here so no component dereferences undefined. That dereference used to
+    // throw inside the `stages` computed, and Angular then kept the computed's
+    // LAST GOOD VALUE — the fixture — so a running live run rendered the
+    // fixture's "COMPLETED, 5 findings" under the live run's own header.
+    voc: {
+      reviews_meta: (r.voc as Partial<Voc> | undefined)?.reviews_meta ?? {},
+      themes: (r.voc as Partial<Voc> | undefined)?.themes ?? [],
+      per_finding_quotes: (r.voc as Partial<Voc> | undefined)?.per_finding_quotes ?? {},
+    },
     prd_draft: r.prd_markdown ?? null,
     artifacts: (r.artifacts ?? []).map((a) => a.uri),
   };
@@ -417,7 +426,7 @@ export class RunService {
   }
 
   private failedStatuses(run: RunState): StageStatus[] {
-    const reached = run.code_gaps.length ? 3 : run.findings.length ? 2 : run.snapshot.stages.length ? 1 : 0;
+    const reached = (run.code_gaps?.length ?? 0) ? 3 : (run.findings?.length ?? 0) ? 2 : (run.snapshot?.stages?.length ?? 0) ? 1 : 0;
     const statuses: StageStatus[] = ['done', 'done', 'done', 'done'];
     for (let i = reached; i < 4; i++) statuses[i] = i === reached ? 'failed' : 'pending';
     return statuses;
@@ -427,16 +436,26 @@ export class RunService {
     if (status === 'pending') return '—';
     if (status === 'failed') return 'failed';
     switch (key) {
-      case 'fetch':
-        return `${run.snapshot.stages.length} stage rows · ${run.voc.reviews_meta['pulled'] ?? 0} reviews`;
-      case 'analyze':
+      case 'fetch': {
+        // Backend keys are total/negatives; older fixtures said pulled/negative.
+        const meta = run.voc?.reviews_meta ?? {};
+        const pulled = meta['total'] ?? meta['pulled'];
+        const rows = run.snapshot?.stages?.length ?? 0;
+        if (status === 'running' || !rows) return 'fetching the funnel…';
+        return `${rows} stage rows · ${pulled ?? '—'} reviews`;
+      }
+      case 'analyze': {
+        const findings = run.findings ?? [];
         return status === 'running'
-          ? `drilling down… (query ${run.drilldown_trail.length}/10)`
-          : `${run.findings.length} findings, ${run.findings.filter((f) => f.rank === 1).length ? 1 : 0} critical`;
+          ? `drilling down… (query ${run.drilldown_trail?.length ?? 0}/10)`
+          : `${findings.length} findings, ${findings.some((f) => f.rank === 1) ? 1 : 0} critical`;
+      }
       case 'code': {
-        const found = run.code_gaps.filter((g) => g.mechanism_found);
+        const gaps = run.code_gaps ?? [];
+        if (status === 'running') return 'searching the owning repos…';
+        const found = gaps.filter((g) => g.mechanism_found);
         const remedies = found.reduce((n, g) => n + (g.remedies?.length ?? 0), 0);
-        if (!run.code_gaps.length) return 'no code gaps yet';
+        if (!gaps.length) return 'no code gaps yet';
         return `${found.length} mechanism(s) pinned · ${remedies} remedy verdict(s)`;
       }
       case 'prd':

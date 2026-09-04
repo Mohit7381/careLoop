@@ -21,7 +21,7 @@
       <h1>Run #{{ run().run_id }} · pharmacy delivery order journey</h1>
     </div>
     <div class="meta mono">run #{{ run().run_id }} · {{ run().window_start }} → {{ run().window_end }}</div>
-    <div class="status-pill" [class]="statusPill()">{{ statusPill() }}</div>
+    <div class="status-pill" [class]="statusPill()">{{ statusLabel() }}</div>
   </div>
 
   <app-pipeline-tracker [stages]="stages()" />
@@ -32,7 +32,13 @@
         <h2>The funnel</h2>
         <div class="hint">7 days of production · k≥25 suppression applied at fetch</div>
       </div>
-      <app-funnel [snapshot]="run().snapshot" [findings]="run().findings" />
+      @if (hasFunnel()) {
+        <app-funnel [snapshot]="run().snapshot" [findings]="run().findings" />
+      } @else {
+        <div class="pending-panel">
+          @if (inFlight()) { Fetching the funnel from the warehouse snapshot… } @else { No funnel rows were recorded for this run. }
+        </div>
+      }
     </section>
   }
 
@@ -42,12 +48,22 @@
         <h2>Findings</h2>
         <div class="hint">ranked by magnitude · origin badged</div>
       </div>
-      <app-findings-list
-        [findings]="run().findings"
-        [drilldownTrail]="run().drilldown_trail"
-        [trailVisibleCount]="trailVisibleCount()"
-        [voc]="run().voc"
-      />
+      @if (hasFindings()) {
+        <app-findings-list
+          [findings]="run().findings"
+          [drilldownTrail]="run().drilldown_trail"
+          [trailVisibleCount]="trailVisibleCount()"
+          [voc]="run().voc"
+        />
+      } @else {
+        <div class="pending-panel">
+          @if (inFlight()) {
+            The Analyst is drilling down — findings appear here as soon as the evidence gate has passed them.
+          } @else {
+            No findings survived the evidence gate for this run.
+          }
+        </div>
+      }
     </section>
   }
 
@@ -57,7 +73,17 @@
         <h2>Code scout</h2>
         <div class="hint">read-only · names lines, never writes diffs</div>
       </div>
-      <app-code-scout-panel [gaps]="run().code_gaps" />
+      @if (hasCode()) {
+        <app-code-scout-panel [gaps]="run().code_gaps" />
+      } @else {
+        <div class="pending-panel">
+          @if (inFlight()) {
+            Code Scout is searching the owning repos and running the Remedy Loop — this is the slowest stage.
+          } @else {
+            No code gaps were routed for this run.
+          }
+        </div>
+      }
     </section>
   }
 </div>
