@@ -2,9 +2,28 @@
 
 <aside class="drawer" [class.open]="open()" aria-label="PRD draft">
   <div class="dbanner">{{ prd().banner }}</div>
+
+  @if (prdRanks().length > 1) {
+    <div class="dtabs" role="tablist" aria-label="Findings with a PRD">
+      @for (rank of prdRanks(); track rank) {
+        <button
+          type="button"
+          class="dtab"
+          role="tab"
+          [class.active]="rank === selectedRank()"
+          [attr.aria-selected]="rank === selectedRank()"
+          (click)="selectRank(rank)"
+        >
+          #{{ rank }}
+          @if (isEdited(rank)) {<span class="dtab-edited" title="Edited via chat">●</span>}
+        </button>
+      }
+    </div>
+  }
+
   <div class="dhead">
     <div>
-      <h2>{{ hasMarkdown() ? doc()!.title : prd().title }}</h2>
+      <h2>{{ prd().title }}</h2>
       <div class="sub mono">{{ prd().subtitle }}</div>
     </div>
     <button class="btn dclose" type="button" (click)="close()">Close</button>
@@ -12,7 +31,8 @@
 
   <div class="dbody">
     @if (doc(); as d) {
-      <!-- The real generated PRD (prd_markdown), split into editable sections. -->
+      <!-- The generated PRD for the selected finding, split into sections.
+           Read mode renders them; Edit turns each into an in-place editor. -->
       @if (editing() || editedCount() > 0) {
         <div class="editbar">
           @if (editing()) {
@@ -27,20 +47,20 @@
 
       @if (editedCount() > 0) {
         <div class="unverified-note">
-          Your changes are <b>not verified against the code</b>. Agent requirements carry a Remedy Loop
-          verdict; typed ones do not, and stay marked as yours wherever they appear.
+          Your typed changes are <b>not verified against the code</b>. A chat edit goes through the
+          backend and comes back checked; anything you type here does not, and stays marked as yours.
         </div>
       }
 
       @for (s of d.sections; track s.id) {
-        <section class="prdsec" [class.touched]="isEdited(s)">
+        <section class="prdsec" [class.touched]="isSectionEdited(s)">
           <div class="sechead">
             @if (editing()) {
               <input class="headinput" [value]="s.heading" (input)="onHeadingInput(s, $any($event.target).value)" />
             } @else {
               <h3>{{ s.heading }}</h3>
             }
-            @if (isEdited(s)) {
+            @if (isSectionEdited(s)) {
               <span class="humanbadge">{{ originLabel(s) }}</span>
             }
             @if (editing()) {
@@ -63,7 +83,7 @@
         </section>
       }
     } @else {
-      <!-- No prd_markdown on this run — structured fallback from findings + code_gaps. -->
+      <!-- No markdown for this finding — structured fallback from findings + code_gaps. -->
       <div class="dsec">
         <h3>Overview</h3>
         <p>{{ prd().overview }}</p>
@@ -106,6 +126,40 @@
         </div>
       </div>
     }
+
+    <!-- Chat editing: asks the backend to make the change and re-verify it.
+         The other half of the pair — typed section edits above are direct
+         but unverified; this one is checked but indirect. -->
+    <div class="dsec dchat">
+      <h3>Ask for a change</h3>
+      @if (!chatAvailable()) {
+        <p class="dchat-hint">
+          Chat editing needs a live run — this is a fixture PRD, so there's nothing on the backend to
+          edit. You can still edit sections directly above.
+        </p>
+      } @else {
+        @if (chatLog().length) {
+          <div class="dchat-log">
+            @for (m of chatLog(); track $index) {
+              <div class="dchat-msg" [class.assistant]="m.role === 'assistant'">{{ m.text }}</div>
+            }
+          </div>
+        }
+        <form class="dchat-form" (submit)="$event.preventDefault(); sendChat()">
+          <input
+            class="dchat-input"
+            type="text"
+            placeholder="e.g. &quot;title: Rescue rx-gated checkout&quot; or &quot;remove FR-2&quot;"
+            [value]="chatInput()"
+            (input)="chatInput.set($any($event.target).value)"
+            [disabled]="chatBusy()"
+          />
+          <button class="btn" type="submit" [disabled]="chatBusy() || !chatInput().trim()">
+            {{ chatBusy() ? 'Sending…' : 'Send' }}
+          </button>
+        </form>
+      }
+    </div>
   </div>
 
   <div class="dfoot">

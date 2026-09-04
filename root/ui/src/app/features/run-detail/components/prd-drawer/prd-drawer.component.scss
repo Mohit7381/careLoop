@@ -47,6 +47,36 @@
   letter-spacing: 0.02em;
 }
 
+.dtabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 22px 0;
+  flex-wrap: wrap;
+}
+.dtab {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dtab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.dtab-edited {
+  color: var(--good);
+  font-size: 8px;
+}
+
 .dhead {
   padding: 20px 22px 14px;
   border-bottom: 1px solid var(--line);
@@ -152,6 +182,91 @@ tr:last-child td {
   padding: 2px 0;
   text-align: center;
   height: 20px;
+}
+
+.dmarkdown {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.dmarkdown :is(h2, h3, h4, h5) {
+  color: var(--ink);
+  margin: 18px 0 8px;
+  font-size: 15px;
+}
+.dmarkdown h2:first-child {
+  margin-top: 0;
+}
+.dmarkdown p {
+  margin: 0 0 10px;
+}
+.dmarkdown ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+.dmarkdown li {
+  margin: 4px 0;
+}
+.dmarkdown blockquote {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--line-strong);
+  color: var(--ink-3);
+  font-style: italic;
+}
+.dmarkdown code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.dchat {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.dchat-hint {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  max-width: 56ch;
+}
+.dchat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.dchat-msg {
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  max-width: 46ch;
+  align-self: flex-end;
+}
+.dchat-msg.assistant {
+  background: var(--accent-soft);
+  color: var(--ink);
+  align-self: flex-start;
+}
+.dchat-form {
+  display: flex;
+  gap: 8px;
+}
+.dchat-input {
+  flex: 1;
+  font-size: 12.5px;
+  padding: 8px 11px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+}
+.dchat-input:disabled {
+  opacity: 0.6;
 }
 
 .dfoot {

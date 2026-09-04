@@ -88,5 +88,11 @@ class RunArtifact(Base):
     run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"), nullable=False, index=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)  # report_md | prd_md
     uri: Mapped[str] = mapped_column(Text, nullable=False)
+    # NULL for report_md (one per run); the finding a prd_md belongs to when a
+    # run produces more than one PRD (up to MAX_PRDS_PER_RUN, one per finding).
+    finding_rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    edited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    edited_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
 
     run: Mapped["AnalysisRun"] = relationship(back_populates="artifacts")

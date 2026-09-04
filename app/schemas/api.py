@@ -19,6 +19,13 @@ class CreateRunResponse(BaseModel):
     status: RunStatus
 
 
+class PrdSummary(BaseModel):
+    finding_rank: int
+    title: Optional[str] = None
+    markdown: str
+    edited: bool = False
+
+
 class RunDetailResponse(BaseModel):
     run_id: int
     journey: str
@@ -34,10 +41,22 @@ class RunDetailResponse(BaseModel):
     drilldown_trail: list[dict[str, Any]]
     artifacts: list[dict[str, Any]]
     report_markdown: Optional[str] = None
-    prd_markdown: Optional[str] = None
+    prd_markdown: Optional[str] = None  # the #1 finding's PRD only — kept for back-compat
+    prds: list[PrdSummary] = []         # one per finding, up to MAX_PRDS_PER_RUN — NEW
 
 
 class DeliverResponse(BaseModel):
     run_id: int
     delivered: bool
     detail: str
+
+
+class PrdChatRequest(BaseModel):
+    message: str
+
+
+class PrdChatResponse(BaseModel):
+    finding_rank: int
+    reply: str
+    markdown: str
+    applied: bool
