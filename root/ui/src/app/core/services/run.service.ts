@@ -125,7 +125,15 @@ function toRunState(r: RunDetailResponse): RunState {
     code_gaps: r.code_gaps ?? [],
     suggestions: r.suggestions ?? [],
     trend_report: { deltas: [], adoption: [], voc_theme_deltas: [], narrative: '' },
-    voc: r.voc,
+    // An in-flight run returns `voc: {}` — Phase 3 has not run yet.
+    // validateRunDetail only proves `voc` is an object, not that it is
+    // populated, so default each field here and every consumer can read the
+    // shape unconditionally instead of guarding at each call site.
+    voc: {
+      reviews_meta: r.voc?.reviews_meta ?? {},
+      themes: r.voc?.themes ?? [],
+      per_finding_quotes: r.voc?.per_finding_quotes ?? {},
+    },
     prd_draft: r.prd_markdown ?? null,
     prds: r.prds ?? [],
     artifacts: (r.artifacts ?? []).map((a) => a.uri),
@@ -466,8 +474,14 @@ export class RunService {
     if (status === 'pending') return '—';
     if (status === 'failed') return 'failed';
     switch (key) {
-      case 'fetch':
-        return `${run.snapshot.stages.length} stage rows · ${run.voc.reviews_meta['pulled'] ?? 0} reviews`;
+      case 'fetch': {
+        // phase3_voc.py emits `total`; `pulled` was the pre-Rev-3 name, kept
+        // as a fallback so an older backend still reports a real number
+        // rather than silently reading 0.
+        const meta = run.voc.reviews_meta;
+        const reviews = meta['total'] ?? meta['pulled'] ?? 0;
+        return `${run.snapshot.stages.length} stage rows · ${reviews} reviews`;
+      }
       case 'analyze':
         return status === 'running'
           ? `drilling down… (query ${run.drilldown_trail.length}/10)`
