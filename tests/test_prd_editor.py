@@ -42,7 +42,7 @@ def _llm_returning(markdown):
     calls = []
     def llm(ctx):
         calls.append(ctx)
-        return {"prd_markdown": markdown}
+        return {"prd_markdown": markdown, "reply": "Updated Section 7 with measurable metrics."}
     llm.calls = calls
     return llm
 
@@ -52,9 +52,10 @@ def test_a_plain_language_request_is_rewritten_by_the_model():
     result = apply_edit_instruction(SAMPLE, "make the success metrics measurable", llm)
     assert result.applied
     assert "do the first thing, measured weekly" in result.markdown
-    assert result.reply.startswith("Applied: make the success metrics measurable")
-    sent = llm.calls[0]["prd_inputs"]
-    assert sent["mode"] == "revise" and sent["current_prd_markdown"] == SAMPLE
+    assert result.reply.startswith("Updated Section 7 with measurable metrics.")
+    assert "still a DRAFT" in result.reply
+    sent = llm.calls[0]["edit_inputs"]
+    assert sent == {"original_markdown": SAMPLE, "instruction": "make the success metrics measurable"}
 
 
 def test_the_draft_banner_is_ours_and_comes_back_if_the_model_drops_it():

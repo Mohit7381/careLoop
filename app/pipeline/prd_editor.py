@@ -8,9 +8,10 @@ instead of hand-editing markdown. Two tiers:
     - "title: <new title>" / "rename title to <new title>" -> renames the H1
     - "remove FR-<n>" / "delete FR-<n>" -> drops that functional requirement row
 
-  everything else -> a real rewrite through the `prd-generation` sphere use
-    case in revision mode (template 21691 receives the current markdown and
-    the instruction). The rewrite is accepted only if it is a complete
+  everything else -> a real rewrite through the dedicated `prd-chat-edit`
+    sphere use case (project 7121, use case 12870, template 21791: it receives
+    original_markdown + instruction and returns prd_markdown + a one-line
+    reply for the chat). The rewrite is accepted only if it is a complete
     document and every number it cites was already in the document or the
     instruction — the same evidence gate the generator uses — and the DRAFT
     banner is ours, re-inserted if the model dropped it. When no model is
@@ -83,22 +84,11 @@ def apply_edit_instruction(markdown: str, message: str, llm: Optional[LLMCall] =
 def revise_with_llm(llm: LLMCall, markdown: str, instruction: str) -> EditResult:
     """One revision call. Returns applied=False with the reason on any failure;
     the caller decides what to do with the document then."""
-    inputs = {
-        "mode": "revise",
-        "instruction": instruction,
-        "current_prd_markdown": markdown,
-        "rules": [
-            "Return the COMPLETE revised document, every section, as prd_markdown.",
-            "Keep the DRAFT banner line and all section headings unless the instruction is about them.",
-            "Never introduce a number that is not in current_prd_markdown or the instruction.",
-            "If the instruction needs data you do not have, add an open question in Section 8 instead.",
-            "No angle brackets anywhere in the output.",
-        ],
-    }
+    inputs = {"original_markdown": markdown, "instruction": instruction}
     try:
-        out = llm({"prd_inputs": inputs})
+        out = llm({"edit_inputs": inputs})
     except Exception as exc:                                   # network, sphere FAILED, bad JSON
-        logger.warning("prd revision call failed (%s)", exc)
+        logger.warning("prd-chat-edit call failed (%s)", exc)
         return EditResult(markdown, f"the model call failed ({type(exc).__name__})", applied=False)
 
     body = (out.get("prd_markdown") or "").strip()
@@ -113,8 +103,9 @@ def revise_with_llm(llm: LLMCall, markdown: str, instruction: str) -> EditResult
 
     body = _keep_banner(markdown, body)
     added, removed = _line_delta(markdown, body)
-    reply = (f"Applied: {instruction} — {added} line(s) added, {removed} removed. "
-             "Every number in the revised draft was already in the document; it is still a DRAFT.")
+    model_reply = " ".join((out.get("reply") or "").split())
+    reply = (model_reply or f"Applied: {instruction}.") + \
+        f" ({added} line(s) added, {removed} removed; every number was already in the document; still a DRAFT.)"
     return EditResult(body, reply, applied=True)
 
 

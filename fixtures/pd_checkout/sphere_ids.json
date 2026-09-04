@@ -25,6 +25,11 @@
    "name": "prd-generation",
    "use_case_id": 12816,
    "template_id": 21691
+  },
+  {
+   "name": "prd-chat-edit",
+   "use_case_id": 12870,
+   "template_id": 21791
   }
  ]
 }

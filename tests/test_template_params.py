@@ -62,3 +62,9 @@ def test_create_timeout_covers_a_full_synchronous_model_call():
     is never the thing that cuts a healthy call."""
     from app.integrations import sphere
     assert sphere.CREATE_TIMEOUT_S >= 60
+
+
+def test_prd_chat_edit_is_registered_under_its_placeholder():
+    from app.integrations.sphere import TEMPLATE_PARAM
+    assert TEMPLATE_PARAM["prd-chat-edit"] == "edit_inputs"
+

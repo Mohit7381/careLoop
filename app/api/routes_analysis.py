@@ -362,7 +362,7 @@ def _prd_edit_llm(run: AnalysisRun):
     from app.integrations.sphere import _live_llm_wanted, make_use_case_llm
     if not _live_llm_wanted(True):
         return None
-    return make_use_case_llm(get_settings().llm_use_case_prd_generation, demo_mode=False, journey=run.journey)
+    return make_use_case_llm(get_settings().llm_use_case_prd_chat_edit, demo_mode=False, journey=run.journey)
 
 
 @router.post(

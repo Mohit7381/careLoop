@@ -19,6 +19,7 @@ SPHERE_BASE = os.environ.get("SPHERE_BASE_URL", "http://sphere-platform.stage-k8
 # replied "analysis_context is empty" and the run produced zero findings with
 # no error anywhere. call() now refuses a mismatched key instead.
 TEMPLATE_PARAM: dict[str, str] = {
+    "prd-chat-edit": "edit_inputs",
     "funnel-hypothesis-generation": "analysis_context",
     "voc-theme-classification":     "reviews_batch",
     "code-gap-assessment":          "code_context",
