@@ -51,6 +51,33 @@ def _supported(value: float, allowed: set[float]) -> bool:
     return False
 
 
+def _string_leaves(obj: Any) -> list[str]:
+    if isinstance(obj, str):
+        return [obj]
+    if isinstance(obj, dict):
+        return [t for v in obj.values() for t in _string_leaves(v)]
+    if isinstance(obj, (list, tuple)):
+        return [t for v in obj for t in _string_leaves(v)]
+    return []
+
+
+def shown_numbers(inputs: Any) -> set[float]:
+    """Every number the model could legitimately repeat: numeric leaves AND
+    numbers embedded in the strings it was given.
+
+    The first live PRD run was rejected for citing 647,191 / 229,622 / 315,934
+    — the funnel counts — because they live inside evidence `metric` strings
+    ("1_item entered 315,934 converted 139,707 rate 0.4422") and only the
+    `value` float was whitelisted. The model quoted what it was shown, and the
+    gate threw the draft away. A reviewer's quote saying "61rb" is shown text
+    too; repeating it is not inventing a number.
+    """
+    allowed = set(collect_numbers(inputs))
+    for text in _string_leaves(inputs):
+        allowed |= numbers_in_text(text)
+    return allowed
+
+
 def unsupported_numbers(text: str, inputs: Any) -> list[float]:
     """Numbers in `text` that do not trace back to anything in `inputs`.
 
@@ -58,6 +85,6 @@ def unsupported_numbers(text: str, inputs: Any) -> list[float]:
     result as "do not ship this text", not as "correct it" — silently editing a
     model's numbers would hide the fact that it invented one.
     """
-    allowed = collect_numbers(inputs)
+    allowed = shown_numbers(inputs)
     return sorted(v for v in numbers_in_text(text)
                   if abs(v) > STRUCTURAL_MAX and not _supported(v, allowed))

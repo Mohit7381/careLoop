@@ -183,6 +183,11 @@ def _delta_rows(deltas, adoption, no_prior_data, voc) -> list[dict]:
     for d in deltas:
         if d.maturing:
             continue
+        if d.current_rate >= 0.9999 and d.previous_rate >= 0.9999:
+            # The terminal stage's own row converts 100% -> 100% by construction
+            # (nothing follows it). The narrative model once wrote "delivered
+            # held steady at 100.00%" from it — true, vacuous, and confusing.
+            continue
         rows.append({"id": f"stage:{d.stage}", "kind": "stage", "stage": d.stage,
                      "previous_rate": d.previous_rate, "current_rate": d.current_rate,
                      "delta_pp": d.delta_pp})

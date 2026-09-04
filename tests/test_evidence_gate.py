@@ -40,3 +40,16 @@ def test_labelled_requirement_ids_are_not_read_as_magnitudes():
 
 def test_empty_inputs_reject_every_real_number():
     assert unsupported_numbers("we lost 417,569 orders", {}) == [417569.0]
+
+
+def test_numbers_inside_shown_strings_are_shown_numbers():
+    """Live run 7's PRD was rejected for citing the funnel counts, which live
+    inside evidence `metric` strings, and a reviewer quote's "61rb". The model
+    repeated what it was given; that is not invention."""
+    inputs = {"finding": {"evidence": [{"metric": "1_item entered 315,934 converted 139,707 rate 0.4422",
+                                        "value": 0.4422}]},
+              "anecdotal_quotes": [{"text": "sia sia saya ngeluarin uang, meskipun cuma 61rb"}]}
+    text = "Single-item baskets (315,934 entered, 139,707 converted) — one user lost 61rb."
+    assert unsupported_numbers(text, inputs) == []
+    # ...and a number that appears nowhere, string or leaf, is still caught
+    assert unsupported_numbers("this will recover 3,400 orders", inputs) == [3400.0]

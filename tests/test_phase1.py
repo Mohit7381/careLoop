@@ -44,3 +44,14 @@ def test_category_first_tag_normalization():
     assert phase1.normalize_category(raw) == "Contraceptions & Hormone"
     assert phase1.normalize_category(";") == "unknown"
     assert phase1.normalize_category("") == "unknown"
+
+
+def test_the_analyst_is_told_which_rate_is_right_censored():
+    """Live run 7 called confirmed->delivered 'relatively healthy' at 69.23%.
+    That rate is an artefact of the window, and the model had no way to know."""
+    from app.agents.analyst.phase1 import censoring_caveats
+    caveats = censoring_caveats(["created", "confirmed", "delivered"], ["delivered"])
+    assert len(caveats) == 1
+    assert "confirmed -> delivered" in caveats[0] and "RIGHT-CENSORED" in caveats[0]
+    assert censoring_caveats(["created", "confirmed", "delivered"], []) == []
+    assert censoring_caveats(["created"], ["created"]) == []       # nothing upstream

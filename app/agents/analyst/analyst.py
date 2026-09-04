@@ -56,7 +56,8 @@ def run_analyst(state: RunState,
     if gap is None:
         gap = phase1.largest_drop(table)
     clusters = phase1.cluster_reasons(state.snapshot.reasons, cfg["artifact_reasons"])
-    summary = {"funnel": table, "reason_clusters": clusters}
+    summary = {"funnel": table, "reason_clusters": clusters,
+               "caveats": phase1.censoring_caveats(cfg["stages"], cfg.get("maturing_stages") or [])}
 
     # ---- VoC classification (before the drill-down) ----
     # Themes are classified first so the drill-down model can see them as
