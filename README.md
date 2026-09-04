@@ -45,7 +45,9 @@ A local `careloop.db` (SQLite) is created automatically on first startup and aut
 ### Trigger a run and read its output
 
 ```bash
-# trigger a run (journey defaults to pd_checkout; demo mode reads fixtures/pd_checkout/*.json)
+# trigger a run (journey defaults to pd_checkout; demo mode reads fixtures/<journey>/*.json).
+# Journeys: pd_checkout, consultation, homecare (Halolab), digital_clinic (Haloskin/Halofit) — see config/journeys/.
+# A prompt that names one ("homecare", "lab", "haloskin", "treatment"...) auto-selects it via /v1/analysis/resolve.
 curl -s -X POST localhost:8000/v1/analysis/runs \
   -H "Authorization: Bearer dev-local-token" -H "Content-Type: application/json" \
   -d '{"window_start":"2026-08-27","window_end":"2026-09-02"}'

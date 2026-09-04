@@ -55,7 +55,13 @@ export class RunDetailComponent {
   /** Journey name from the API, humanised; pharmacy is the historical default. */
   readonly journeyLabel = computed(() => {
     const j = (this.run() as unknown as { journey?: string }).journey ?? 'pd_checkout';
-    return j === 'pd_checkout' ? 'pharmacy delivery order journey' : `${j.replace(/_/g, ' ')} journey`;
+    const names: Record<string, string> = {
+      pd_checkout: 'pharmacy delivery order journey',
+      consultation: 'doctor consultation journey',
+      homecare: 'Halolab homecare booking journey',
+      digital_clinic: 'Haloskin / Halofit treatment plan journey',
+    };
+    return names[j] ?? `${j.replace(/_/g, ' ')} journey`;
   });
 
   readonly hasFunnel = computed(() => (this.run().snapshot?.stages?.length ?? 0) > 0);

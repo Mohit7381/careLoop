@@ -1,0 +1,115 @@
+{
+ "done": true,
+ "findings": [
+  {
+   "stage": "chose a slot and confirmed",
+   "evidence": [
+    "{\"segment\": \"no_slot_chosen\", \"entered\": 4267, \"converted\": 0, \"rate\": 0.0}"
+   ],
+   "segments": [
+    "bookings with no slot chosen"
+   ],
+   "confidence": "high",
+   "hypothesis": "A very large group (4,267) started a booking but never chose a slot and therefore never reached confirmation; this single segment alone explains most of the 4,804 lost bookings between started and confirmed.",
+   "confirm_via": "Cross-tab 'no_slot_chosen' with clickstream events to see whether these sessions reached the slot-selection UI or the payments page; instrument a small UI change that forces an explicit slot selection before proceeding and measure lift in confirmed bookings vs holdout."
+  },
+  {
+   "stage": "chose a slot and confirmed",
+   "evidence": [
+    "{\"customer went back from payments page\": 3520}",
+    "{\"stage\": \"created\", \"count\": 5899, \"conversion_from_previous\": null}",
+    "{\"stage\": \"confirmed\", \"count\": 1095, \"conversion_from_previous\": 0.1856}"
+   ],
+   "segments": [
+    "users who returned from the payments page"
+   ],
+   "confidence": "high",
+   "hypothesis": "Independent of the 'no_slot_chosen' group, payment-page abandonment is a major driver: 3,520 recorded cases of customers going back from the payments page match the large created->confirmed gap and point to payment failures, confusion or friction at checkout.",
+   "confirm_via": "Add instrumentation to mark a 'visited payments page' event and capture payment-provider error codes; cross-tab those events with app version, interface_type and transaction_source to identify whether abandonment is due to provider errors, UI timeouts or user choice, then run a recovery experiment that surfaces clearer error messaging and one-tap retry."
+  },
+  {
+   "stage": "chose a slot and confirmed",
+   "evidence": [
+    "{\"segment\": \"halodoc_customer\", \"entered\": 5193, \"converted\": 652, \"rate\": 0.1256}",
+    "{\"segment\": \"b2c\", \"entered\": 5777, \"converted\": 993, \"rate\": 0.1719}"
+   ],
+   "segments": [
+    "customers in the consumer/halodoc_customer channel"
+   ],
+   "confidence": "high",
+   "hypothesis": "Consumer flows account for most volume and convert much worse than corporate channels: the main consumer channel 'halodoc_customer' converted 652 of 5,193 (12.56%) and b2c converted 993 of 5,777 (17.19%), so most of the lost bookings live in consumer UX/payment paths rather than corporate onboarding.",
+   "confirm_via": "Cross-tab transaction_source and target_market with 'visited payments page' and with abandon_reason to see whether the consumer drop is concentrated at payments; run a targeted simplified-payment experiment for halodoc_customer users (e.g., saved payment UI) and compare confirmed bookings to a control group."
+  },
+  {
+   "stage": "chose a slot and confirmed",
+   "evidence": [
+    "{\"segment\": \"android\", \"entered\": 2164, \"converted\": 223, \"rate\": 0.103}",
+    "{\"segment\": \"ios\", \"entered\": 3293, \"converted\": 515, \"rate\": 0.1564}"
+   ],
+   "segments": [
+    "customers on Android vs iOS"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Android sessions convert worse (223 of 2,164 = 10.3%) than iOS (515 of 3,293 = 15.64%); this suggests a platform-specific payments/checkout issue affecting a meaningful portion of consumer volume.",
+   "confirm_via": "Cross-tab Android sessions with payment-provider logs and Play Store error reports, reproduce checkout on the lowest-converting Android builds, and A/B test an alternate checkout flow (e.g., webview or external browser) for Android to measure impact."
+  },
+  {
+   "stage": "chose a slot and confirmed",
+   "evidence": [
+    "{\"segment\": \"East Java\", \"entered\": 187, \"converted\": 10, \"rate\": 0.0535}",
+    "{\"segment\": \"Central Java\", \"entered\": 137, \"converted\": 7, \"rate\": 0.0511}",
+    "{\"segment\": \"Sumatera\", \"entered\": 105, \"converted\": 5, \"rate\": 0.0476}"
+   ],
+   "segments": [
+    "several regional markets (East Java, Central Java, Sumatera)"
+   ],
+   "confidence": "low",
+   "hypothesis": "A small number of regions show very low conversion (e.g., East Java 10 of 187 = 5.35%); these could be caused by local payment provider issues, telco instability, or supply-side availability in those markets, but their total entered counts are modest so they explain only a small fraction of the overall loss.",
+   "confirm_via": "Cross-tab region with 'visited payments page', payment-provider response codes and provider availability; run a local diagnostic and a region-specific fallback payment method pilot to measure lift."
+  }
+ ],
+ "growth_ideas": [
+  {
+   "title": "One-tap saved payments",
+   "evidence": [
+    "{\"segment\": \"halodoc_customer\", \"entered\": 5193, \"converted\": 652, \"rate\": 0.1256}"
+   ],
+   "rationale": "Consumer bookings (halodoc_customer) have low conversion (12.56%); reducing payment friction for returning consumers should convert more of that large volume.",
+   "description": "Let returning consumers securely save a single default payment method and enable a one-tap 'pay and confirm' button on checkout so repeat bookings skip manual card entry; include explicit consent and a simple revoke button in profile settings.",
+   "inspiration": "funnel_data",
+   "target_stage": "chose a slot and confirmed"
+  },
+  {
+   "title": "10-minute slot hold",
+   "evidence": [
+    "{\"segment\": \"no_slot_chosen\", \"entered\": 4267, \"converted\": 0, \"rate\": 0.0}"
+   ],
+   "rationale": "Many users start bookings but never choose a slot (4,267); a short hold removes time pressure and lets users pick a slot and finish payment without losing availability.",
+   "description": "Allow users to reserve a specific slot for 10 minutes without immediate payment; show an in-app countdown and send a push/SMS reminder with a one-tap payment link before the hold expires.",
+   "inspiration": "funnel_data",
+   "target_stage": "chose a slot and confirmed"
+  },
+  {
+   "title": "Payment-failure recovery flow",
+   "evidence": [
+    "{\"customer went back from payments page\": 3520}"
+   ],
+   "rationale": "3,520 recorded cases of users returning from the payments page indicate many checkouts fail or confuse users; a recovery flow should reclaim a large share of these abandonments.",
+   "description": "When a payment attempt fails or the user navigates away from payment, show an immediate in-app diagnostic explaining the error and offer two alternatives: retry payment with one tap, or complete checkout via WhatsApp/web checkout pre-filled with booking details; log provider error codes for analytics.",
+   "inspiration": "funnel_data",
+   "target_stage": "chose a slot and confirmed"
+  },
+  {
+   "title": "WhatsApp fallback checkout",
+   "evidence": [
+    "{\"segment\": \"whatsapp\", \"entered\": 157, \"converted\": 110, \"rate\": 0.7006}",
+    "{\"segment\": \"whatsapp_order\", \"entered\": 157, \"converted\": 110, \"rate\": 0.7006}"
+   ],
+   "rationale": "WhatsApp-originated bookings convert far better (70.06%) than the main consumer channel; offering a WhatsApp checkout fallback for users who hit errors can recover successful transactions quickly.",
+   "description": "If a consumer's in-app payment fails (especially on Android), surface a one-tap option to continue checkout through a WhatsApp flow with pre-filled booking details and a payment link or agent-assisted checkout.",
+   "inspiration": "funnel_data",
+   "target_stage": "chose a slot and confirmed"
+  }
+ ],
+ "next_question": null
+}

@@ -1,0 +1,10 @@
+{
+ "done": false,
+ "findings": null,
+ "growth_ideas": null,
+ "next_question": {
+  "dimension": "lead_time",
+  "rationale": "Most evidence points at a payments-page abandonment concentrated in consumer flows: \"customer went back from payments page\" = 3,520 and the top gap is 4,804 lost bookings. Consumer and direct channels convert poorly (b2c 993 of 5,777 = 17.19%; halodoc_customer 652 of 5,193 = 12.56%) while corporate channels convert well. I expect one or two lead-time buckets (for example, same-day or very short lead times) to show much lower conversion from \"started a booking\" to \"chose a slot and confirmed\" than others \u2014 perhaps because urgent/same-day bookings hit payment time pressure, app timeouts, or provider availability and are more likely to be abandoned at the payments page. If true, that will localise the failure to a narrow booking type we can fix or route differently (e.g., simplify payment or offer a hold option) and explain a large share of the 4,804 lost bookings.",
+  "also_dimension": null
+ }
+}

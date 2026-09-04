@@ -1,0 +1,10 @@
+{
+ "done": false,
+ "findings": null,
+ "growth_ideas": null,
+ "next_question": {
+  "dimension": "target_market",
+  "rationale": "Transaction_source shows corporate channels (b2b_project, offline_activation) convert very well while the main 'halodoc_customer' channel converts poorly; I expect the consumer target_market to have a much lower conversion than corporate, which would localise the payments/UX failure to consumer flows and explain a large share of the 4,804 lost bookings. This matters because a consumer-specific fix is narrower and faster to test than platform-wide changes.",
+  "also_dimension": "hour_of_day"
+ }
+}
