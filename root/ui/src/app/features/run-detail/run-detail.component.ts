@@ -96,14 +96,10 @@ export class RunDetailComponent {
   onKeydown(e: KeyboardEvent): void {
     const target = e.target as HTMLElement | null;
     if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-    const key = e.key.toLowerCase();
-    if (key === 'r') {
-      e.preventDefault();
-      this.replay();
-    } else if (key === 'p') {
-      e.preventDefault();
-      this.openPrd();
-    } else if (e.key === 'Escape') {
+    // R/P are gone with their badges — a bare letter key that fires a CTA is
+    // a trap once the page has more than a couple of controls. Escape stays:
+    // closing an open drawer is what it is for.
+    if (e.key === 'Escape') {
       this.closePrd();
     }
   }

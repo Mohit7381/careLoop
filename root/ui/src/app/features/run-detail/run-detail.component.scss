@@ -1,35 +1,8 @@
-.topbar-sub {
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-}
-.topbar-sub-in {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 8px 28px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
+
 
 .chip-env,
-.src-chip {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  border: 1px dashed var(--line-strong);
-  border-radius: 5px;
-  padding: 3px 8px;
-}
-.src-chip.live {
-  color: var(--good);
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--good) 40%, transparent);
-}
-.src-chip.err {
-  color: var(--warn);
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
-}
+
+
 
 .wrap {
   max-width: 1180px;
@@ -149,18 +122,6 @@ section {
   background: var(--accent-ink);
   border-color: var(--accent-ink);
   color: #fff;
-}
-
-.kbd {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  border: 1px solid var(--line-strong);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  padding: 1px 4px;
-  color: var(--ink-3);
-  background: var(--surface-2);
-  margin-left: 6px;
 }
 
 
