@@ -89,11 +89,26 @@ def _app_token() -> str:
     every live call went out unauthenticated). Fixed in app/config.py via
     validation_alias, confirmed live 2026-09-04.
     """
-    tok = os.environ.get("SPHERE_APP_TOKEN", "")
-    if tok:
-        return tok
-    from app.config import get_settings  # local import: config must not import us
-    return get_settings().sphere_platform_app_token or ""
+    # First NON-EMPTY value wins. An alias list alone is not enough: pydantic
+    # picks the first name that is *present*, so a placeholder line
+    # `SPHERE_PLATFORM_API_KEY=` in .env shadowed a real token stored under
+    # SPHERE_PLATFORM_APP_TOKEN and every live call went out with an empty
+    # token (run 25 on main: HTTP 401 on the first Analyst call).
+    from app.config import get_settings
+    from dotenv import dotenv_values
+    candidates = [
+        os.environ.get("SPHERE_APP_TOKEN"),
+        get_settings().sphere_platform_app_token,
+        os.environ.get("SPHERE_PLATFORM_APP_TOKEN"),
+        os.environ.get("SPHERE_PLATFORM_API_KEY"),
+    ]
+    try:
+        env_file = dotenv_values(".env")
+        candidates += [env_file.get("SPHERE_PLATFORM_APP_TOKEN"), env_file.get("SPHERE_PLATFORM_API_KEY"),
+                       env_file.get("SPHERE_APP_TOKEN")]
+    except Exception:
+        pass
+    return next((c.strip() for c in candidates if c and c.strip()), "")
 
 
 def _live_llm_wanted(demo_mode: bool) -> bool:
