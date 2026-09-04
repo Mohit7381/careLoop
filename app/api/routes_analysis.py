@@ -11,6 +11,7 @@ from app.db.base import SessionLocal, get_session
 from app.db.models import AnalysisRun, RunArtifact
 from app.agents.scope_resolver import describe, pick_journey, resolve_scope
 from app.integrations.garuda_client import GarudaDeliveryError, send_report
+from app.integrations.sphere import make_use_case_llm
 from app.journeys import all_journeys, load_journey
 from app.pipeline.prd_editor import apply_edit_instruction
 from app.pipeline.runner import run_pipeline
@@ -415,7 +416,9 @@ async def chat_edit_prd(
         raise HTTPException(status_code=404, detail=f"no PRD drafted for finding #{rank} on this run")
 
     current = Path(artifact.uri).read_text()
-    result = apply_edit_instruction(current, body.message)
+    settings = get_settings()
+    llm = make_use_case_llm(settings.llm_use_case_prd_chat_edit, settings.demo_mode, journey=run.journey)
+    result = apply_edit_instruction(current, body.message, llm=llm)
 
     Path(artifact.uri).write_text(result.markdown)
     artifact.edited = True

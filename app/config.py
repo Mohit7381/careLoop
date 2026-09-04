@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # would be a 6th. Needs the same AI Studio setup code-gap-assessment got before
     # _sphere_llm() in pipeline/nodes/analyst.py can look up its template_id.
     llm_use_case_voc_correlation: str = "voc-funnel-correlation"
+    # NOT YET PROVISIONED (2026-09-04) — same situation as voc_correlation above:
+    # make_use_case_llm() degrades to None until this is set up in AI Studio and
+    # added to fixtures/pd_checkout/sphere_ids.json, so app/pipeline/prd_editor.py
+    # keeps working off its honest fallback in the meantime.
+    llm_use_case_prd_chat_edit: str = "prd-chat-edit"
 
     # Metabase (read-only, Fetcher / Alief)
     metabase_base_url: str = ""
