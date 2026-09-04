@@ -1,0 +1,198 @@
+{
+  "type": "object",
+  "required": [
+    "mode",
+    "search_terms",
+    "mechanism_found",
+    "gap_statement",
+    "file",
+    "line",
+    "snippet",
+    "gap_class",
+    "proposed_change_location",
+    "remedies",
+    "status",
+    "evidence_file",
+    "evidence_line",
+    "evidence_snippet",
+    "refined_search_terms",
+    "suggestions"
+  ],
+  "properties": {
+    "file": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "line": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "propose_search_terms",
+        "assess_gap",
+        "remedy_proposal",
+        "remedy_verification",
+        "propose_suggestions",
+        "search_terms",
+        "assessment"
+      ],
+      "type": "string"
+    },
+    "status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "snippet": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "remedies": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "required": [
+          "proposal",
+          "signature",
+          "search_terms"
+        ],
+        "properties": {
+          "proposal": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "search_terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "gap_class": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "search_terms": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_file": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence_line": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "gap_statement": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mechanism_found": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "evidence_snippet": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "refined_search_terms": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "proposed_change_location": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "suggestions": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "required": [
+          "suggestion_type",
+          "title",
+          "description",
+          "rationale",
+          "signature",
+          "evidence_file"
+        ],
+        "properties": {
+          "suggestion_type": {
+            "type": "string",
+            "enum": [
+              "tech",
+              "business",
+              "process"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "signature": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_file": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

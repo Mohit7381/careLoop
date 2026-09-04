@@ -19,6 +19,7 @@ SPHERE_BASE = os.environ.get("SPHERE_BASE_URL", "http://sphere-platform.stage-k8
 # replied "analysis_context is empty" and the run produced zero findings with
 # no error anywhere. call() now refuses a mismatched key instead.
 TEMPLATE_PARAM: dict[str, str] = {
+    "prd-chat-edit": "edit_inputs",
     "funnel-hypothesis-generation": "analysis_context",
     "voc-theme-classification":     "reviews_batch",
     "code-gap-assessment":          "code_context",
@@ -47,7 +48,16 @@ class SphereRequestTimedOut(RuntimeError):
 # instead of failing fast. Worth confirming against a real run.
 _TERMINAL_FAILURE_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
 
-CREATE_TIMEOUT_S = 15    # just enqueuing the job — should return almost immediately
+# LIVE-VERIFIED 2026-09-04 (Nakul): POST /v1/chat-ai/requests is SYNCHRONOUS on
+# our sphere deployment — it returns status=SUCCESS with the data inline after the
+# whole model call (8.5 s for a 3-review VoC batch; 30-50 s for an Analyst turn),
+# and GET /v1/chat-ai/requests/{id} on that id then reports status=INIT with no
+# data, so the poll path below can never complete a request the create call did
+# not. The create timeout therefore has to cover the full model call. 15 s cut
+# off every real call in run 11 (Analyst + all five VoC batches: "timed out").
+# The ingress in front of sphere closes held connections at ~60 s, so anything
+# past that is the ingress's 504, not ours — keep individual calls small instead.
+CREATE_TIMEOUT_S = 75
 POLL_TIMEOUT_S = 15      # one status check — comfortably inside any ~60s ingress cutoff
 POLL_INTERVAL_S = 2.0
 MAX_POLL_SECONDS = 180.0  # generous: real calls have been observed taking 45-75s+

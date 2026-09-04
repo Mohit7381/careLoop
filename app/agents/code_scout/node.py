@@ -26,6 +26,7 @@ the remaining routed repos.
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from app.agents.code_scout.assessor import CodeGapAssessor
 from app.agents.code_scout.errors import CodeScoutExternalError
@@ -99,14 +100,29 @@ def seed_search_terms(finding: Finding, assessor: CodeGapAssessor, journey_cfg: 
     return out[:MAX_SEARCH_TERMS]
 
 
+# Findings are independent of each other, so they are scouted concurrently.
+# Run 16 (live) spent ~600 of 909 s in this stage: six findings, each with
+# a search-term proposal, an assessment and a remedy loop, all sequential.
+CODE_SCOUT_WORKERS = 5   # run 19: 8 findings at 3 wide = 3 rounds; 5 wide = 2
+
+
 def code_scout_node(
     state: RunState, *, search_client: SearchClient, assessor: CodeGapAssessor
 ) -> dict:
     journey_cfg = load_journey(state.journey)
-    new_gaps: list[CodeGap] = []
-    for finding in state.findings:
-        new_gaps.extend(_process_finding(finding, search_client, assessor, state.journey,
-                                         journey_cfg, state.drilldown_trail))
+    findings = list(state.findings)
+
+    def scout(finding: Finding) -> list[CodeGap]:
+        return _process_finding(finding, search_client, assessor, state.journey,
+                                journey_cfg, state.drilldown_trail)
+
+    if len(findings) <= 1:
+        per_finding = [scout(f) for f in findings]
+    else:
+        with ThreadPoolExecutor(max_workers=min(CODE_SCOUT_WORKERS, len(findings))) as pool:
+            per_finding = list(pool.map(scout, findings))      # order preserved
+
+    new_gaps: list[CodeGap] = [g for gaps in per_finding for g in gaps]
     return {"code_gaps": [*state.code_gaps, *new_gaps]}
 
 

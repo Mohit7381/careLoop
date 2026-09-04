@@ -73,6 +73,9 @@ const STATUS_MAP: Record<Exclude<RunStatus, 'failed'>, StageStatus[]> = {
 const STAGE_KEYS: StageKey[] = ['fetch', 'analyze', 'code', 'prd'];
 const POLL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 10_000;
+// A PRD rewrite is a real model call on the backend (30-50 s); the generic
+// request timeout would abandon it while it is still working.
+const PRD_CHAT_TIMEOUT_MS = 90_000;
 const DELIVER_TIMEOUT_MS = 8_000;
 const MAX_RETRIES = 2;
 const API_BASE = '/v1/analysis/runs';
@@ -468,7 +471,7 @@ export class RunService {
             { message },
             { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
           )
-          .pipe(timeout(REQUEST_TIMEOUT_MS))
+          .pipe(timeout(PRD_CHAT_TIMEOUT_MS))
       );
       this._run.update((run) => ({
         ...run,

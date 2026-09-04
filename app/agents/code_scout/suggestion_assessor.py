@@ -11,6 +11,7 @@ the other.
 """
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
@@ -211,8 +212,15 @@ class SpherePlatformFeatureSuggestionAssessor:
     """
 
     def __init__(self, base_url: Optional[str] = None, app_token: Optional[str] = None):
-        self.base_url = (base_url or os.environ["SPHERE_BASE_URL"]).rstrip("/")
-        self.app_token = app_token or os.environ["SPHERE_APP_TOKEN"]
+        # Same host/token resolution as every other sphere caller in this
+        # repo. The first live run to reach this node (run 23) died in this
+        # constructor with KeyError: 'SPHERE_BASE_URL' — nothing else reads
+        # that variable.
+        from app.config import get_settings
+        from app.integrations.sphere import SPHERE_BASE, _app_token
+        self.base_url = (base_url or os.environ.get("SPHERE_BASE_URL") or SPHERE_BASE).rstrip("/")
+        self.app_token = app_token or os.environ.get("SPHERE_APP_TOKEN") or _app_token()
+        self.service_type = get_settings().sphere_platform_service_type
 
     def _headers(self) -> dict[str, str]:
         return {"Content-Type": "application/json", "x-app-token": self.app_token}
@@ -225,10 +233,14 @@ class SpherePlatformFeatureSuggestionAssessor:
                 json={
                     "use_case": SPHERE_USE_CASE,
                     "template_id": SPHERE_TEMPLATE_ID,
-                    "service_type": SPHERE_SERVICE_TYPE,
-                    "params": params,
+                    "service_type": self.service_type,
+                    # Template 21689 renders exactly one placeholder, {code_context};
+                    # sphere ignores every other param key silently, so the raw task
+                    # dict here produced an EMPTY prompt. Same convention as
+                    # assessor.py / remedy loop: the whole ctx as one JSON string.
+                    "params": {"code_context": json.dumps(params)},
                 },
-                timeout=30,
+                timeout=75,   # the call is synchronous for the whole model run; ingress cuts at ~60 s
             )
             resp.raise_for_status()
             body = resp.json()

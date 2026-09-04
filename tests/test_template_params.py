@@ -53,3 +53,18 @@ def test_the_factory_always_wraps_under_the_registered_key(monkeypatch, use_case
     assert llm is not None
     llm({"anything": [1, 2], "else": "x"})
     assert set(sent["params"]) == {TEMPLATE_PARAM[use_case]}
+
+
+def test_create_timeout_covers_a_full_synchronous_model_call():
+    """POST /v1/chat-ai/requests blocks for the whole model call (live-verified
+    2026-09-04); a 15 s create timeout killed every real call in run 11. Keep
+    it at or above the ~60 s ingress window so the client, not the gateway,
+    is never the thing that cuts a healthy call."""
+    from app.integrations import sphere
+    assert sphere.CREATE_TIMEOUT_S >= 60
+
+
+def test_prd_chat_edit_is_registered_under_its_placeholder():
+    from app.integrations.sphere import TEMPLATE_PARAM
+    assert TEMPLATE_PARAM["prd-chat-edit"] == "edit_inputs"
+

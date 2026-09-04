@@ -131,3 +131,38 @@ def test_the_floor_does_not_re_query_what_the_model_already_covered(cohort_cuts,
     _, trail = run_drilldown(make_llm(script), tool, GAP, {}, ROUTING, "pharmacy_checkout")
     assert len(trail) == len(tool.rate_bearing_dimensions)
     assert not any("exploration floor" in t.question for t in trail)
+
+
+def test_two_dimensions_in_one_turn_both_land_in_the_trail(cohort_cuts, journey_cfg):
+    """Template 21687 v8 lets the model name a second, untried dimension in
+    next_question.also_dimension; both are aggregated before the next turn,
+    so the same trail costs half the sequential model calls."""
+    llm = make_llm([
+        {"done": False, "next_question": {"dimension": "pd_category", "rationale": "skew",
+                                          "also_dimension": "consultation_required"}},
+        {"done": True, "findings": []},
+    ])
+    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+                             GAP, {}, ROUTING, "pharmacy_checkout", budget=10)
+    assert [s.dimension for s in trail[:2]] == ["pd_category", "consultation_required"]
+    assert trail[1].question.startswith("second cut this turn")
+
+
+def test_a_second_dimension_that_was_already_tried_or_repeats_the_first_is_ignored(cohort_cuts, journey_cfg):
+    llm = make_llm([
+        {"done": False, "next_question": {"dimension": "pd_category", "rationale": "a", "also_dimension": "pd_category"}},
+        {"done": False, "next_question": {"dimension": "consultation_required", "rationale": "b", "also_dimension": "pd_category"}},
+        {"done": True, "findings": []},
+    ])
+    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+                             GAP, {}, ROUTING, "pharmacy_checkout", budget=10)
+    assert [s.dimension for s in trail[:2]] == ["pd_category", "consultation_required"]
+    assert len({s.dimension for s in trail}) == len(trail)        # no dimension cut twice
+
+
+def test_pairs_never_exceed_the_budget(cohort_cuts, journey_cfg):
+    llm = make_llm([{"done": False, "next_question": {"dimension": "pd_category", "rationale": "a",
+                                                       "also_dimension": "consultation_required"}}] * 5)
+    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+                             GAP, {}, ROUTING, "pharmacy_checkout", budget=3)
+    assert len(trail) == 3

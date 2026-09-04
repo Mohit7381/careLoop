@@ -1,3 +1,4 @@
+import json
 """SpherePlatformFeatureSuggestionAssessor - request/response shape only.
 No real SPHERE_APP_TOKEN exists yet, so requests.post is mocked; this proves
 the client builds the right HTTP call and parses the right response shape,
@@ -58,7 +59,11 @@ def test_propose_search_terms_calls_sphere_when_no_journey_events(mock_post):
     assert kwargs["headers"]["x-app-token"] == "tok"
     assert kwargs["json"]["use_case"] == "code-gap-assessment"
     assert kwargs["json"]["template_id"] == 21689
-    assert kwargs["json"]["params"]["task"] == "propose_search_terms"
+    # Template 21689 renders one placeholder, {code_context}; the task dict
+    # travels inside it as a JSON string (a raw dict rendered an empty prompt).
+    sent = json.loads(kwargs["json"]["params"]["code_context"])
+    assert set(kwargs["json"]["params"]) == {"code_context"}
+    assert sent["task"] == "propose_search_terms"
 
 
 @patch("app.agents.code_scout.suggestion_assessor.requests.post")
@@ -92,7 +97,7 @@ def test_propose_suggestions_sends_the_full_inventory_and_parses_the_response(mo
     assert proposals[1].suggestion_type == "business"
     assert proposals[1].signature is None
 
-    sent_params = mock_post.call_args.kwargs["json"]["params"]
+    sent_params = json.loads(mock_post.call_args.kwargs["json"]["params"]["code_context"])
     assert sent_params["inventory"] == [
         {"file": "ConsultationDao.java", "line": 146, "snippet": "..."}
     ]
