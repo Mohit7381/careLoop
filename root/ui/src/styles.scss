@@ -1,88 +1,73 @@
-/* CareLoop design tokens — carried over from the HTML prototype so the
-   Angular build looks identical. Light palette on bare :root; dark palette
-   redefined under prefers-color-scheme AND [data-theme="dark"] so both an
-   OS preference and an explicit toggle (if one is added later) work. */
+/* CareLoop design tokens, in the Halodoc website design language.
+ *
+ * Colours are lifted from web-apps/magneto/halodoc-website-frontend on
+ * master (src/styles/_color.scss and tailwind.config.js), not from memory
+ * of the site:
+ *
+ *   $primary            #e0004d   -> --accent
+ *   $secondary          #53565a   -> --ink-2
+ *   $dark-gray-0        #111111   -> --ink
+ *   $dark-gray-3        #666666   -> --ink-3
+ *   $light-gray-1       #d8d8d8   -> --line-strong
+ *   $light-gray-6       #dedede   -> --line
+ *   $gray-100           #f8f9fa   -> --ground
+ *   $grey-100           #f5f5f5   -> --surface-2
+ *   $dc-green-primary   #2d6548   -> --good
+ *   $dc-orange-text     #cc5200   -> --warn (darkened, see below)
+ *   $dc-orange-secondary #ffe0cc  -> --warn-soft
+ *   $dc-purple-primary  #7e3da2   -> --voc
+ *
+ * Type is Inter throughout (base/_typography.scss). IBM Plex is gone: the
+ * brand ships one family, so figures hold their columns with
+ * `font-variant-numeric: tabular-nums` (.num) rather than a second face.
+ * --font-mono survives only for genuine code — repo paths, file:line,
+ * search terms — which the website's token set has no case for; it points
+ * at the system stack so nothing extra is downloaded.
+ *
+ * Light only, deliberately. The brand has no dark palette, and the dark
+ * blocks that used to live here (prefers-color-scheme and
+ * [data-theme="dark"]) would have overridden this on any machine set to
+ * dark, which is most of them.
+ *
+ * --ink-3 takes $dark-gray-3 rather than $light-gray-4 (#999999). #999 on
+ * white is 2.85:1 — fine for the website's large muted text, but CareLoop
+ * spends this token on 11-12px metadata, where it failed WCAG AA on ~100
+ * elements. #666 is 5.7:1 and still reads as clearly subordinate.
+ *
+ * --warn is $dc-orange-text darkened from #cc5200. The brand value is
+ * 4.4:1 on white and only 3.5:1 on --warn-soft, and this token is spent on
+ * 10-11px confidence and severity chips sitting on exactly that tint.
+ *
+ * --accent is the brand crimson and reads as "action", so --critical is a
+ * distinctly deeper brick red: a red-on-red collision between "primary
+ * button" and "critical finding" is the one real hazard in mapping this
+ * palette onto an analysis UI. */
 :root {
-  --ground: #f6f9fa;
+  --ground: #f8f9fa;
   --surface: #ffffff;
-  --surface-2: #edf3f5;
-  --surface-3: #e3ecef;
-  --ink: #0e1a1f;
-  --ink-2: #54696f;
-  --ink-3: #7e9099;
-  --line: #dbe5e9;
-  --line-strong: #c3d2d8;
-  --accent: #0e7c86;
-  --accent-soft: #dff0f1;
-  --accent-ink: #095c64;
-  --critical: #c62f45;
-  --critical-soft: #fbe7ea;
-  --warn: #a06508;
-  --warn-soft: #fbf0dc;
-  --voc: #6b4e9b;
-  --voc-soft: #efe9f8;
-  --good: #17795e;
-  --good-soft: #e0f2ec;
+  --surface-2: #f5f5f5;
+  --surface-3: #ebebeb;
+  --ink: #111111;
+  --ink-2: #53565a;
+  --ink-3: #666666;
+  --line: #dedede;
+  --line-strong: #d8d8d8;
+  --accent: #e0004d;
+  --accent-soft: #fdeaf1;
+  --accent-ink: #b8003f;
+  --critical: #b3261e;
+  --critical-soft: #fdecea;
+  --warn: #a34200;
+  --warn-soft: #ffe0cc;
+  --voc: #7e3da2;
+  --voc-soft: #f3ecf7;
+  --good: #2d6548;
+  --good-soft: #e8f2ec;
   --shadow:
-    0 1px 2px rgba(14, 26, 31, 0.05),
-    0 8px 24px -12px rgba(14, 26, 31, 0.18);
-  --font-sans:
-    'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --ground: #0d1316;
-    --surface: #151e22;
-    --surface-2: #1c272c;
-    --surface-3: #243136;
-    --ink: #e6eff2;
-    --ink-2: #9bafb7;
-    --ink-3: #76898f;
-    --line: #26343a;
-    --line-strong: #35474e;
-    --accent: #3fb3bd;
-    --accent-soft: #12333a;
-    --accent-ink: #7fd3da;
-    --critical: #f2788b;
-    --critical-soft: #3a1a20;
-    --warn: #e0a94a;
-    --warn-soft: #33260f;
-    --voc: #a98bd8;
-    --voc-soft: #241c36;
-    --good: #4fbf9b;
-    --good-soft: #12302a;
-    --shadow:
-      0 1px 2px rgba(0, 0, 0, 0.4),
-      0 8px 24px -12px rgba(0, 0, 0, 0.6);
-  }
-}
-
-:root[data-theme='dark'] {
-  --ground: #0d1316;
-  --surface: #151e22;
-  --surface-2: #1c272c;
-  --surface-3: #243136;
-  --ink: #e6eff2;
-  --ink-2: #9bafb7;
-  --ink-3: #76898f;
-  --line: #26343a;
-  --line-strong: #35474e;
-  --accent: #3fb3bd;
-  --accent-soft: #12333a;
-  --accent-ink: #7fd3da;
-  --critical: #f2788b;
-  --critical-soft: #3a1a20;
-  --warn: #e0a94a;
-  --warn-soft: #33260f;
-  --voc: #a98bd8;
-  --voc-soft: #241c36;
-  --good: #4fbf9b;
-  --good-soft: #12302a;
-  --shadow:
-    0 1px 2px rgba(0, 0, 0, 0.4),
-    0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    0 1px 2px rgba(17, 17, 17, 0.05),
+    0 8px 24px -12px rgba(17, 17, 17, 0.18);
+  --font-sans: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * {
@@ -92,6 +77,13 @@
 html,
 body {
   height: 100%;
+}
+
+/* The palette is light-only by design, so say so: without this the UA
+   paints native controls — the chat textarea, scrollbars, focus rings —
+   from the OS dark palette on exactly the machines this app now ignores. */
+html {
+  color-scheme: light;
 }
 
 body {
@@ -140,4 +132,105 @@ button {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Rendered PRD markdown (.secbody-read in the PRD drawer).
+ *
+ * These live here rather than in the drawer's own stylesheet because the
+ * elements they target are injected with [innerHTML] and so never carry a
+ * component's _ngcontent attribute — a scoped rule cannot reach them at
+ * all, which is why the first version of this needed ::ng-deep to work.
+ * Global is what these rules honestly are; it also keeps the drawer's
+ * stylesheet under angular.json's 8 kB anyComponentStyle error budget,
+ * which the ::ng-deep version broke (8.55 kB) and only the development
+ * build, which does not enforce budgets, let through. */
+.secbody-read {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.secbody-read p {
+  margin: 0 0 8px;
+}
+
+.secbody-read p:last-child {
+  margin-bottom: 0;
+}
+
+.secbody-read strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.secbody-read code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.secbody-read ul {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.secbody-read li {
+  margin-bottom: 4px;
+}
+
+/* Review quotes. Each is its own blockquote (one per `> ` line), so they
+   stack tightly rather than sitting 47px apart under UA margins. */
+.secbody-read blockquote {
+  margin: 0 0 6px;
+  padding: 6px 0 6px 12px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-2);
+}
+
+.secbody-read blockquote:last-child {
+  margin-bottom: 0;
+}
+
+.secbody-read h2,
+.secbody-read h3,
+.secbody-read h4,
+.secbody-read h5 {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 12px 0 6px;
+}
+
+.secbody-read table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.secbody-read th,
+.secbody-read td {
+  text-align: left;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.secbody-read th {
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.secbody-read .task {
+  color: var(--accent);
+  margin-right: 2px;
+}
+
+.secbody-read ul ul {
+  margin: 4px 0 0;
 }

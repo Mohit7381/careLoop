@@ -141,6 +141,15 @@ section {
   border-color: var(--accent);
   color: #fff;
 }
+/* `.btn:hover` is two classes' worth of specificity and would otherwise
+   beat `.btn-primary`, repainting the primary button --surface-2 while
+   its white label stayed — invisible on a light ground. It read fine
+   only while --surface-2 was dark. */
+.btn-primary:hover:not([disabled]) {
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
+  color: #fff;
+}
 
 .kbd {
   font-family: var(--font-mono);

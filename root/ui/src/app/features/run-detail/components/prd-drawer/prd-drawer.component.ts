@@ -37,6 +37,62 @@ export class PrdDrawerComponent {
    *  `prds[]` yet, so ranks there fall back to one card per finding. */
   readonly selectedRank = signal(1);
 
+  /**
+   * With more than one PRD the drawer opens on a list of cards rather than a
+   * strip of tabs: `#1 #2 #3` says nothing about what each document is, and
+   * a run can draft up to five. Picking one switches to 'doc'; Back returns.
+   * A single-PRD run never sees the list.
+   */
+  readonly view = signal<'list' | 'doc'>('list');
+
+  readonly multiplePrds = computed(() => this.prdRanks().length > 1);
+
+  /** The card's name. Prefer the artifact's own title, then the finding it
+   *  was drafted for — never a bare rank, which is what the tabs showed. */
+  titleFor(rank: number): string {
+    const summary = this.run().prds.find((p) => p.finding_rank === rank);
+    if (summary?.title) return summary.title;
+    const finding = this.run().findings.find((f) => f.rank === rank);
+    // Split on a sentence boundary, not on '.': hypotheses are full of
+    // decimals ("converts at 0.3002 versus 0.3904"), and a bare split left
+    // the card reading "…converts at 0".
+    if (finding) return finding.hypothesis.split(/(?<=[.!?])\s+(?=[A-Z])/)[0].slice(0, 90);
+    return `Finding #${rank}`;
+  }
+
+  openRank(rank: number): void {
+    this.selectRank(rank);
+    this.view.set('doc');
+  }
+
+  backToList(): void {
+    this.view.set('list');
+  }
+
+  /**
+   * Section bodies are markdown. Read mode renders it; edit mode shows the
+   * source in a textarea. Rendering was lost when section editing landed —
+   * the read branch printed the raw source, so `**bold**` and backticks
+   * showed literally. renderPrdMarkdown escapes before it converts, so this
+   * is safe to bind with [innerHTML].
+   *
+   * Rendered once per document rather than per template pass: bound as a
+   * bare method it re-ran every regex in renderPrdMarkdown for every
+   * section on each change-detection cycle, including on every keystroke
+   * in the chat box.
+   */
+  private readonly sectionHtmlById = computed<Record<string, string>>(() => {
+    const d = this.doc();
+    if (!d) return {};
+    const out: Record<string, string> = {};
+    for (const section of d.sections) out[section.id] = renderPrdMarkdown(section.body);
+    return out;
+  });
+
+  sectionHtml(id: string): string {
+    return this.sectionHtmlById()[id] ?? '';
+  }
+
   readonly prdRanks = computed<number[]>(() => {
     const run = this.run();
     if (run.prds.length) return [...run.prds].map((p) => p.finding_rank).sort((a, b) => a - b);
@@ -102,6 +158,14 @@ export class PrdDrawerComponent {
     // edit landing means the sections on screen belong to a different
     // document, so in-progress local edits are dropped rather than silently
     // re-attached to other content.
+    // The card list is the drawer's entry point when there is more than one
+    // PRD, so opening it always lands there rather than resuming whichever
+    // document was last read — which would also survive a switch to a
+    // different run.
+    effect(() => {
+      if (this.open()) this.view.set('list');
+    });
+
     effect(() => {
       const md = this.activeSummary()?.markdown ?? this.run().prd_draft;
       this.doc.set(md?.trim() ? parsePrd(md) : null);

@@ -1,3 +1,40 @@
+/* The shell is a full-height flex column and the routed screen sits in
+ * .shell-main, so a page can fill the viewport without anyone hardcoding
+ * the topbar's height (an earlier calc(100vh - 57px) was 3px off — the
+ * bar is 54px — and leaked a dark strip below the light dashboard).
+ * The outlet is wrapped because a router-inserted component is not part
+ * of this template and so never matches this component's scoped
+ * selectors. */
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar {
+  flex-shrink: 0;
+}
+
+.shell-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* router-outlet is a real element in the DOM, not just an anchor: left as
+ * a flex child it grows and pushes the routed screen to the bottom of the
+ * viewport. The screen itself does not need to grow — .shell-main paints
+ * the ground behind it. */
+.shell-main > router-outlet {
+  display: none;
+}
+
+/* Paints the area a short page does not cover, so the ground runs to the
+ * bottom of the viewport. */
+.shell-main {
+  background: var(--ground);
+}
+
 .topbar {
   position: sticky;
   top: 0;

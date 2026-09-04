@@ -7,3 +7,9 @@ __pycache__/
 careloop.db
 data/
 .pytest_cache/
+
+# Angular build cache — ng writes this at the repo root when invoked
+# from root/ui, where that .gitignore rule ("/.angular/cache") cannot
+# reach it. Unignored, "git add -A" commits ~2MB of .tsbuildinfo and
+# compiler lock files.
+.angular/
