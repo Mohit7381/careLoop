@@ -149,13 +149,13 @@
           <input
             class="dchat-input"
             type="text"
-            placeholder="e.g. &quot;title: Rescue rx-gated checkout&quot; or &quot;remove FR-2&quot;"
+            placeholder="Ask for a change in plain words, e.g. &quot;make the success metrics measurable&quot;, &quot;title: Rescue rx-gated checkout&quot;, &quot;remove FR-2&quot;"
             [value]="chatInput()"
             (input)="chatInput.set($any($event.target).value)"
             [disabled]="chatBusy()"
           />
           <button class="btn" type="submit" [disabled]="chatBusy() || !chatInput().trim()">
-            {{ chatBusy() ? 'Sending…' : 'Send' }}
+            {{ chatBusy() ? 'Rewriting…' : 'Send' }}
           </button>
         </form>
       }
