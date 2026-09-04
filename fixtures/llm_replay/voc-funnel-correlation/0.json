@@ -1,5 +1,0 @@
-{
- "correlated": true,
- "theme": "cs/support",
- "rationale": "The finding describes users stalling mid-flow after an unresolved issue with no path forward. The 'cs/support' theme's sample quotes independently describe slow or unreachable customer service at that same point in the journey - both plausibly describe the same missing real-time-support capability, even though this finding's own stage was never pre-mapped to cs/support in the journey config."
-}

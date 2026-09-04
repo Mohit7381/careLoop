@@ -132,9 +132,15 @@ def corroborate(warehouse_findings: list[Finding], voc: Voc,
             f.theme, f.review_count = hit
 
 
-CORRELATION_FLOOR = 3   # smaller than CORROBORATION_FLOOR: reasoning gets more
-                        # benefit of the doubt than a blind count match does,
-                        # but a 1-2 review cluster is still noise either way.
+CORRELATION_FLOOR = CORROBORATION_FLOOR  # PR #12 review point 4 (Nakul): originally
+                        # set lower than CORROBORATION_FLOOR on the theory that
+                        # reasoning deserves more benefit of the doubt than a blind
+                        # count match. That's the more debatable assumption, not the
+                        # safer one - an LLM has no particular immunity to a false
+                        # positive on thin data, and this codebase is consistently
+                        # conservative about evidence thresholds elsewhere (k>=25
+                        # suppression, the 20-review escalation floor). Keeping both
+                        # passes at the same floor is the more defensible default.
 CORRELATION_BUDGET = 3  # LLM calls spent on this pass, mirrors phase2's
                         # drill-down budget discipline - only the top-N
                         # still-uncorrelated findings get a reasoning pass,
