@@ -4,7 +4,7 @@ import { EMPTY, Subscription, firstValueFrom, timer } from 'rxjs';
 import { catchError, switchMap, tap, timeout } from 'rxjs/operators';
 
 import { RUN_47_RESPONSE } from '../fixtures/run-47.fixture';
-import { RunDetailResponse, RunState, RunStatus, SnapshotRow } from '../models/run-state';
+import { PrdSummary, RunDetailResponse, RunState, RunStatus, SnapshotRow } from '../models/run-state';
 import { environment } from '../../../environments/environment';
 
 export type StageKey = 'fetch' | 'analyze' | 'code' | 'prd';
@@ -126,6 +126,7 @@ function toRunState(r: RunDetailResponse): RunState {
     trend_report: { deltas: [], adoption: [], voc_theme_deltas: [], narrative: '' },
     voc: r.voc,
     prd_draft: r.prd_markdown ?? null,
+    prds: r.prds ?? [],
     artifacts: (r.artifacts ?? []).map((a) => a.uri),
   };
 }
@@ -358,6 +359,51 @@ export class RunService {
       return { delivered: !!res?.delivered, detail: res?.detail };
     } catch {
       return { delivered: false, detail: 'delivery endpoint unreachable' };
+    }
+  }
+
+  /**
+   * POST /v1/analysis/runs/{id}/prd/{rank}/chat — chat-style PRD editing
+   * (prd_editor.py). Recognises a handful of concrete instructions ("title:
+   * ...", "remove FR-3"); anything else gets appended to the PRD as an
+   * unresolved reviewer request and an honest reply saying so — there is no
+   * LLM rewrite path wired up yet, so this never fabricates an edit it
+   * didn't actually make.
+   *
+   * Only meaningful against a live run (the PRD has to exist as a
+   * `RunArtifact` row/file on the backend); callers should gate this behind
+   * `source() === 'live'`, same discipline as `deliver()`.
+   *
+   * On success, patches the local `prds[]` signal in place so the drawer
+   * reflects the edit without a re-poll.
+   */
+  async chatOnPrd(
+    runId: number,
+    rank: number,
+    message: string
+  ): Promise<{ reply: string; markdown: string; applied: boolean } | { error: string }> {
+    try {
+      const res = await firstValueFrom(
+        this.http
+          .post<{ finding_rank: number; reply: string; markdown: string; applied: boolean }>(
+            `${API_BASE}/${runId}/prd/${rank}/chat`,
+            { message },
+            { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
+          )
+          .pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      this._run.update((run) => ({
+        ...run,
+        prds: run.prds.map((p): PrdSummary => (p.finding_rank === rank ? { ...p, markdown: res.markdown, edited: true } : p)),
+      }));
+      return { reply: res.reply, markdown: res.markdown, applied: res.applied };
+    } catch (err) {
+      if (err instanceof HttpErrorResponse) {
+        if (err.status === 401) return { error: 'not authorised — check APP_TOKEN' };
+        if (err.status === 404) return { error: 'no PRD found for this run/finding' };
+        return { error: describeError(err) };
+      }
+      return { error: 'request timed out' };
     }
   }
 

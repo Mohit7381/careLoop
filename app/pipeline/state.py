@@ -30,7 +30,8 @@ class GraphState(TypedDict, total=False):
     code_gaps: list[dict[str, Any]]    # Agent 3 (Code Scout) — Harshit
     trend_report: dict[str, Any]       # Reporter — Mohit
     voc: dict[str, Any]
-    prd_draft: Optional[str]           # PRD Generator — Mohit
+    prd_draft: Optional[str]           # PRD Generator — Mohit; #1 finding's PRD only, kept for back-compat
+    prd_drafts: list[dict[str, Any]]   # PRD Generator — Mohit; one per finding (up to MAX_PRDS_PER_RUN), NEW
     artifacts: list[dict[str, str]]    # [{kind, uri}]
 
     error: Optional[str]
@@ -62,6 +63,7 @@ def initial_state(
         trend_report={},
         voc={},
         prd_draft=None,
+        prd_drafts=[],
         artifacts=[],
         error=None,
     )
