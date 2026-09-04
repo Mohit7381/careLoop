@@ -78,49 +78,25 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
     trail: list[DrilldownStep] = []
     findings: list[Finding] = []
     for _ in range(budget + 1):  # +1: final synthesis turn after budget exhausts
-        tried = {s.dimension for s in trail}
-        untried_rate_bearing = [d for d in tool.rate_bearing_dimensions if d not in tried]
         ctx = {
             "top_gap": top_gap,
             "phase1": phase1_summary,
             "drilldown_trail": [s.model_dump() for s in trail],
             # only dimensions that actually HAVE cohort data — asking for others wastes budget
             "allowed_dimensions": tool.dimensions_with_data,
-            # of those, the ones carrying `converted` — the only cuts that can
-            # show one segment converting worse than another. Prefer these.
-            "rate_bearing_dimensions": tool.rate_bearing_dimensions,
-            "rate_bearing_not_yet_tried": untried_rate_bearing,
-            "dimensions_already_tried": sorted(tried),
+            "dimensions_already_tried": sorted({s.dimension for s in trail}),
             "budget_remaining": budget - len(trail),
         }
         out = llm(ctx)
         if out.get("findings"):
             findings = _parse_findings(out["findings"], journey_routing_keys, routing_for_gap)
-
-        if len(trail) >= budget:
+        if out.get("done") or len(trail) >= budget:
             break
-
-        if out.get("done"):
-            # EXPLORATION FLOOR. Concluding while a rate-bearing cut is still
-            # untried is the one stopping condition we do not accept: those are
-            # the only dimensions that can show a conversion gap, and a live run
-            # was observed declaring done=True after 3 of 10 turns having never
-            # looked at stock_status — which carries a 35.8pp spread against the
-            # 9pp one it settled for. The choice of WHICH untried dimension is
-            # deterministic (first alphabetically), not a second LLM call, so the
-            # floor cannot itself be argued away by the model.
-            if not untried_rate_bearing:
-                break
-            dim = untried_rate_bearing[0]
-            rationale = (f"exploration floor: rate-bearing dimension '{dim}' was never "
-                         f"tried, so the run cannot conclude yet")
-        else:
-            nq = out.get("next_question") or {}
-            dim = nq.get("dimension", "")
-            rationale = nq.get("rationale", f"cut by {dim}")
+        nq = out.get("next_question") or {}
+        dim = nq.get("dimension", "")
         result = tool.aggregate(top_gap.get("to_stage", "confirmed"), dim)
         trail.append(DrilldownStep(
-            question=rationale,
+            question=nq.get("rationale", f"cut by {dim}"),
             dimension=dim,
             result_rows=result.get("rows", []),
             note=("no cohort data — pick from dimensions_with_data" if result.get("no_data")

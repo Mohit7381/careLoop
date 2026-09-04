@@ -1,56 +1,8 @@
 {
- "done": true,
- "findings": [
-  {
-   "stage": "created\u00021confirmed (top gap)",
-   "evidence": [
-    "created: 647191",
-    "confirmed: 229622",
-    "lost: 417569",
-    "conversion_from_previous: 0.3548",
-    "share_of_prev: 0.6452"
-   ],
-   "segments": [
-    "overall"
-   ],
-   "confidence": "high",
-   "hypothesis": "A large proportion of orders never progress from created to confirmed (417,569 lost; conversion 0.3548). This is a system-level funnel gap worth prioritizing for remediation rather than a small edge-case.",
-   "confirm_via": "Run an experiment that targets the full created cohort with a lightweight confirmation nudge (A/B test sending an in-app/email nudge immediately after creation) and measure lift in confirmed count and conversion_from_previous versus control."
-  },
-  {
-   "stage": "created\u00021confirmed (explained vs unexplained loss)",
-   "evidence": [
-    "user_total: 199417",
-    "artifact_total: 42107",
-    "user abandon the cart: 111993",
-    "user clicked back: 83517",
-    "items unavailable: 3907",
-    "address changed: 35111",
-    "add items: 6996",
-    "artifact_share: 0.1743"
-   ],
-   "segments": [
-    "user_reasons",
-    "artifact_reasons"
-   ],
-   "confidence": "medium",
-   "hypothesis": "Documented user and artifact reasons explain a substantial but incomplete portion of the top gap (user_total: 199417 + artifact_total: 42107 = explained portion). A meaningful remainder of the 417,569 loss (i.e., ~176k) is unexplained by reason clusters and likely due to other operational or UX factors.",
-   "confirm_via": "Add an experimented telemetry/mandatory reason capture for a representative sample of created orders (force a lightweight reason selection or passive event capture) to shrink the unexplained bucket and validate which new reason(s) account for the remaining ~176k loss."
-  },
-  {
-   "stage": "created\u00021confirmed (consultation_required cut)",
-   "evidence": [
-    "segment: rx_gated, entered: 255293, converted: 76641, rate: 0.3002",
-    "segment: non_rx, entered: 391898, converted: 152981, rate: 0.3904"
-   ],
-   "segments": [
-    "rx_gated",
-    "non_rx"
-   ],
-   "confidence": "medium",
-   "hypothesis": "Orders labeled rx_gated have materially lower confirmation rate (rate: 0.3002) than non_rx orders (rate: 0.3904); because rx_gated is large (entered: 255293) it accounts for a big share of the top gap. This is a correlation that suggests consultation-related friction is a major contributor to the unexplained loss.",
-   "confirm_via": "Run a controlled experiment that reduces friction for rx_gated orders (e.g., prioritized clinician callbacks, express consultation slots, or automated triage) and measure change in rx_gated conversion (converted and rate) versus control; if conversion increases toward non_rx levels, consultation friction is causal."
-  }
- ],
- "next_question": null
+ "done": false,
+ "findings": [],
+ "next_question": {
+  "dimension": "price_band",
+  "rationale": "The top gap (created -> confirmed) is large: lost 417,569 (share_of_prev 0.6452). The provided reason clusters only account for part of that loss: user_total 199,417 + artifact_total 42,107 = 241,524, leaving ~176,045 losses unallocated. The abandon_reason drill shows fragments: \"user abandon the cart\" 111,993; \"user clicked back\" 83,517; \"address changed\" 35,111; \"add items\" 6,996; \"items unavailable\" 3,907, and was marked distribution_only. Cut by price_band next to see whether the remaining/total loss concentrates in higher price bands (which would point to price sensitivity) versus being spread evenly (which would point toward UX/flow issues or category effects). If price_band shows concentration, confirm via an A/B experiment offering targeted discounts or price messaging to that band."
+ }
 }
