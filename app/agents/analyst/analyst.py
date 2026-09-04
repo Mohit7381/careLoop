@@ -58,6 +58,28 @@ def run_analyst(state: RunState,
     clusters = phase1.cluster_reasons(state.snapshot.reasons, cfg["artifact_reasons"])
     summary = {"funnel": table, "reason_clusters": clusters}
 
+    # ---- VoC classification (before the drill-down) ----
+    # Themes are classified first so the drill-down model can see them as
+    # voc_signals and use a large, unescalated theme to pick its next cut.
+    # Ranks are assigned afterwards: VoC findings always sit after warehouse
+    # findings, so they are re-ranked once the drill-down is done.
+    voc_findings: list = []
+    voc = None
+    if reviews is None and state.demo_mode:
+        rv_path = FIXTURES / state.journey / "reviews_scrubbed.json"
+        reviews = json.loads(rv_path.read_text()) if rv_path.exists() else []
+    if reviews:
+        reviews, window_meta = phase3_voc.filter_by_days(reviews, state.scope.review_days)
+        themes_per_review, voc_meta = classify_reviews(
+            voc_llm, reviews, cfg["voc"]["themes"], phase3_voc.classify_review,
+            scope_hint=state.scope.prompt)
+        voc_findings, voc = run_voc(reviews, cfg["voc"], 1,
+                                    themes_per_review=themes_per_review,
+                                    extra_meta={**window_meta,
+                                                "classifier": voc_meta["classifier"]})
+    voc_signals = [{"theme": t["theme"], "count": t["count"], "escalated": t["escalated"]}
+                   for t in (voc.themes if voc else []) if t["theme"] != "unmapped"]
+
     # ---- phase 2: agentic drill-down ----
     if cohort_cuts is None and state.demo_mode:
         cuts_path = FIXTURES / state.journey / "cohort_cuts.json"
@@ -75,7 +97,7 @@ def run_analyst(state: RunState,
     tool = AggregateTool(cohort_cuts or {}, whitelist)
     findings, trail = run_drilldown(
         llm, tool, gap or {}, summary, routing_keys,
-        _default_routing_for_gap(gap or {}, cfg))
+        _default_routing_for_gap(gap or {}, cfg), voc_signals=voc_signals)
 
     # ---- evidence gate (accepts every number the model was shown) ----
     shown = collect_numbers(summary) | collect_numbers(gap or {})
@@ -86,22 +108,11 @@ def run_analyst(state: RunState,
         # seed material for Code Scout than hypothesis-prose splitting.
         f.journey_events = journey_events_for(f, state.snapshot.ct_events)
 
-    # ---- phase 3: VoC ----
-    voc_findings: list = []
-    if reviews is None and state.demo_mode:
-        rv_path = FIXTURES / state.journey / "reviews_scrubbed.json"
-        reviews = json.loads(rv_path.read_text()) if rv_path.exists() else []
-    if reviews:
-        reviews, window_meta = phase3_voc.filter_by_days(reviews, state.scope.review_days)
-        themes_per_review, voc_meta = classify_reviews(
-            voc_llm, reviews, cfg["voc"]["themes"], phase3_voc.classify_review,
-            scope_hint=state.scope.prompt)
+    # ---- VoC findings: ranked after the warehouse findings ----
+    if voc is not None:
         next_rank = (max((f.rank for f in kept), default=0)) + 1
-        voc_findings, voc = run_voc(reviews, cfg["voc"], next_rank,
-                                    themes_per_review=themes_per_review,
-                                    extra_meta={**window_meta,
-                                                "classifier": voc_meta["classifier"]})
-        for f in voc_findings:
+        for i, f in enumerate(voc_findings):
+            f.rank = next_rank + i
             validate_routing_stage(f.stage, routing_keys)
         corroborate(kept, voc, cfg["voc"])
         state.voc = voc

@@ -75,3 +75,38 @@ def test_rejected_findings_are_reported_not_swallowed(cohort_cuts, reviews):
     out = run_analyst(state, llm=llm, cohort_cuts=cohort_cuts, reviews=reviews)
     assert not [f for f in out.findings if f.origin == "warehouse"]
     assert out.findings_rejected and "no evidence" in out.findings_rejected[0]["reason"]
+
+
+def test_drilldown_sees_voc_signals_and_voc_findings_rank_last(cohort_cuts, reviews):
+    """The v7 prompt tells the model about voc_signals, so the drill-down must
+    actually receive them: review themes are classified BEFORE phase 2 now.
+    Ranks still put every VoC finding after every warehouse finding, and a
+    review count is never accepted as warehouse evidence."""
+    import json
+    from app.schemas.contracts import RunState, Snapshot
+    state = RunState(run_id=1, journey="pd_checkout", window_start="a", window_end="b",
+                     status="analyzing",
+                     snapshot=Snapshot(**json.loads((FIX / "snapshot.json").read_text())))
+    seen = []
+
+    def llm(ctx):
+        seen.append(ctx)
+        if len(seen) == 1:
+            return {"done": False, "next_question": {"dimension": "consultation_required",
+                                                     "rationale": "rx"}}
+        return {"done": True, "findings": [
+            {"hypothesis": "rx-gated orders confirm at 30.0% vs 39.0%", "stage": "pharmacy_checkout",
+             "confidence": "high", "evidence": ["255293", "76641"], "confirm_via": "A/B a resume nudge"},
+            {"hypothesis": "41 reviews say payment", "stage": "payments", "confidence": "high",
+             "evidence": ["41"], "confirm_via": "correlate reviews with funnel"}]}
+
+    out = run_analyst(state, llm=llm, cohort_cuts=cohort_cuts, reviews=reviews)
+
+    signals = seen[0]["voc_signals"]
+    assert signals and {"theme", "count", "escalated"} <= set(signals[0])
+    assert all(s["theme"] != "unmapped" for s in signals)
+    # the review-count "finding" was rejected: voc_signals is context, not evidence
+    assert any("41 reviews" in r["finding"] for r in out.findings_rejected)
+    wh = [f for f in out.findings if f.origin == "warehouse"]
+    voc = [f for f in out.findings if f.origin == "voc"]
+    assert wh and voc and min(f.rank for f in voc) > max(f.rank for f in wh)

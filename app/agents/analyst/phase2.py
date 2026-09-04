@@ -9,7 +9,7 @@ drilldown_trail — the trail renders in the UI and is half the demo.
 """
 import json
 import re
-from typing import Any, Callable
+from typing import Optional, Any, Callable
 
 _NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
@@ -73,7 +73,8 @@ def _glued(s: str, start: int, end: int) -> bool:
 
 def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
                   phase1_summary: dict, journey_routing_keys: list[str],
-                  routing_for_gap: str, budget: int = BUDGET
+                  routing_for_gap: str, budget: int = BUDGET,
+                  voc_signals: Optional[list[dict]] = None,
                   ) -> tuple[list[Finding], list[DrilldownStep]]:
     trail: list[DrilldownStep] = []
     findings: list[Finding] = []
@@ -92,6 +93,11 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             "rate_bearing_not_yet_tried": untried_rate_bearing,
             "dimensions_already_tried": sorted(tried),
             "budget_remaining": budget - len(trail),
+            # Review themes, classified BEFORE the drill-down so the model can
+            # use them to choose a cut. Context only: the evidence gate never
+            # adds these counts to `shown`, so a finding that cites one is
+            # rejected — funnel magnitudes stay warehouse-sourced.
+            "voc_signals": voc_signals or [],
         }
         out = llm(ctx)
         if out.get("findings"):
