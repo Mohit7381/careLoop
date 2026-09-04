@@ -1,43 +1,57 @@
 <div class="wrap">
-  <div class="head">
-    <div>
-      <h1>CareLoop</h1>
-      <p class="sub">funnel drop-off analysis · runs dashboard</p>
+  <header class="head">
+    <div class="head-text">
+      <h1>Runs</h1>
+      <p class="sub">Funnel drop-off analysis across the pharmacy delivery journey.</p>
     </div>
-    <div class="chip-env">data: prod snapshot · 26 Aug – 2 Sep 2026</div>
-    <button class="btn btn-primary" type="button" [disabled]="creating()" (click)="newAnalysis()">
-      {{ creating() ? 'Starting…' : 'New analysis' }}
-    </button>
-  </div>
+
+    <div class="head-actions">
+      <span class="chip-env"><span class="dot" aria-hidden="true"></span>prod snapshot · 26 Aug – 2 Sep 2026</span>
+      <button class="btn btn-primary" type="button" [disabled]="creating()" (click)="newAnalysis()">
+        {{ creating() ? 'Starting…' : 'New analysis' }}
+      </button>
+    </div>
+  </header>
 
   @if (createError(); as err) {
-    <div class="create-error">{{ err }}</div>
+    <div class="create-error" role="alert">{{ err }}</div>
   }
 
-  <div class="tablewrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Run</th>
-          <th>Window</th>
-          <th>Status</th>
-          <th>Top finding</th>
-          <th class="num-col">Findings</th>
-          <th>Triggered</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (row of rows; track row.id) {
-          <tr class="row" (click)="open(row.id)">
-            <td class="mono">#{{ row.id }}</td>
-            <td class="mono">{{ row.window }}</td>
-            <td><span class="pill" [class]="row.status">{{ row.status }}</span></td>
-            <td class="finding">{{ row.topFinding }}</td>
-            <td class="num-col mono">{{ row.findingsCount }}</td>
-            <td class="mono ink3">{{ row.timestamp }}</td>
+  <section class="runs">
+    <h2 class="section-label">Recent runs</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Run</th>
+            <th scope="col">Window</th>
+            <th scope="col">Status</th>
+            <th scope="col">Top finding</th>
+            <th scope="col" class="num-col">Findings</th>
+            <th scope="col">Triggered</th>
           </tr>
-        }
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody>
+          @for (row of rows; track row.id) {
+            <tr
+              class="row"
+              tabindex="0"
+              [attr.aria-label]="'Open run ' + row.id"
+              (click)="open(row.id)"
+              (keydown.enter)="open(row.id)"
+              (keydown.space)="$event.preventDefault(); open(row.id)"
+            >
+              <td class="c-run">#{{ row.id }}</td>
+              <td class="c-window">{{ row.window }}</td>
+              <td class="c-status"><span class="pill" [class]="row.status">{{ row.status }}</span></td>
+              <td class="c-finding">{{ row.topFinding }}</td>
+              <td class="c-count num-col">{{ row.findingsCount }}</td>
+              <td class="c-time">{{ row.timestamp }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
 </div>

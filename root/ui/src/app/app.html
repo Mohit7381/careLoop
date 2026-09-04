@@ -1,4 +1,4 @@
-<div class="topbar">
+<div class="topbar" [class.topbar-hd]="lightShell()">
   <div class="topbar-in">
     <a class="brand" routerLink="/runs">
       <span class="brand-mark">Care<span class="accent">Loop</span></span>
@@ -7,4 +7,6 @@
   </div>
 </div>
 
-<router-outlet />
+<main class="shell-main" [class.shell-main-hd]="lightShell()">
+  <router-outlet />
+</main>
