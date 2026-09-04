@@ -10,12 +10,12 @@ Fetcher ─▶ Analyst ─▶ Code Scout ─▶ Suggestion ─▶ Reporter ─�
 
 - **Fetcher** — data aggregation layer, brings data from various sources.
 - **Analyst** — funnel-gap detection → agentic drill-down → VoC classification/escalation/corroboration → LLM correlation pass.
-- **Code Scout** — routes a finding to its repo, locates the mechanism, runs the Remedy Loop (verifies ≤3 proposed fixes against source). Read-only.
+- **Code Scout** — routes a finding to its repo, locates the mechanism, runs the Remedy Loop (verifies ≤3 proposed fixes against source).
 - **Suggestion** — Code Scout's generative sibling: proposes business/tech/process improvements per finding.
 - **Reporter** — period-over-period deltas + narrative.
-- **Feature Generator** — one draft PRD per finding from findings + gaps + suggestions + trend + quotes. Always stamped `DRAFT`.
+- **Feature Generator** — one draft PRD per finding from findings + gaps + suggestions + trend.
 - **Report Writer** — renders the Markdown report.
-- **Delivery** — sends to Garuda, only after a human clicks Approve.
+- **Delivery** — presents the finding on UI.
 
 ## Steps to host the changes locally
 
