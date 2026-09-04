@@ -33,7 +33,7 @@ BATCH_SIZE = 20          # 40 ran 50-75 s per call and the ingress in front of s
                          # (our log: HTTP 504; sphere's log: SUCCESS at 74 s). 20 keeps calls ~20-35 s.
 MAX_TEXT_CHARS = 400     # reviews are short; this only guards a pathological one
 NEGATIVE_MAX_SCORE = 2   # mirrors phase3_voc: only these are ever bucketed into themes
-PARALLEL_BATCHES = 3     # sphere calls for 21688 run ~45 s each; three in flight is polite
+PARALLEL_BATCHES = 5     # 92 negatives = 5 batches of 20; five in flight is one round (~40 s) instead of two
 
 LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
 

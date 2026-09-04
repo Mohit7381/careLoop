@@ -48,16 +48,17 @@ class SphereRequestTimedOut(RuntimeError):
 # instead of failing fast. Worth confirming against a real run.
 _TERMINAL_FAILURE_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
 
-# 15s ("just enqueuing the job — should return almost immediately") was only safe for an ASYNC
-# use case (is_async: true), which hands back a request_id right away. Live-confirmed 2026-09-04
-# that a SYNC use case (is_async: false, e.g. prd-chat-edit as provisioned) makes the create call
-# itself BE the LLM call — it blocks until the model finishes — so a real PRD-sized edit request
-# timed out at 15s with no request_id ever issued to poll against (_data_or_poll() only starts
-# polling once one exists). Raised to 60s, matching the ~60s ingress gateway cutoff documented
-# below: going past that wouldn't help anyway, the connection gets killed there regardless of
-# client timeout. The real fix is flipping the use case to is_async: true in AI Studio so this
-# client gets a request_id back immediately instead of blocking on the create call at all.
-CREATE_TIMEOUT_S = 60
+# LIVE-VERIFIED 2026-09-04 (Nakul): POST /v1/chat-ai/requests is SYNCHRONOUS on
+# our sphere deployment — it returns status=SUCCESS with the data inline after the
+# whole model call (8.5 s for a 3-review VoC batch; 30-50 s for an Analyst turn),
+# and GET /v1/chat-ai/requests/{id} on that id then reports status=INIT with no
+# data, so the poll path below can never complete a request the create call did
+# not. The create timeout therefore has to cover the full model call. 15 s cut
+# off every real call in run 11 (Analyst + all five VoC batches: "timed out") —
+# and independently cut off a real PRD-sized prd-chat-edit request the same way.
+# The ingress in front of sphere closes held connections at ~60 s, so anything
+# past that is the ingress's 504, not ours — keep individual calls small instead.
+CREATE_TIMEOUT_S = 75
 POLL_TIMEOUT_S = 15      # one status check — comfortably inside any ~60s ingress cutoff
 POLL_INTERVAL_S = 2.0
 MAX_POLL_SECONDS = 180.0  # generous: real calls have been observed taking 45-75s+

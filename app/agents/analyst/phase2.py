@@ -71,6 +71,9 @@ def _glued(s: str, start: int, end: int) -> bool:
     return (before.isalpha() or before == "_") or (after.isalpha() or after == "_")
 
 
+CUTS_PER_TURN = 2
+
+
 def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
                   phase1_summary: dict, journey_routing_keys: list[str],
                   routing_for_gap: str, budget: int = BUDGET,
@@ -106,6 +109,10 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
         if len(trail) >= budget:
             break
 
+        # Up to CUTS_PER_TURN dimensions are aggregated per model turn. Each turn
+        # is a ~20 s sphere call and the turns are inherently sequential, so
+        # letting the model name a second dimension (next_question.also_dimension,
+        # template 21687 v8) halves the number of turns for the same trail.
         if out.get("done"):
             # EXPLORATION FLOOR. Concluding while a rate-bearing cut is still
             # untried is the one stopping condition we do not accept: those are
@@ -117,20 +124,27 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             # floor cannot itself be argued away by the model.
             if not untried_rate_bearing:
                 break
-            dim = untried_rate_bearing[0]
-            rationale = (f"exploration floor: rate-bearing dimension '{dim}' was never "
-                         f"tried, so the run cannot conclude yet")
+            cuts = [(d, f"exploration floor: rate-bearing dimension '{d}' was never "
+                        f"tried, so the run cannot conclude yet")
+                    for d in untried_rate_bearing[:CUTS_PER_TURN]]
         else:
             nq = out.get("next_question") or {}
             dim = nq.get("dimension", "")
-            rationale = nq.get("rationale", f"cut by {dim}")
-        result = tool.aggregate(top_gap.get("to_stage", "confirmed"), dim)
-        trail.append(DrilldownStep(
-            question=rationale,
-            dimension=dim,
-            result_rows=result.get("rows", []),
-            note=("no cohort data — pick from dimensions_with_data" if result.get("no_data")
-                  else "rejected: not whitelisted" if "error" in result
-                  else "distribution_only" if result.get("distribution_only") else None),
-        ))
+            cuts = [(dim, nq.get("rationale", f"cut by {dim}"))]
+            also = (nq.get("also_dimension") or "").strip()
+            if also and also != dim and also not in tried:
+                cuts.append((also, f"second cut this turn: {also}"))
+
+        for dim, rationale in cuts:
+            if len(trail) >= budget:
+                break
+            result = tool.aggregate(top_gap.get("to_stage", "confirmed"), dim)
+            trail.append(DrilldownStep(
+                question=rationale,
+                dimension=dim,
+                result_rows=result.get("rows", []),
+                note=("no cohort data — pick from dimensions_with_data" if result.get("no_data")
+                      else "rejected: not whitelisted" if "error" in result
+                      else "distribution_only" if result.get("distribution_only") else None),
+            ))
     return findings, trail

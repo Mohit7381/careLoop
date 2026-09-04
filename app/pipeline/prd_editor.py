@@ -2,23 +2,25 @@
 Chat-style PRD editing. OWNER: Mohit.
 
 A human reviewing a DRAFT PRD can ask for a change in plain language
-instead of hand-editing markdown. The two recognized-intent branches below
-(title rename, remove FR-N) are always tried first regardless of whether an
-LLM is wired in — they're free, deterministic, and don't need a network
-call. Anything else goes through the `prd-chat-edit` sphere use case when
-one is passed in; when it isn't (no template provisioned yet, or the call
-fails, or the response doesn't survive the same grounding check the PRD
-generator itself uses), it's honest that it can't apply the change
-autonomously rather than pretending a rewrite happened — same
-"insufficient capability is a valid output, don't fabricate" discipline
-used everywhere else in this pipeline.
+instead of hand-editing markdown. Two tiers:
 
-Recognized intents:
-  - "title: <new title>" / "rename title to <new title>" -> renames the H1
-  - "remove FR-<n>" / "delete FR-<n>" -> drops that functional requirement row
-  - anything else -> tried against the LLM if one is wired in; on any
-    failure, appended to Open Questions as a human-flagged note instead of
-    being silently dropped or silently "fixed"
+  fast paths (no network, always available)
+    - "title: <new title>" / "rename title to <new title>" -> renames the H1
+    - "remove FR-<n>" / "delete FR-<n>" -> drops that functional requirement row
+
+  everything else -> a real rewrite through the dedicated `prd-chat-edit`
+    sphere use case (project 7121, use case 12870, template 21791: it receives
+    original_markdown + instruction and returns prd_markdown + a one-line
+    reply for the chat). The rewrite is accepted only if it is a complete
+    document, contains no corrupted control bytes the input didn't already
+    have (a live call was observed replacing em dashes / middle dots / stars
+    with stray control bytes — reproducible, cause unconfirmed, intermittent),
+    and every number it cites was already in the document or the instruction
+    — the same evidence gate the generator uses — and the DRAFT banner is
+    ours, re-inserted if the model dropped it. When no model is available
+    (demo mode without LIVE_LLM) or the draft is rejected, the request is
+    appended to Open Questions as a flagged item and the reply says exactly
+    why, rather than pretending an edit was made.
 """
 import logging
 import re
@@ -27,9 +29,17 @@ from typing import Any, Callable, Optional
 
 from app.agents.evidence_gate import unsupported_numbers
 
-logger = logging.getLogger(__name__)
-
+logger = logging.getLogger("careloop.prd_editor")
 LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
+
+MIN_REVISION_CHARS = 200          # anything shorter is a truncated or empty draft
+# A live call returned prose where every em dash / middle dot / star / plus-minus sign had
+# been replaced by a single control byte (e.g. em-dash "—" -> "\x14") — reproduced against the
+# real prd-chat-edit endpoint 2026-09-04, not a local encoding bug (this repo's own read/write
+# round-trips UTF-8 correctly; confirmed by direct test). Cause not confirmed (sphere-side
+# guardrail or transport), but the fix has to live here regardless: never ship visibly-corrupted
+# prose just because the length/number checks below don't catch it.
+_BAD_CONTROL_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 @dataclass
@@ -41,20 +51,7 @@ class EditResult:
 
 _TITLE_RE = re.compile(r"^(?:title:\s*|rename title to\s+)(.+)$", re.IGNORECASE)
 _REMOVE_FR_RE = re.compile(r"\b(?:remove|delete)\s+fr[-\s]?(\d+)\b", re.IGNORECASE)
-# A live call returned prose where every em dash / middle dot / star / plus-minus sign had
-# been replaced by a single control byte (e.g. em-dash "—" -> "\x14") — reproduced against the
-# real prd-chat-edit endpoint 2026-09-04, not a local encoding bug (this repo's own read/write
-# round-trips UTF-8 correctly; confirmed by direct test). Cause not confirmed (sphere-side
-# guardrail or transport), but the fix has to live here regardless: never ship visibly-corrupted
-# prose just because the length/number checks below don't catch it.
-_BAD_CONTROL_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-
-_FALLBACK_REPLY = (
-    "I can't apply that change autonomously — {reason}. Added your request to "
-    "Section 8 (Open Questions) as a flagged item instead of guessing at a "
-    "rewrite. I can rename the title or remove a specific FR-N directly — "
-    "try one of those if that's what you need."
-)
+_BANNER_RE = re.compile(r"^>\s*\*\*DRAFT", re.MULTILINE)
 
 
 def apply_edit_instruction(markdown: str, message: str, llm: Optional[LLMCall] = None) -> EditResult:
@@ -76,42 +73,72 @@ def apply_edit_instruction(markdown: str, message: str, llm: Optional[LLMCall] =
             return EditResult(markdown, f"Couldn't find {fr_id} in this PRD — nothing removed.", applied=False)
         return EditResult("\n".join(kept), f"Removed {fr_id}.", applied=True)
 
-    reason = "no LLM is wired into this edit path"
     if llm is not None:
-        result, reason = _apply_via_llm(markdown, message, llm)
-        if result is not None:
-            return result
+        revised = revise_with_llm(llm, markdown, message)
+        if revised.applied:
+            return revised
+        why = revised.reply
+    else:
+        why = "no model is available for rewrites in this mode (demo mode without LIVE_LLM)"
 
     note = f"- **Reviewer request (unresolved):** {message}"
     new_markdown = markdown.rstrip() + "\n" + note + "\n"
-    return EditResult(new_markdown, _FALLBACK_REPLY.format(reason=reason), applied=False)
+    reply = (
+        f"I couldn't apply that rewrite — {why}. "
+        "Added your request to Section 8 (Open Questions) as a flagged item instead of guessing. "
+        "Renaming the title or removing a specific FR-N always works directly."
+    )
+    return EditResult(new_markdown, reply, applied=False)
 
 
-def _apply_via_llm(markdown: str, message: str, llm: LLMCall) -> tuple[Optional[EditResult], str]:
-    """Returns (result, reason). result is None when the caller should fall
-    back to the honest Open-Questions note; `reason` says why, for the reply."""
-    inputs = {"original_markdown": markdown, "instruction": message}
+def revise_with_llm(llm: LLMCall, markdown: str, instruction: str) -> EditResult:
+    """One revision call. Returns applied=False with the reason on any failure;
+    the caller decides what to do with the document then."""
+    inputs = {"original_markdown": markdown, "instruction": instruction}
     try:
-        out = llm(inputs)
-    except Exception as exc:
-        logger.warning("prd-chat-edit call failed (%s) — honest fallback", exc)
-        return None, "the edit request failed"
+        out = llm({"edit_inputs": inputs})
+    except Exception as exc:                                   # network, sphere FAILED, bad JSON
+        logger.warning("prd-chat-edit call failed (%s)", exc)
+        return EditResult(markdown, f"the model call failed ({type(exc).__name__})", applied=False)
 
-    new_markdown = (out.get("prd_markdown") or "").strip()
-    if len(new_markdown) < 200:
-        logger.warning("prd-chat-edit returned %d chars — honest fallback", len(new_markdown))
-        return None, "the rewrite came back too short to trust"
+    body = (out.get("prd_markdown") or "").strip()
+    if len(body) < MIN_REVISION_CHARS:
+        return EditResult(markdown, "the model returned an empty or truncated document", applied=False)
 
-    bad_chars = set(_BAD_CONTROL_CHARS.findall(new_markdown)) - set(_BAD_CONTROL_CHARS.findall(markdown))
+    bad_chars = set(_BAD_CONTROL_CHARS.findall(body)) - set(_BAD_CONTROL_CHARS.findall(markdown))
     if bad_chars:
-        logger.warning("prd-chat-edit returned corrupted control bytes %s — honest fallback",
+        logger.warning("prd-chat-edit returned corrupted control bytes %s — rejected",
                         [hex(ord(c)) for c in bad_chars])
-        return None, "the rewrite came back with corrupted characters"
+        return EditResult(markdown, "the rewrite came back with corrupted characters", applied=False)
 
-    invented = unsupported_numbers(new_markdown, inputs)
+    invented = unsupported_numbers(body, inputs)
     if invented:
-        logger.warning("prd-chat-edit cited ungrounded numbers %s — honest fallback", invented)
-        return None, "the rewrite cited numbers not present in the PRD or your message"
+        logger.warning("prd revision cited ungrounded numbers %s — rejected", invented)
+        return EditResult(markdown, f"the rewrite cited numbers that are not in the document: {invented}",
+                          applied=False)
 
-    reply = (out.get("reply") or "").strip() or "Updated the PRD per your request."
-    return EditResult(new_markdown, reply, applied=True), ""
+    body = _keep_banner(markdown, body)
+    added, removed = _line_delta(markdown, body)
+    model_reply = " ".join((out.get("reply") or "").split())
+    reply = (model_reply or f"Applied: {instruction}.") + \
+        f" ({added} line(s) added, {removed} removed; every number was already in the document; still a DRAFT.)"
+    return EditResult(body, reply, applied=True)
+
+
+def _keep_banner(original: str, revised: str) -> str:
+    """The banner is ours, not the model's: if the rewrite dropped it, put the
+    original banner back under the title (or at the top)."""
+    if _BANNER_RE.search(revised):
+        return revised
+    banner = next((ln for ln in original.splitlines() if _BANNER_RE.match(ln)), None)
+    if banner is None:
+        return revised
+    lines = revised.splitlines()
+    if lines and lines[0].startswith("#"):
+        return "\n".join([lines[0], "", banner, ""] + lines[1:])
+    return "\n".join([banner, ""] + lines)
+
+
+def _line_delta(before: str, after: str) -> tuple[int, int]:
+    a = set(before.splitlines()); b = set(after.splitlines())
+    return len(b - a), len(a - b)

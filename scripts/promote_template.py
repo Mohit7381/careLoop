@@ -34,6 +34,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--use-case", required=True)
     ap.add_argument("--system-message-file", required=True)
+    ap.add_argument("--output-schema-file", help="optional JSON schema to set alongside the system message")
     ap.add_argument("--apply", action="store_true")
     a = ap.parse_args()
     if not TOKEN:
@@ -45,9 +46,16 @@ def main() -> int:
 
     cur = call(base)
     live = (cur["system_message"] or "").strip()
+    new_schema = json.loads(Path(a.output_schema_file).read_text()) if a.output_schema_file else None
+    schema_changed = new_schema is not None and new_schema != cur.get("output_schema")
     print(f"{a.use_case}: template {uc['template_id']} is at v{cur['version']} (active={cur['is_active']})")
-    if live == new:
-        print("that text is already live — nothing to do."); return 0
+    if live == new and not schema_changed:
+        print("that text (and schema) is already live — nothing to do."); return 0
+    if schema_changed:
+        print("output_schema changes too:")
+        print("\n".join(difflib.unified_diff(json.dumps(cur.get("output_schema"), indent=1).splitlines(),
+                                             json.dumps(new_schema, indent=1).splitlines(),
+                                             fromfile="live", tofile=a.output_schema_file, lineterm="")))
 
     print("\n".join(difflib.unified_diff(live.splitlines(), new.splitlines(),
                                          fromfile=f"live v{cur['version']}", tofile=a.system_message_file,
@@ -56,7 +64,10 @@ def main() -> int:
         print("\nDry run. Re-run with --apply to patch and promote."); return 0
 
     print("\nPATCH (creates a snapshot; does NOT activate it)...")
-    call(base, "PATCH", {"system_message": new})
+    patch = {"system_message": new}
+    if schema_changed:
+        patch["output_schema"] = new_schema
+    call(base, "PATCH", patch)
     versions = call(f"{base}/versions")
     rows = versions["result"] if isinstance(versions, dict) else versions   # {"result": [...]}
     latest = max(int(v["version"]) for v in rows)

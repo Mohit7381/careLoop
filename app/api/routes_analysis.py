@@ -11,9 +11,9 @@ from app.db.base import SessionLocal, get_session
 from app.db.models import AnalysisRun, RunArtifact
 from app.agents.scope_resolver import describe, pick_journey, resolve_scope
 from app.integrations.garuda_client import GarudaDeliveryError, send_report
-from app.integrations.sphere import make_use_case_llm
 from app.journeys import all_journeys, load_journey
 from app.pipeline.prd_editor import apply_edit_instruction
+from fastapi.concurrency import run_in_threadpool
 from app.pipeline.runner import run_pipeline
 from app.schemas.api import (
     CreateRunRequest,
@@ -327,8 +327,12 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
         report_markdown=_read_artifact(run, "report_md"),
         prd_markdown=_rank1_prd_markdown(run),
         prds=[
-            PrdSummary(finding_rank=a.finding_rank, title=a.title, markdown=Path(a.uri).read_text(), edited=a.edited)
-            for a in sorted((a for a in run.artifacts if a.kind == "prd_md"), key=lambda a: a.finding_rank or 0)
+            # prd_md rows written before #6 have no finding_rank; they were always
+            # the #1 finding's PRD, so read them back as rank 1 instead of 500-ing
+            # every GET for an older run.
+            PrdSummary(finding_rank=a.finding_rank if a.finding_rank is not None else 1,
+                       title=a.title, markdown=Path(a.uri).read_text(), edited=bool(a.edited))
+            for a in sorted((a for a in run.artifacts if a.kind == "prd_md"), key=lambda a: a.finding_rank or 1)
         ],
     )
 
@@ -392,6 +396,16 @@ async def get_run_prd(
     return Path(prd.uri).read_text()
 
 
+def _prd_edit_llm(run: AnalysisRun):
+    """Live sphere only. Demo mode replays a recorded *generation*, which would
+    silently replace the reviewer's PRD with a different document — so without
+    LIVE_LLM there is no model here and the editor says so."""
+    from app.integrations.sphere import _live_llm_wanted, make_use_case_llm
+    if not _live_llm_wanted(True):
+        return None
+    return make_use_case_llm(get_settings().llm_use_case_prd_chat_edit, demo_mode=False, journey=run.journey)
+
+
 @router.post(
     "/runs/{run_id}/prd/{rank}/chat",
     response_model=PrdChatResponse,
@@ -416,9 +430,9 @@ async def chat_edit_prd(
         raise HTTPException(status_code=404, detail=f"no PRD drafted for finding #{rank} on this run")
 
     current = Path(artifact.uri).read_text()
-    settings = get_settings()
-    llm = make_use_case_llm(settings.llm_use_case_prd_chat_edit, settings.demo_mode, journey=run.journey)
-    result = apply_edit_instruction(current, body.message, llm=llm)
+    # A rewrite is a 30-50 s sphere call; keep it off the event loop so
+    # polling GETs keep answering while the reviewer waits.
+    result = await run_in_threadpool(apply_edit_instruction, current, body.message, _prd_edit_llm(run))
 
     Path(artifact.uri).write_text(result.markdown)
     artifact.edited = True

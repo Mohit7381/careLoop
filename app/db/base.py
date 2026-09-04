@@ -29,6 +29,13 @@ def init_db() -> None:
     _ensure_column("drop_off_findings", "theme_search_terms", "TEXT NOT NULL DEFAULT '[]'")
     _ensure_column("drop_off_findings", "review_count", "INTEGER")
     _ensure_column("drop_off_findings", "top_quotes", "TEXT NOT NULL DEFAULT '[]'")
+    # #6 multi-PRD: run_artifacts gained per-finding columns; an existing local
+    # careloop.db raised "no such column: run_artifacts.finding_rank" on the
+    # first run after pulling main.
+    _ensure_column("run_artifacts", "finding_rank", "INTEGER")
+    _ensure_column("run_artifacts", "title", "TEXT")
+    _ensure_column("run_artifacts", "edited", "BOOLEAN NOT NULL DEFAULT 0")
+    _ensure_column("run_artifacts", "edited_at", "DATETIME")
 
 
 def _ensure_column(table: str, column: str, ddl_type: str) -> None:

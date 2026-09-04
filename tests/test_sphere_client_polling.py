@@ -64,11 +64,13 @@ def test_polls_until_success(mock_urlopen, mock_sleep):
 
 @patch("app.integrations.sphere.time.sleep")
 @patch("app.integrations.sphere.urllib.request.urlopen")
-def test_poll_calls_use_a_short_timeout_not_one_long_one(mock_urlopen, mock_sleep):
-    """The whole point of polling: no single POLL call should be held open
-    long enough to hit the ~60s ingress cutoff, even though polling overall
-    can run well past 60s. The CREATE call is exempt — for a synchronous use
-    case it IS the LLM call and has to wait for it (see CREATE_TIMEOUT_S)."""
+def test_create_waits_for_the_model_but_polls_stay_short(mock_urlopen, mock_sleep):
+    """Live-verified 2026-09-04: POST /v1/chat-ai/requests is synchronous on
+    our deployment — it returns SUCCESS with the data inline after the whole
+    model call, and the request record then reads INIT, so polling cannot
+    finish what create did not. The create call must therefore be allowed
+    the full model time (up to the ~60 s ingress cutoff, which is the
+    gateway's limit, not ours); only the poll calls need to stay short."""
     mock_urlopen.side_effect = [
         _response({"status": "PENDING", "request_id": "r1"}),
         _response({"status": "SUCCESS", "data": {}}),
@@ -76,9 +78,10 @@ def test_poll_calls_use_a_short_timeout_not_one_long_one(mock_urlopen, mock_slee
 
     _client().call("prd-generation", 21691, {"prd_inputs": "{}"})
 
-    poll_calls = mock_urlopen.call_args_list[1:]
-    assert poll_calls, "expected at least one poll call"
-    for call in poll_calls:
+    create, *polls = mock_urlopen.call_args_list
+    assert create.kwargs["timeout"] >= 60
+    assert polls, "expected at least one poll call"
+    for call in polls:
         assert call.kwargs["timeout"] <= 15
 
 

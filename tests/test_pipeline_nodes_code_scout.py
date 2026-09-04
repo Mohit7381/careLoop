@@ -81,10 +81,13 @@ def test_a_failing_gap_remedy_loop_does_not_abort_other_gaps(mock_run_remedy_loo
     """One gap's run_remedy_loop() blowing up (a GitLab outage mid-
     verification) must not lose the other gaps' already-verified remedies."""
     ok_gap_with_remedies = _gap(2, "timor/fulfilment")
-    mock_run_remedy_loop.side_effect = [
-        CodeScoutExternalError("simulated GitLab outage"),
-        ok_gap_with_remedies,
-    ]
+    # Mechanisms are verified concurrently now, so key the outage on the gap
+    # rather than on call order.
+    def loop(llm, search_fn, gap, summary, repos):
+        if gap.finding_rank == 1:
+            raise CodeScoutExternalError("simulated GitLab outage")
+        return ok_gap_with_remedies
+    mock_run_remedy_loop.side_effect = loop
 
     run_state = RunState(
         run_id=1, window_start="a", window_end="b", demo_mode=False,
@@ -169,3 +172,38 @@ def test_a_failing_assess_call_does_not_crash_and_reports_honestly():
     assert gaps[0].gap_class == "unclassified"
     assert gaps[0].file == "OrderDao.java"
     assert "assessment unavailable" in gaps[0].gap_statement
+
+
+@patch("app.pipeline.nodes.code_scout.run_remedy_loop")
+def test_gaps_sharing_a_mechanism_verify_once_and_share_the_verdicts(mock_run_remedy_loop):
+    """Run 16: three findings pinned OrderAbandonConfiguration.java:8 and each
+    re-ran the same proposal + verification. Verdicts belong to the mechanism,
+    so the loop runs once per (repo, file, line) and siblings reuse them."""
+    from app.schemas.contracts import Remedy
+
+    def loop(llm, search_fn, gap, summary, repos):
+        gap.remedies = [Remedy(proposal=f"fix for {gap.file}:{gap.line}", signature="sig",
+                               status="absent", searched_terms=["x"])]
+        return gap
+    mock_run_remedy_loop.side_effect = loop
+
+    run_state = RunState(
+        run_id=1, window_start="a", window_end="b", demo_mode=False,
+        findings=[_finding(1), _finding(2), _finding(3), _finding(5)],
+    )
+    same = dict(file="src/OrderAbandonConfiguration.java", line=8)
+    gaps = [
+        _gap(1, "timor/oms").model_copy(update=same),
+        _gap(2, "timor/oms").model_copy(update={"file": "src/OrderService.java", "line": 2099}),
+        _gap(3, "timor/oms").model_copy(update=same),
+        _gap(5, "timor/oms").model_copy(update=same),
+    ]
+
+    result = code_scout_module._run_remedies(run_state, gaps)
+
+    assert mock_run_remedy_loop.call_count == 2                       # two mechanisms, not four findings
+    assert [g.finding_rank for g in result] == [1, 2, 3, 5]           # order preserved
+    assert all(len(g.remedies) == 1 for g in result)
+    assert result[0].remedies[0].proposal == result[2].remedies[0].proposal == result[4 - 1].remedies[0].proposal
+    assert result[1].remedies[0].proposal.endswith("OrderService.java:2099")
+

@@ -6,6 +6,7 @@ snapshots/findings/artifacts once the graph finishes, and turning any node
 exception into a `failed` run instead of a crashed background task.
 """
 import logging
+import time
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -114,9 +115,14 @@ def run_pipeline(
         # after the Fetcher, findings after the Analyst, gaps after Code Scout.
         persisted = {"snapshot": False, "findings": False, "gaps": False}
         final_state = state
+        t_run = t_stage = time.monotonic()
         for final_state in compiled_graph.stream(state, stream_mode="values"):
             new_status = final_state.get("status")
             if new_status and new_status != run.status and new_status not in ("completed", "failed"):
+                now = time.monotonic()
+                logger.info("run %s: %s -> %s  (stage %.0fs, total %.0fs)",
+                            run_id, run.status, new_status, now - t_stage, now - t_run)
+                t_stage = now
                 run.status = new_status
             snap = final_state.get("snapshot") or {}
             if not persisted["snapshot"] and snap.get("stages"):
