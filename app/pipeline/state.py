@@ -28,6 +28,7 @@ class GraphState(TypedDict, total=False):
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
     drilldown_trail: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]    # Agent 3 (Code Scout) — Harshit
+    suggestions: list[dict[str, Any]]  # Agent 3 alt flow (Code Scout) — Harshit
     trend_report: dict[str, Any]       # Reporter — Mohit
     voc: dict[str, Any]
     prd_draft: Optional[str]           # PRD Generator — Mohit; #1 finding's PRD only, kept for back-compat
@@ -60,6 +61,7 @@ def initial_state(
         findings=[],
         drilldown_trail=[],
         code_gaps=[],
+        suggestions=[],
         trend_report={},
         voc={},
         prd_draft=None,

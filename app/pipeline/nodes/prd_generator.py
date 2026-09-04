@@ -13,10 +13,10 @@ settings.llm_use_case_prd_generation) when ready — keep the "<=2 quotes,
 labelled anecdotal" and "unconfirmed assumptions -> Section 8" rules.
 """
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 from app.pipeline.state import GraphState
-from app.schemas.contracts import CodeGap, Finding, RunState, TrendReport, VocQuote
+from app.schemas.contracts import CodeGap, Finding, RunState, Suggestion, TrendReport, VocQuote
 
 TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "templates" / "prd_template.md"
 
@@ -55,39 +55,75 @@ def _collect_quotes(finding: Finding, per_finding_quotes: dict) -> list:
     return list(per_finding_quotes.get(str(finding.rank), []))
 
 
-def _remedies_block(gap: CodeGap) -> str:
+SUGGESTION_TYPE_LABELS = {"tech": "Tech", "business": "Business", "process": "Process"}
+
+
+def _requirements_block(gap: Optional[CodeGap], suggestions: list[Suggestion]) -> str:
     """
-    Appendix A #9: ABSENT remedies become the PRD's proposed FRs; EXISTING
-    ones are surfaced so the PRD never proposes what's already built;
-    PARTIAL is flagged as needing a closer look. UNVERIFIED (status=None —
-    the loop never actually searched, e.g. budget ran out first) gets its
-    own honest label rather than being folded into "partial" — reviewed in
-    PR #1 B4: "confirmed missing" is the strongest claim available and it
-    was being attached to the verdict with the weakest support.
+    Functional requirements, numbered FR-N across BOTH sources in one list —
+    a business/process suggestion is just as valid a requirement as a code
+    fix (Harshit's ask, 2026-09-04: "not only PRD [code] — changes in the
+    business, delivery, and other org verticals"), so it isn't relegated to
+    a second-class appendix with its own numbering.
+
+    Remedy Loop verdicts come first (Appendix A #9): ABSENT remedies become
+    proposed FRs; EXISTING ones are surfaced so the PRD never re-proposes
+    what's already built; PARTIAL needs a closer look; UNVERIFIED
+    (status=None — the loop never actually searched, e.g. budget ran out
+    first) gets its own honest label rather than folding into "partial"
+    (PR #1 B4: "confirmed missing" is the strongest claim available and it
+    was being attached to the verdict with the weakest support).
+
+    Suggestions (tech/business/process, contracts.py decision #11) follow,
+    continuing the same FR-N sequence, each labelled with its type and
+    verification status so a reader can tell "proven missing" apart from
+    "proposed, nothing to verify" apart from "we didn't get to check."
     """
-    if not gap.remedies:
+    lines: list[str] = []
+    n = 1
+
+    if gap and gap.remedies:
+        for r in gap.remedies:
+            searched = len(r.searched_terms)
+            tag = f"FR-{n}:"
+            n += 1
+            if r.status == "absent":
+                lines.append(f"- {tag} **[FR candidate — not found in {searched} search{'es' if searched != 1 else ''}]** {r.proposal}")
+            elif r.status == "exists":
+                lines.append(
+                    f"- {tag} **[Already built — do not re-propose]** {r.proposal} "
+                    f"(`{r.evidence_file}:{r.evidence_line}`)"
+                )
+            elif r.status == "partial":
+                lines.append(f"- {tag} **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
+            else:
+                lines.append(f"- {tag} **[Unverified — no search ran, e.g. budget exhausted first]** {r.proposal}")
+
+    for s in suggestions:
+        tag = f"FR-{n}:"
+        n += 1
+        type_label = SUGGESTION_TYPE_LABELS[s.suggestion_type]
+        if s.verification_status == "exists":
+            verdict = f"**[{type_label} — already built, do not re-propose]** ({s.evidence_file}:{s.evidence_line})"
+        elif s.verification_status == "absent":
+            verdict = f"**[{type_label} — not found in code, FR candidate]**"
+        elif s.verification_status == "partial":
+            verdict = f"**[{type_label} — needs a closer look, partial match]** ({s.evidence_file or 'related code found'})"
+        elif s.verification_status == "unverified":
+            verdict = f"**[{type_label} — unverified, budget exhausted before the check ran]**"
+        else:  # not_applicable — business/process suggestions carry no code evidence by design
+            verdict = f"**[{type_label} suggestion]**"
+        lines.append(f"- {tag} {verdict} {s.title}: {s.description} — _{s.rationale}_")
+
+    if not lines:
         return ""
-    lines = ["\n\n**Remedy Loop verdicts (proposed fixes, verified against the code):**"]
-    for i, r in enumerate(gap.remedies, start=1):
-        n = len(r.searched_terms)
-        tag = f"FR-{i}:"
-        if r.status == "absent":
-            lines.append(f"- {tag} **[FR candidate — not found in {n} search{'es' if n != 1 else ''}]** {r.proposal}")
-        elif r.status == "exists":
-            lines.append(
-                f"- {tag} **[Already built — do not re-propose]** {r.proposal} "
-                f"(`{r.evidence_file}:{r.evidence_line}`)"
-            )
-        elif r.status == "partial":
-            lines.append(f"- {tag} **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
-        else:
-            lines.append(f"- {tag} **[Unverified — no search ran, e.g. budget exhausted first]** {r.proposal}")
-    return "\n".join(lines)
+    return "\n\n**Functional requirements (code fixes + suggested improvements, verified where applicable):**\n" + "\n".join(lines)
 
 
 def _render_prd_llm_stub(
     finding: Finding,
     gaps: list[CodeGap],
+    suggestions: list[Suggestion],
     trend: TrendReport,
     quotes: list,
     run_id: int,
@@ -111,6 +147,8 @@ def _render_prd_llm_stub(
     segment_desc = ", ".join(f"{s.dimension}={s.value}" for s in finding.segments) or "all"
     background = f"Routing category `{finding.stage}` (segments: {segment_desc}). Trend context: {trend.narrative}"
 
+    requirements = _requirements_block(gap, suggestions)
+
     if gap and gap.mechanism_found:
         goals = f"Close the `{gap.gap_class}` gap at `{gap.repo}/{gap.file}:{gap.line}` without regressing existing behaviour."
         solution = (
@@ -118,7 +156,7 @@ def _render_prd_llm_stub(
             f"**Gap statement:** {gap.gap_statement}\n\n"
             f"**Location:** `{gap.repo}/{gap.file}:{gap.line}`"
             + (f"\n\n**Proposed change location:** {gap.proposed_change_location}" if gap.proposed_change_location else "")
-            + _remedies_block(gap)
+            + requirements
         )
         scope = f"In scope: routing category `{finding.stage}` in `{gap.service}`. Out of scope: unrelated stages."
     elif gap and not gap.mechanism_found:
@@ -126,8 +164,21 @@ def _render_prd_llm_stub(
         solution = (
             f"Code Scout searched `{gap.repo}` ({gap.searches_run} of a 5-search budget) but found no matching "
             f"mechanism (reason: `{gap.no_match_reason}`). No code-level solution can be proposed until this resolves."
+            + requirements
         )
         scope = f"In scope: routing category `{finding.stage}` in `{gap.repo}`. Out of scope: unrelated stages."
+    elif suggestions:
+        # No diagnosed code bug for this finding, but Code Scout's alternate
+        # flow still surfaced improvement ideas (business/process/tech) —
+        # that's a legitimate PRD on its own, not a TODO placeholder.
+        repos = sorted({s.repo for s in suggestions})
+        goals = f"Address the drop-off via the improvement(s) below rather than a diagnosed code bug — no code gap was located for this finding."
+        solution = (
+            f"Code Scout found no single diagnosed mechanism for this finding, but proposes the following "
+            f"improvement(s) after exploring {', '.join(f'`{r}`' for r in repos)}."
+            + requirements
+        )
+        scope = f"In scope: routing category `{finding.stage}` in {', '.join(f'`{r}`' for r in repos)}. Out of scope: unrelated stages."
     else:
         goals = "TODO(Code Scout): no code gap was routed for this finding yet."
         solution = "TODO(Code Scout): pipeline ran without a resolved code_gap for the top finding."
@@ -181,10 +232,12 @@ def prd_generator_node(state: GraphState) -> GraphState:
     drafts = []
     for finding in findings:
         gaps = run_state.gaps_for(finding.rank)
+        suggestions = run_state.suggestions_for(finding.rank)
         quotes = _collect_quotes(finding, run_state.voc.per_finding_quotes)
         title, body = _render_prd_llm_stub(
             finding,
             gaps,
+            suggestions,
             run_state.trend_report,
             quotes,
             run_id=run_state.run_id,

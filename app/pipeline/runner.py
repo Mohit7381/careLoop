@@ -106,6 +106,7 @@ def run_pipeline(
         run.status = final_state.get("status", "completed")
         run.failed_stage = final_state.get("failed_stage")
         run.code_gaps = final_state.get("code_gaps", [])
+        run.suggestions = final_state.get("suggestions", [])
         run.voc = final_state.get("voc", {})
         run.drilldown_trail = final_state.get("drilldown_trail", [])
         session.commit()

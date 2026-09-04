@@ -37,6 +37,7 @@ class RunDetailResponse(BaseModel):
     snapshots: list[dict[str, Any]]
     findings: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]
+    suggestions: list[dict[str, Any]]
     voc: dict[str, Any]
     drilldown_trail: list[dict[str, Any]]
     artifacts: list[dict[str, Any]]

@@ -29,6 +29,9 @@ class AnalysisRun(Base):
     code_gaps: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     voc: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     drilldown_trail: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Code Scout's alternate flow (contracts.py decision #11) — tech/business/
+    # process improvement ideas, additive alongside code_gaps.
+    suggestions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=_utcnow, index=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(
