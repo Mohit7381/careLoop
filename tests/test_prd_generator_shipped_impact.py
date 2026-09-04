@@ -1,7 +1,7 @@
 """app/pipeline/nodes/prd_generator.py — rendering a ShippedFix into the
 deterministic PRD template and the live-LLM inputs (closed-loop impact,
 2026-09-04)."""
-from app.pipeline.nodes.prd_generator import _prd_inputs, _remedies_block, _render_prd_llm_stub
+from app.pipeline.nodes.prd_generator import _prd_inputs, _render_prd_llm_stub, _requirements_block
 from app.schemas.contracts import CodeGap, Finding, Remedy, ShippedCommit, ShippedFix, TrendReport
 
 
@@ -34,9 +34,9 @@ def _finding() -> Finding:
                    confidence="high", confirm_via="x")
 
 
-def test_remedies_block_labels_a_shipped_exists_remedy_with_its_commit_and_impact():
+def test_requirements_block_labels_a_shipped_exists_remedy_with_its_commit_and_impact():
     gap = _gap_with_exists_remedy()
-    block = _remedies_block(gap, [_shipped_fix()])
+    block = _requirements_block(gap, [], [_shipped_fix()])
 
     assert "Shipped" in block
     assert "abc123de" in block
@@ -45,17 +45,17 @@ def test_remedies_block_labels_a_shipped_exists_remedy_with_its_commit_and_impac
     assert "+20.0%" in block
 
 
-def test_remedies_block_labels_an_exists_remedy_with_no_shipped_match_as_already_built_not_shipped():
+def test_requirements_block_labels_an_exists_remedy_with_no_shipped_match_as_already_built_not_shipped():
     gap = _gap_with_exists_remedy()
-    block = _remedies_block(gap, [])  # nothing shipped
+    block = _requirements_block(gap, [], [])  # nothing shipped
 
     assert "Already built" in block
     assert "Shipped" not in block
 
 
-def test_remedies_block_is_honest_when_impact_is_not_yet_measurable():
+def test_requirements_block_is_honest_when_impact_is_not_yet_measurable():
     gap = _gap_with_exists_remedy()
-    block = _remedies_block(gap, [_shipped_fix(with_metric=False)])
+    block = _requirements_block(gap, [], [_shipped_fix(with_metric=False)])
 
     assert "Shipped" in block
     assert "not yet measurable" in block
@@ -64,7 +64,7 @@ def test_remedies_block_is_honest_when_impact_is_not_yet_measurable():
 def test_render_prd_stub_notes_the_shipped_fix_in_goals_and_success_metrics():
     gap = _gap_with_exists_remedy()
     _title, body = _render_prd_llm_stub(
-        _finding(), [gap], TrendReport(), quotes=[],
+        _finding(), [gap], [], TrendReport(), quotes=[],
         run_id=1, window_start="2026-08-01", window_end="2026-08-30",
         shipped=[_shipped_fix()],
     )
@@ -77,7 +77,7 @@ def test_render_prd_stub_notes_the_shipped_fix_in_goals_and_success_metrics():
 def test_prd_inputs_only_carries_shipped_fixes_for_the_matching_finding():
     gap = _gap_with_exists_remedy()
     inputs = _prd_inputs(
-        _finding(), [gap], TrendReport(), quotes=[],
+        _finding(), [gap], [], TrendReport(), quotes=[],
         run_id=1, window_start="2026-08-01", window_end="2026-08-30",
         shipped=[_shipped_fix(finding_rank=1), _shipped_fix(finding_rank=2)],
     )
@@ -90,7 +90,7 @@ def test_prd_inputs_only_carries_shipped_fixes_for_the_matching_finding():
 def test_prd_inputs_shipped_fixes_is_empty_when_nothing_shipped():
     gap = _gap_with_exists_remedy()
     inputs = _prd_inputs(
-        _finding(), [gap], TrendReport(), quotes=[],
+        _finding(), [gap], [], TrendReport(), quotes=[],
         run_id=1, window_start="2026-08-01", window_end="2026-08-30",
     )
 

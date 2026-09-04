@@ -142,7 +142,7 @@ def test_two_dimensions_in_one_turn_both_land_in_the_trail(cohort_cuts, journey_
                                           "also_dimension": "consultation_required"}},
         {"done": True, "findings": []},
     ])
-    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+    _, trail, _ = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
                              GAP, {}, ROUTING, "pharmacy_checkout", budget=10)
     assert [s.dimension for s in trail[:2]] == ["pd_category", "consultation_required"]
     assert trail[1].question.startswith("second cut this turn")
@@ -154,7 +154,7 @@ def test_a_second_dimension_that_was_already_tried_or_repeats_the_first_is_ignor
         {"done": False, "next_question": {"dimension": "consultation_required", "rationale": "b", "also_dimension": "pd_category"}},
         {"done": True, "findings": []},
     ])
-    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+    _, trail, _ = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
                              GAP, {}, ROUTING, "pharmacy_checkout", budget=10)
     assert [s.dimension for s in trail[:2]] == ["pd_category", "consultation_required"]
     assert len({s.dimension for s in trail}) == len(trail)        # no dimension cut twice
@@ -163,6 +163,6 @@ def test_a_second_dimension_that_was_already_tried_or_repeats_the_first_is_ignor
 def test_pairs_never_exceed_the_budget(cohort_cuts, journey_cfg):
     llm = make_llm([{"done": False, "next_question": {"dimension": "pd_category", "rationale": "a",
                                                        "also_dimension": "consultation_required"}}] * 5)
-    _, trail = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
+    _, trail, _ = run_drilldown(llm, AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"]),
                              GAP, {}, ROUTING, "pharmacy_checkout", budget=3)
     assert len(trail) == 3

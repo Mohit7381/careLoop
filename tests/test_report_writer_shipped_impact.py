@@ -24,7 +24,7 @@ def test_report_includes_a_shipped_fix_with_its_measured_impact():
     result = report_writer_node(_state_with_shipped_fix(with_metric=True))
     report = result["artifacts"][-1]["content"]
 
-    assert "## Shipped fixes & measured impact" in report
+    assert "## 7. Shipped Fixes & Measured Impact" in report
     assert "abc123de" in report
     assert "up 20.0%" in report
 
@@ -49,7 +49,7 @@ def test_report_includes_a_feature_amplification_idea():
     result = report_writer_node(state)
     report = result["artifacts"][-1]["content"]
 
-    assert "## Feature amplification ideas (built on shipped wins)" in report
+    assert "## 8. Feature Amplification Ideas (Built on Shipped Wins)" in report
     assert "Widen to consultation abandon too" in report
 
 
@@ -74,7 +74,7 @@ def test_report_includes_growth_ideas_and_labels_their_inspiration():
     result = report_writer_node(state)
     report = result["artifacts"][-1]["content"]
 
-    assert "## Growth ideas" in report
+    assert "## 6. Growth Ideas" in report
     assert "One-tap saved payment method" in report
     assert "general industry pattern, not Halodoc-specific data" in report
     assert "grounded in this run's own funnel data" in report
