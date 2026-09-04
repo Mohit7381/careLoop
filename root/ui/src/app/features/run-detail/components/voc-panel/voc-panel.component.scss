@@ -49,23 +49,3 @@
   margin-top: 3px;
 }
 
-.qgloss.missing {
-  color: var(--warn);
-}
-
-.anecdotal {
-  margin-top: 11px;
-  padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--voc) 18%, transparent);
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-
-.anecdotal .warnlbl {
-  color: var(--voc);
-  font-weight: 600;
-}

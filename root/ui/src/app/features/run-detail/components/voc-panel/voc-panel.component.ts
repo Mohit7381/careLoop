@@ -30,24 +30,6 @@ export class VocPanelComponent {
 
   readonly hasQuotes = computed(() => this.quotes().length > 0);
 
-  /**
-   * Key names here must match `Voc.reviews_meta` / `Voc.themes` as the backend
-   * emits them: `total`, `negatives`, and `{theme, count}`. The previous
-   * version read `pulled`, `negative` and `{name, negatives}` — none of which
-   * exist — so this line rendered "? newest reviews · ? negative". Nothing
-   * type-checks it because reviews_meta is `dict[str, Any]` on the wire.
-   */
-  readonly sourceLine = computed(() => {
-    const meta = this.voc().reviews_meta ?? {};
-    const total = meta['total'] ?? meta['pulled'] ?? '?';
-    const negatives = meta['negatives'] ?? meta['negative'] ?? '?';
-    const name = this.theme();
-    const row = name ? this.voc().themes.find((t) => (t['theme'] ?? t['name']) === name) : undefined;
-    const count = row ? (row['count'] ?? row['negatives']) : null;
-    const themePart = name ? ` · theme: ${name}${count != null ? ` (${count})` : ''}` : '';
-    return `${total} newest reviews · ${negatives} negative${themePart}`;
-  });
-
   stars(n: number): string {
     return '★'.repeat(Math.max(0, Math.min(5, n)));
   }
