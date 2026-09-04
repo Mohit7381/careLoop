@@ -1,8 +1,10 @@
 {
  "done": false,
  "findings": null,
+ "growth_ideas": null,
  "next_question": {
-  "dimension": "consultation_trigger",
-  "rationale": "The largest funnel gap is between created -> confirmed (lost 87,511, share_of_prev 0.3862; created->confirmed conversion 0.6138 from phase1). Phase1 reason clusters show a large count of user-side system terminations (\"abandoned by system\": 54015; user_total: 90419), which suggests the drop may be concentrated in particular trigger types (e.g., on-demand vs scheduled). consultation_trigger is a rate-bearing dimension we have not yet tried; cutting by it will tell us whether specific trigger types convert materially worse and therefore where to focus remediation. If a trigger shows much lower confirm rate, confirm via a targeted A/B test (e.g., change availability messaging or queue handling for that trigger and measure created->confirmed conversion uplift)."
+  "dimension": "interface_type",
+  "rationale": "A large group of abandonments are labelled \u201cabandoned by system\u201d and there are several app/technical voc themes; this suggests a platform- or device-specific problem (for example Android vs iOS vs web) that prevents users from reaching the \u201cpaid and confirmed\u201d step. If one interface converts much worse, we can target engineering fixes or roll back a recent release. I expect to see one platform with materially lower conversion from \u201crequested a consultation\u201d to \u201cpaid and confirmed.\u201d",
+  "also_dimension": "payer"
  }
 }

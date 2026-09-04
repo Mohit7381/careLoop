@@ -1,8 +1,143 @@
 {
- "done": false,
- "findings": null,
- "next_question": {
-  "dimension": "item_count",
-  "rationale": "Two rate-bearing cuts remain untried (hour_of_day, item_count). I recommend cutting by item_count next because it can reveal whether baskets of certain sizes systematically convert worse \u2014 which would interact with the stock_status and consultation_required gaps we already see and point to an operational fix (e.g., better handling of single-item RX orders or multi-item fulfillment). Evidence: top gap is from created->confirmed with lost=417569 (share_of_prev=0.6452) and funnel shows created=647191 -> confirmed=229622 (conversion_from_previous=0.3548). Consultation_required already shows a meaningful gap (rx_gated: entered=255293, converted=76641, rate=0.3002 vs non_rx: entered=391898, converted=152981, rate=0.3904). stock_status shows extremely low conversion for unfulfilled/partially-fulfilled baskets (has_unfulfilled_item: entered=19728, converted=1831, rate=0.0928; has_partially_fulfilled_item: entered=2191, converted=16, rate=0.0073), suggesting fulfillment issues tied to items in the basket. Cutting by item_count should help determine if low-conversion segments are concentrated in particular basket sizes (e.g., single-item RX vs multi-item orders), which is more actionable than hour_of_day for addressing fulfillment/consultation interactions."
- }
+ "done": true,
+ "findings": [
+  {
+   "stage": "started an order \u2192 paid and confirmed",
+   "evidence": [
+    "1_item entered 315934 converted 139707 rate 0.4422",
+    "2_items entered 138446 converted 41433 rate 0.2993",
+    "3_to_5_items entered 176399 converted 43996 rate 0.2494",
+    "6_to_10_items entered 15805 converted 4262 rate 0.2697",
+    "gte_11_items entered 607 converted 224 rate 0.369",
+    "created 647191",
+    "confirmed 229622"
+   ],
+   "segments": [
+    "customers with 1 item in cart",
+    "customers with 2 or more items in cart"
+   ],
+   "confidence": "high",
+   "hypothesis": "Carts with a single item convert much better (139,707 of 315,934, 44.22%) than multi\u2011item carts (e.g. 3\u20135 items convert 43,996 of 176,399, 24.94%); if every cart converted like single\u2011item carts we would see ~56,509 more paid orders (286,131 expected vs 229,622 actual), so multi\u2011item behavior explains the largest recoverable chunk of the 417,569 lost.",
+   "confirm_via": "Run a holdout A/B test that (a) offers free/discounted shipping or a one\u2011click checkout button to a random subset of multi\u2011item carts and (b) measures paid-and-confirmed conversions by item_count. If conversions on treated multi\u2011item carts rise toward the single\u2011item baseline, the shipping/checkout friction hypothesis is confirmed."
+  },
+  {
+   "stage": "started an order \u2192 paid and confirmed",
+   "evidence": [
+    "rx_gated entered 255293 converted 76641 rate 0.3002",
+    "non_rx entered 391898 converted 152981 rate 0.3904",
+    "created 647191",
+    "confirmed 229622"
+   ],
+   "segments": [
+    "orders that needed a prescription",
+    "orders that did not need a prescription"
+   ],
+   "confidence": "high",
+   "hypothesis": "Carts that need a prescription convert worse (76,641 of 255,293, 30.02%) than non\u2011prescription carts (152,981 of 391,898, 39.04%); if rx_gated carts converted like non_rx carts we would recover roughly 22,998 paid orders, so prescription gating/consultation steps are a meaningful contributor to the 417,569 loss.",
+   "confirm_via": "Experimentally streamline the prescription path for a random subset of rx_gated carts (e.g., one\u2011tap 'Book a consult now' inline with checkout, auto\u2011attach consult outcome into the order flow) and measure whether paid-and-confirmed conversions rise versus control."
+  },
+  {
+   "stage": "started an order \u2192 paid and confirmed",
+   "evidence": [
+    "all_items_fulfilled entered 594507 converted 217230 rate 0.3654",
+    "has_unfulfilled_item entered 19728 converted 1831 rate 0.0928",
+    "has_partially_fulfilled_item entered 2191 converted 16 rate 0.0073",
+    "created 647191",
+    "confirmed 229622"
+   ],
+   "segments": [
+    "orders with all items in stock",
+    "orders with at least one item unfulfillable or partially fulfillable"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Orders with unfulfilled or partially fulfilled items perform extremely poorly (1,831 of 19,728, 9.28% and 16 of 2,191, 0.73% respectively) versus orders where all items are in stock (217,230 of 594,507, 36.54%); bringing those buckets up to the all\u2011items\u2011fulfilled rate could recover ~6,158 paid orders, so inventory/fulfillment gating explains a small but acute portion of the loss.",
+   "confirm_via": "Run an experiment that (a) offers automatic substitution suggestions or a 'notify and hold' option for orders with unfulfilled items, and (b) measures paid-and-confirmed conversions for affected orders versus current behavior."
+  },
+  {
+   "stage": "started an order \u2192 paid and confirmed",
+   "evidence": [
+    "17 entered 34090 converted 10464 rate 0.3070",
+    "19 entered 43613 converted 13484 rate 0.3092",
+    "21 entered 34990 converted 10906 rate 0.3117",
+    "00 entered 13217 converted 6133 rate 0.4640",
+    "created 647191",
+    "confirmed 229622"
+   ],
+   "segments": [
+    "orders started around 17:00\u201321:00",
+    "orders started around 00:00"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Conversion varies by hour; high\u2011volume evening hours (for example 17:00 with 34,090 started and 30.70% conversion) are below the best hour (00:00 at 46.40%, though low volume). Targeting retries/messaging or payment fallbacks in specific evening hours could recover a few thousand paid orders (roughly 4k estimated from evenings tested), so time\u2011bound payment/session friction is a secondary factor in the 417,569 loss.",
+   "confirm_via": "Run time\u2011targeted experiments that (a) apply a different payment retry logic and clearer messaging for orders started between 17:00\u201321:00 and (b) measure the paid-and-confirmed lift during those hours versus control."
+  },
+  {
+   "stage": "started an order \u2192 paid and confirmed",
+   "evidence": [
+    "user_reasons: user abandon the cart 111993",
+    "user_reasons: user clicked back 83517",
+    "user_total 199417",
+    "artifact_total 42107",
+    "artifact_reasons: address changed 35111",
+    "artifact_reasons: add items 6996"
+   ],
+   "segments": [
+    "recorded user abandon reasons",
+    "recorded artifact reasons"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Recorded reasons show 199,417 user\u2011side abandon notes (111,993 'user abandon the cart', 83,517 'user clicked back') versus 42,107 artifact reasons; much of the 417,569 loss appears to be voluntary user abandonment rather than platform errors, pointing to UX, price sensitivity or perceived friction at checkout as dominant causes.",
+   "confirm_via": "Instrument short in\u2011flow surveys or a microphone/exit intent prompt on the checkout page for abandoning users to collect causal reasons, and run A/B tests of targeted UX fixes (e.g., clearer total price, fewer required fields) to measure conversion impact."
+  }
+ ],
+ "growth_ideas": [
+  {
+   "title": "One\u2011tap express checkout",
+   "evidence": [
+    "1_item entered 315934 converted 139707 rate 0.4422",
+    "created 647191",
+    "confirmed 229622"
+   ],
+   "rationale": "Single\u2011item carts convert far better (44.22%), so removing friction for rapid repeat purchases should increase paid orders for a large share of traffic.",
+   "description": "Add an express 'Buy now' flow for products meeting criteria (single item, saved address, saved card or OTP payment) that skips cart review and completes payment with one confirmation tap; expose it on product pages and the cart for returning users who opt in to saving one payment method and address.",
+   "inspiration": "funnel_data",
+   "target_stage": "started an order \u2192 paid and confirmed"
+  },
+  {
+   "title": "In\u2011cart prescription fast\u2011path",
+   "evidence": [
+    "rx_gated entered 255293 converted 76641 rate 0.3002",
+    "non_rx entered 391898 converted 152981 rate 0.3904"
+   ],
+   "rationale": "Prescription\u2011required carts convert ~9pp worse; reducing the extra steps (consultation, upload) in the cart will raise paid orders among rx_gated users.",
+   "description": "Add an inline 'Complete prescription' assistant in the cart that (a) offers immediate teleconsult booking with auto\u2011attach to the order, (b) allows secure upload and one\u2011tap acceptance of an existing prescription, and (c) shows ETA for consult and a progress status so users see the path to completion before leaving checkout.",
+   "inspiration": "funnel_data",
+   "target_stage": "started an order \u2192 paid and confirmed"
+  },
+  {
+   "title": "Auto\u2011substitute and hold for OOS items",
+   "evidence": [
+    "has_unfulfilled_item entered 19728 converted 1831 rate 0.0928",
+    "has_partially_fulfilled_item entered 2191 converted 16 rate 0.0073",
+    "all_items_fulfilled entered 594507 converted 217230 rate 0.3654"
+   ],
+   "rationale": "Orders with unfulfilled items convert extremely poorly; giving customers clear, low\u2011friction choices when stock problems occur should recover conversions instead of losing the whole order.",
+   "description": "When an item is unfulfillable, present two clear, prominent options in checkout: 'Auto\u2011substitute with nearest equivalent' with pre\u2011selected pricing and shipping, or 'Hold full order and notify me when all items available' with an ETA; track conversions and fulfillment outcomes for both flows.",
+   "inspiration": "funnel_data",
+   "target_stage": "started an order \u2192 paid and confirmed"
+  },
+  {
+   "title": "Evening payment retry and messaging",
+   "evidence": [
+    "17 entered 34090 converted 10464 rate 0.3070",
+    "19 entered 43613 converted 13484 rate 0.3092",
+    "21 entered 34990 converted 10906 rate 0.3117"
+   ],
+   "rationale": "High\u2011volume evening hours convert worse than other times; targeted retry logic and clearer payment messaging can recover lost paid orders during those hours.",
+   "description": "Implement a time\u2011aware payment flow that (a) retries failed authorizations silently up to a configurable number during 17:00\u201321:00 with an immediate fallback to an alternate PSP, and (b) surfaces a compact explainers ('why payment may fail and how to fix') during those hours; A/B test conversion lift in the target window.",
+   "inspiration": "funnel_data",
+   "target_stage": "started an order \u2192 paid and confirmed"
+  }
+ ],
+ "next_question": null
 }
