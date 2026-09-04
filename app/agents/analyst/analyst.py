@@ -6,6 +6,7 @@ writes state.findings / state.drilldown_trail / state.voc. Fails loudly:
 any exception marks the run failed with failed_stage="analyzing" upstream.
 """
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -84,9 +85,35 @@ def run_analyst(state: RunState,
         reviews = json.loads(rv_path.read_text()) if rv_path.exists() else []
     if reviews:
         reviews, window_meta = phase3_voc.filter_by_days(reviews, state.scope.review_days)
-        themes_per_review, voc_meta = classify_reviews(
-            voc_llm, reviews, cfg["voc"]["themes"], phase3_voc.classify_review,
-            scope_hint=state.scope.prompt)
+        positive_themes_cfg = cfg["voc"].get("positive_themes") or []
+
+        # Negative and positive classification are fully independent (different
+        # taxonomies, different score bands) - run them CONCURRENTLY. They used
+        # to be the only classification pass; running the new positive one
+        # sequentially after it would silently double this stage's worst-case
+        # live-LLM wall-clock time (each batch can take up to ~180s against
+        # real sphere-platform - see sphere.py's polling ceiling), which reads
+        # as "the analysing stage is running but nothing is happening" for
+        # however long the now-serialized second pass takes (2026-09-04 bug
+        # report). classify_reviews() already runs its own batches concurrently
+        # via a ThreadPoolExecutor internally - nesting one more level here is
+        # safe because sphere calls carry no shared mutable state in live mode.
+        def _classify_negative():
+            return classify_reviews(voc_llm, reviews, cfg["voc"]["themes"], phase3_voc.classify_review,
+                                    scope_hint=state.scope.prompt)
+
+        def _classify_positive():
+            if not positive_themes_cfg:
+                return [], {}
+            return classify_reviews(voc_llm, reviews, positive_themes_cfg, phase3_voc.classify_review,
+                                    scope_hint=state.scope.prompt, polarity="positive")
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            negative_future = pool.submit(_classify_negative)
+            positive_future = pool.submit(_classify_positive)
+            themes_per_review, voc_meta = negative_future.result()
+            positive_per_review, _positive_meta = positive_future.result()
+
         voc_findings, voc = run_voc(reviews, cfg["voc"], 1,
                                     themes_per_review=themes_per_review,
                                     extra_meta={**window_meta,
@@ -95,11 +122,7 @@ def run_analyst(state: RunState,
         # Never escalates into a Finding — see phase3_voc.run_positive_voc —
         # this exists purely as growth_ideas' second real grounding source
         # (what users already love), alongside top_strength.
-        positive_themes_cfg = cfg["voc"].get("positive_themes") or []
         if positive_themes_cfg:
-            positive_per_review, _positive_meta = classify_reviews(
-                voc_llm, reviews, positive_themes_cfg, phase3_voc.classify_review,
-                scope_hint=state.scope.prompt, polarity="positive")
             positive_voc_signals = phase3_voc.run_positive_voc(
                 reviews, positive_themes_cfg, themes_per_review=positive_per_review)
     voc_signals = [{"theme": t["theme"], "count": t["count"], "escalated": t["escalated"]}
