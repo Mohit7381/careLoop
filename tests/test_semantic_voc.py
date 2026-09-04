@@ -76,17 +76,27 @@ def test_an_invented_theme_is_rejected():
     assert "vibes" not in themes
 
 
-def test_batching_covers_every_review_exactly_once():
+def test_only_negative_reviews_are_sent_and_each_exactly_once():
+    """Only negative reviews are ever bucketed into themes, so only they go to
+    the model. The first live run sent all 600 in 15 batches at ~45 s each —
+    eleven minutes for 92 reviews' worth of signal. Positives are "unmapped"
+    without a call, which is what run_voc did with them anyway."""
     seen = []
 
     def counting(ctx):
-        seen.extend(r["review_id"] for r in ctx["reviews_batch"]["reviews"])
+        seen.extend(int(r["review_id"]) for r in ctx["reviews_batch"]["reviews"])
         return _llm()(ctx)
 
     themes, meta = classify_reviews(counting, REVIEWS, THEMES, classify_review)
+
+    negatives = [i for i, r in enumerate(REVIEWS) if int(r.get("score", 5)) <= 2]
+    positives = [i for i in range(len(REVIEWS)) if i not in set(negatives)]
     assert len(themes) == len(REVIEWS)
-    assert sorted(map(int, seen)) == list(range(len(REVIEWS)))
-    assert meta["batches"] == -(-len(REVIEWS) // BATCH_SIZE)
+    assert sorted(seen) == negatives, "every negative review exactly once, nothing else"
+    assert not set(seen) & set(positives)
+    assert all(themes[i] == "unmapped" for i in positives)
+    assert meta["reviews_sent_to_llm"] == len(negatives)
+    assert meta["batches"] == -(-len(negatives) // BATCH_SIZE)
 
 
 # --- the review window ---

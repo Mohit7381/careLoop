@@ -47,7 +47,8 @@ def _sphere_llm() -> Any:
 
 def analyst_node(state: GraphState) -> GraphState:
     run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
-    llm = _demo_llm() if state.get("demo_mode", True) else _sphere_llm()
+    from app.integrations.sphere import _live_llm_wanted
+    llm = _sphere_llm() if _live_llm_wanted(state.get("demo_mode", True)) else _demo_llm()
 
     voc_llm = make_use_case_llm(get_settings().llm_use_case_voc_theme_classification,
                                 bool(state.get("demo_mode", True)))

@@ -24,19 +24,24 @@ behaviour, never to an empty bucket that reads as "no complaints".
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger("careloop.semantic_voc")
 
 BATCH_SIZE = 40          # keeps each call well inside the context and the output schema small
 MAX_TEXT_CHARS = 400     # reviews are short; this only guards a pathological one
+NEGATIVE_MAX_SCORE = 2   # mirrors phase3_voc: only these are ever bucketed into themes
+PARALLEL_BATCHES = 3     # sphere calls for 21688 run ~45 s each; three in flight is polite
 
 LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
 
 
-def _batches(items: list, size: int):
-    for i in range(0, len(items), size):
-        yield i, items[i:i + size]
+def _score(review: dict) -> int:
+    try:
+        return int(review.get("score", 5))
+    except (TypeError, ValueError):
+        return 5
 
 
 def classify_reviews(llm: Optional[LLMCall], reviews: list[dict], themes_cfg: list[dict],
@@ -60,41 +65,56 @@ def classify_reviews(llm: Optional[LLMCall], reviews: list[dict], themes_cfg: li
 
     valid = {t["name"] for t in themes_cfg} | {"unmapped"}
 
-    for offset, batch in _batches(reviews, BATCH_SIZE):
-        meta["batches"] += 1
+    # Only negative reviews are ever bucketed into themes (phase3_voc), so
+    # classifying the rest is pure cost. First live run sent all 600 in 15
+    # batches at ~45 s each — eleven minutes, 6.5x the necessary work. Positive
+    # reviews get "unmapped", which is exactly what run_voc does with them.
+    negative_idx = [i for i, r in enumerate(reviews)
+                    if _score(r) <= NEGATIVE_MAX_SCORE]
+    for i, r in enumerate(reviews):
+        if i not in set(negative_idx):
+            out[i] = "unmapped"
+    meta["reviews_sent_to_llm"] = len(negative_idx)
+
+    def _run_batch(batch_idx: list[int]) -> tuple[list[int], dict]:
         payload = {
             "taxonomy": taxonomy,
             "scope_hint": scope_hint or "",
-            "reviews": [{"review_id": str(offset + i),
-                         "text": (r.get("text") or "")[:MAX_TEXT_CHARS],
-                         "rating": r.get("score")}
-                        for i, r in enumerate(batch)],
+            "reviews": [{"review_id": str(i),
+                         "text": (reviews[i].get("text") or "")[:MAX_TEXT_CHARS],
+                         "rating": reviews[i].get("score")} for i in batch_idx],
         }
         try:
             res = llm({"reviews_batch": payload})
-            rows = {str(c["review_id"]): c for c in (res.get("classifications") or [])}
+            return batch_idx, {str(c["review_id"]): c for c in (res.get("classifications") or [])}
         except Exception as exc:
-            logger.warning("semantic VoC batch at %d failed (%s) — lexical for this batch",
-                           offset, exc)
-            rows = {}
+            logger.warning("semantic VoC batch starting at %s failed (%s) — lexical for this batch",
+                           batch_idx[:1], exc)
+            return batch_idx, {}
 
+    batches = [negative_idx[i:i + BATCH_SIZE] for i in range(0, len(negative_idx), BATCH_SIZE)]
+    meta["batches"] = len(batches)
+    with ThreadPoolExecutor(max_workers=PARALLEL_BATCHES) as pool:
+        results = list(pool.map(_run_batch, batches))
+
+    for batch_idx, rows in results:
         missing = 0
-        for i, r in enumerate(batch):
-            row = rows.get(str(offset + i))
+        for i in batch_idx:
+            row = rows.get(str(i))
             theme = (row or {}).get("theme")
             if theme not in valid:
                 missing += 1
-                out[offset + i] = lexical_fallback(r.get("text", ""), themes_cfg)
+                out[i] = lexical_fallback(reviews[i].get("text", ""), themes_cfg)
                 continue
-            out[offset + i] = theme
+            out[i] = theme
             if row.get("english_gloss"):
-                meta["glosses"][str(offset + i)] = row["english_gloss"]
+                meta["glosses"][str(i)] = row["english_gloss"]
             if row.get("matched_phrase"):
-                meta["matched_phrases"][str(offset + i)] = row["matched_phrase"]
-        if missing == len(batch):
+                meta["matched_phrases"][str(i)] = row["matched_phrase"]
+        if missing == len(batch_idx):
             meta["fallback_batches"] += 1
 
-    if meta["fallback_batches"] == meta["batches"]:
+    if meta["batches"] and meta["fallback_batches"] == meta["batches"]:
         meta["classifier"] = "lexical"
         meta["reason"] = "every batch fell back"
     elif meta["fallback_batches"]:

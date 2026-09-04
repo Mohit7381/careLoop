@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     app_name: str = "careloop-service"
     app_token: str = "dev-local-token"
     demo_mode: bool = True
+    # demo_mode governs the DATA source: the Fetcher has no live warehouse path
+    # yet, so the snapshot must come from the frozen fixture. live_llm forces
+    # every LLM and GitLab call to be real anyway — the realistic way to run
+    # today: real analysis over frozen, k-anonymised production aggregates.
+    live_llm: bool = False
 
     # Storage
     database_url: str = "sqlite:///./careloop.db"

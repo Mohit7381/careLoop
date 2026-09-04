@@ -92,7 +92,16 @@ def run_pipeline(
             journey=journey, prev_window_start=prev_window_start,
             prev_window_end=prev_window_end, scope=scope,
         )
-        final_state = compiled_graph.invoke(state)
+        # Stream node by node so the run's status is persisted as each stage
+        # finishes. invoke() only returned at the end, so a live run sat at
+        # "queued" for its whole ten minutes while the UI polled — the row said
+        # nothing had started when three stages were already done.
+        final_state = state
+        for final_state in compiled_graph.stream(state, stream_mode="values"):
+            new_status = final_state.get("status")
+            if new_status and new_status != run.status and new_status not in ("completed", "failed"):
+                run.status = new_status
+                session.commit()
 
         if final_state.get("error"):
             logger.warning("run %s finished with a recorded error: %s", run_id, final_state["error"])

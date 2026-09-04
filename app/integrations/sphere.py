@@ -11,7 +11,25 @@ from pathlib import Path
 from typing import Any, Optional
 
 SPHERE_BASE = os.environ.get("SPHERE_BASE_URL", "http://sphere-platform.stage-k8s.halodoc.com")
-APP_TOKEN = os.environ.get("SPHERE_APP_TOKEN", "")
+def _app_token() -> str:
+    """Shell env wins; otherwise the .env-backed settings.
+
+    Three names had grown for one secret (SPHERE_APP_TOKEN in the shell,
+    sphere_platform_app_token in settings, SPHERE_PLATFORM_API_KEY in
+    .env.example) and a module-level read of only the first meant a token
+    placed in .env never reached this client. Resolved lazily so the API
+    server picks it up from .env without an exported shell variable.
+    """
+    tok = os.environ.get("SPHERE_APP_TOKEN", "")
+    if tok:
+        return tok
+    from app.config import get_settings  # local import: config must not import us
+    return get_settings().sphere_platform_app_token or ""
+
+
+def _live_llm_wanted(demo_mode: bool) -> bool:
+    from app.config import get_settings
+    return (not demo_mode) or bool(get_settings().live_llm)
 REPLAY_DIR = Path(os.environ.get("LLM_REPLAY_DIR", "fixtures/llm_replay"))
 
 
@@ -36,7 +54,7 @@ class SphereClient:
         req = urllib.request.Request(
             f"{SPHERE_BASE}/v1/chat-ai/requests/validation",
             method="POST",
-            headers={"X-APP-TOKEN": APP_TOKEN, "Content-Type": "application/json"},
+            headers={"X-APP-TOKEN": _app_token(), "Content-Type": "application/json"},
             data=json.dumps(body).encode(),
         )
         with urllib.request.urlopen(req, timeout=90) as r:
@@ -76,14 +94,14 @@ def make_use_case_llm(use_case: str, demo_mode: bool):
     except Exception:
         return None
 
-    if demo_mode:
+    if _live_llm_wanted(demo_mode):
+        if not _app_token():
+            return None
+        client = SphereClient(mode="sphere")
+    else:
         if not (Path("fixtures/llm_replay") / use_case).exists():
             return None                      # nothing recorded yet
         client = SphereClient(mode="replay")
-    else:
-        if not APP_TOKEN:
-            return None
-        client = SphereClient(mode="sphere")
 
     def llm(ctx: dict[str, Any]) -> dict[str, Any]:
         params = {k: (json.dumps(v) if isinstance(v, (dict, list)) else str(v))

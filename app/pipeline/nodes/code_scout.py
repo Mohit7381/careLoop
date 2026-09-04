@@ -156,8 +156,10 @@ def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
     no remedies in demo_mode rather than a mismatched one.
     """
     settings = get_settings()
-    llm = _demo_llm() if run_state.demo_mode else _live_remedy_llm(settings)
-    search_fn = _demo_search_fn() if run_state.demo_mode else _live_search_fn(settings)
+    from app.integrations.sphere import _live_llm_wanted
+    live = _live_llm_wanted(run_state.demo_mode)
+    llm = _live_remedy_llm(settings) if live else _demo_llm()
+    search_fn = _live_search_fn(settings) if live else _demo_search_fn()
     findings_by_rank = {f.rank: f for f in run_state.findings}
 
     out = []
@@ -190,7 +192,8 @@ def code_scout_node(state: GraphState) -> GraphState:
     run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
     settings = get_settings()
 
-    if state.get("demo_mode", True):
+    from app.integrations.sphere import _live_llm_wanted
+    if not _live_llm_wanted(state.get("demo_mode", True)):
         search_client = FixtureSearchClient(FIXTURES_DIR)
         assessor = StubCodeGapAssessor()
     else:
