@@ -23,6 +23,7 @@ search_client.py's find_gap() (review D1) - _live_search_fn used to take
 the top 3 raw hits unfiltered.
 """
 import json
+from concurrent.futures import ThreadPoolExecutor
 import logging
 from pathlib import Path
 from typing import Any
@@ -147,6 +148,13 @@ def _live_remedy_llm(settings) -> Any:
 DEMO_REMEDIES_REPO = "timor/oms"  # the only repo the scripted verdicts below are actually about
 
 
+REMEDY_WORKERS = 5
+
+
+def _mechanism_key(gap: CodeGap) -> tuple:
+    return (gap.repo, gap.file, gap.line)
+
+
 def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
     """
     demo_mode's scripted remedies are specific to the timor/oms abandon
@@ -154,25 +162,36 @@ def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
     consultation gap citing an orders-repo file as evidence (review PR #1
     M3). Only run the scripted loop for gaps in that repo; other repos get
     no remedies in demo_mode rather than a mismatched one.
+
+    The loop runs ONCE per located mechanism (repo, file, line), not once
+    per finding: in run 16 three of six findings pinned
+    OrderAbandonConfiguration.java:8 and each re-proposed and re-verified
+    the same remedies against the same code — the verdicts are a property
+    of the mechanism, so siblings share them. Distinct mechanisms are
+    verified concurrently.
     """
     settings = get_settings()
-    llm = _demo_llm() if run_state.demo_mode else _live_remedy_llm(settings)
-    search_fn = _demo_search_fn() if run_state.demo_mode else _live_search_fn(settings)
+    from app.integrations.sphere import _live_llm_wanted
+    live = _live_llm_wanted(run_state.demo_mode)
+    llm = _live_remedy_llm(settings) if live else _demo_llm()
+    search_fn = _live_search_fn(settings) if live else _demo_search_fn()
     findings_by_rank = {f.rank: f for f in run_state.findings}
 
-    out = []
-    for gap in gaps:
-        if not gap.mechanism_found:
-            out.append(gap)
-            continue
-        if run_state.demo_mode and gap.repo != DEMO_REMEDIES_REPO:
-            out.append(gap)
-            continue
+    eligible = {
+        i for i, g in enumerate(gaps)
+        if g.mechanism_found and not (run_state.demo_mode and g.repo != DEMO_REMEDIES_REPO)
+    }
+    leaders: dict[tuple, int] = {}                 # mechanism -> first gap that carries it
+    for i in sorted(eligible):
+        leaders.setdefault(_mechanism_key(gaps[i]), i)
+
+    def verify(i: int) -> CodeGap:
+        gap = gaps[i]
         finding = findings_by_rank.get(gap.finding_rank)
         summary = finding.hypothesis if finding else gap.gap_statement
         repos = [r["repo"] for r in repos_for_stage(gap.stage, run_state.journey)]
         try:
-            out.append(run_remedy_loop(llm, search_fn, gap, summary, repos))
+            return run_remedy_loop(llm, search_fn, gap, summary, repos)
         except CodeScoutExternalError as exc:
             # A GitLab outage mid-verification used to crash the entire
             # code_scout_node run, taking down every other gap's remedies
@@ -182,15 +201,37 @@ def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
             logger.warning(
                 "run_remedy_loop failed for finding #%s (%s): %s", gap.finding_rank, gap.repo, exc
             )
+            return gap
+
+    lead_indices = list(leaders.values())
+    if len(lead_indices) <= 1:
+        verified = [verify(i) for i in lead_indices]
+    else:
+        with ThreadPoolExecutor(max_workers=min(REMEDY_WORKERS, len(lead_indices))) as pool:
+            verified = list(pool.map(verify, lead_indices))
+    by_key = {_mechanism_key(g): g for g in verified}
+
+    out = []
+    for i, gap in enumerate(gaps):
+        if i not in eligible:
             out.append(gap)
+        elif leaders[_mechanism_key(gap)] == i:
+            out.append(by_key[_mechanism_key(gap)])
+        else:
+            lead = by_key[_mechanism_key(gap)]
+            if lead.remedies:
+                logger.info("finding #%s shares mechanism %s:%s with finding #%s — reusing %d remedy verdict(s)",
+                            gap.finding_rank, gap.file, gap.line, lead.finding_rank, len(lead.remedies))
+            out.append(gap.model_copy(update={"remedies": [r.model_copy() for r in lead.remedies]}))
     return out
 
 
 def code_scout_node(state: GraphState) -> GraphState:
-    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
+    run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     settings = get_settings()
 
-    if state.get("demo_mode", True):
+    from app.integrations.sphere import _live_llm_wanted
+    if not _live_llm_wanted(state.get("demo_mode", True)):
         search_client = FixtureSearchClient(FIXTURES_DIR)
         assessor = StubCodeGapAssessor()
     else:

@@ -17,9 +17,10 @@ from app.agents.analyst.analyst import run_analyst
 from app.integrations.sphere import SphereClient
 from app.schemas.contracts import RunState, Snapshot
 
-FIX = Path("fixtures/pd_checkout")
-REPLAY = Path("fixtures/llm_replay/funnel-hypothesis-generation")
-IDS = json.loads((FIX / "sphere_ids.json").read_text())
+JOURNEY = os.environ.get("JOURNEY", "pd_checkout")
+FIX = Path("fixtures") / JOURNEY
+REPLAY = Path("fixtures/llm_replay") / JOURNEY / "funnel-hypothesis-generation"
+IDS = json.loads(Path("fixtures/pd_checkout/sphere_ids.json").read_text())  # sphere ids are project-wide
 TEMPLATE = next(u["template_id"] for u in IDS["use_cases"]
                 if u["name"] == "funnel-hypothesis-generation")
 
@@ -43,7 +44,7 @@ def llm(ctx: dict) -> dict:
     return out
 
 state = RunState(
-    run_id=999, journey="pd_checkout", demo_mode=True, status="analyzing",
+    run_id=999, journey=JOURNEY, demo_mode=True, status="analyzing",
     window_start="2026-08-27", window_end="2026-09-02",
     prev_window_start="2026-08-20", prev_window_end="2026-08-26",
     snapshot=Snapshot(**json.loads((FIX / "snapshot.json").read_text())),
@@ -51,7 +52,7 @@ state = RunState(
 cuts = json.loads((FIX / "cohort_cuts.json").read_text())
 reviews = json.loads((FIX / "reviews_scrubbed.json").read_text())
 
-print(f"Running Analyst live (mode={client.mode}, template {TEMPLATE})...", flush=True)
+print(f"Running Analyst live (journey={JOURNEY}, mode={client.mode}, template {TEMPLATE})...", flush=True)
 out = run_analyst(state, llm=llm, cohort_cuts=cuts, reviews=reviews)
 
 print(f"\n=== RESULT ===")

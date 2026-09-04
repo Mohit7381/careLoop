@@ -11,12 +11,59 @@ class CreateRunRequest(BaseModel):
     window_end: Optional[str] = None
     prev_window_start: Optional[str] = None
     prev_window_end: Optional[str] = None
+    # Routing categories (payments, consultation, ...) — a post-run filter on
+    # which findings surface. NOT drill-down cuts; those come from `prompt`.
     dimensions: Optional[list[str]] = None
+    prompt: Optional[str] = None   # free text; resolved into a RunScope before the run
 
 
 class CreateRunResponse(BaseModel):
     run_id: int
     status: RunStatus
+    scope: Optional[dict[str, Any]] = None
+    scope_summary: Optional[str] = None
+    journey: Optional[str] = None
+
+
+class RunSummary(BaseModel):
+    """One row of run history — deliberately NOT the full RunDetailResponse.
+    A list of runs is scanned, not read; the detail page is one click away
+    for anything more than status/journey/top-finding."""
+
+    run_id: int
+    journey: str
+    window_start: str
+    window_end: str
+    status: RunStatus
+    failed_stage: Optional[str] = None
+    prompt: Optional[str] = None
+    scope_summary: Optional[str] = None
+    findings_count: int
+    top_finding: Optional[str] = None
+    created_at: str
+
+
+class RunListResponse(BaseModel):
+    runs: list[RunSummary]
+
+
+class ResolveScopeRequest(BaseModel):
+    journey: str = "auto"      # "auto" picks the journey from the prompt's vocabulary
+    prompt: str
+
+
+class ResolveScopeResponse(BaseModel):
+    """What a prompt was understood to mean, before anything is run.
+
+    The point of resolving separately is that a misreading is visible and
+    correctable up front rather than discovered in a finished report.
+    """
+
+    scope: dict[str, Any]
+    summary: str
+    matched_on: list[str]
+    unresolved: list[str]
+    journey: str = "pd_checkout"
 
 
 class PrdSummary(BaseModel):
@@ -37,8 +84,11 @@ class RunDetailResponse(BaseModel):
     snapshots: list[dict[str, Any]]
     findings: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]
+    suggestions: list[dict[str, Any]]
     voc: dict[str, Any]
+    scope: Optional[dict[str, Any]] = None
     drilldown_trail: list[dict[str, Any]]
+    findings_rejected: list[dict[str, Any]] = []
     artifacts: list[dict[str, Any]]
     report_markdown: Optional[str] = None
     prd_markdown: Optional[str] = None  # the #1 finding's PRD only — kept for back-compat
@@ -60,3 +110,14 @@ class PrdChatResponse(BaseModel):
     reply: str
     markdown: str
     applied: bool
+
+
+class ScopeChatRequest(BaseModel):
+    message: str
+    journey: str = "pd_checkout"
+
+
+class ScopeChatResponse(BaseModel):
+    dimensions: list[str]
+    reply: str
+    resolved: bool

@@ -22,7 +22,7 @@ from app.agents.code_scout.assessor import StubCodeGapAssessor
 from app.agents.code_scout.node import code_scout_node
 from app.agents.code_scout.routing import repos_for_stage
 from app.agents.code_scout.search_client import FixtureSearchClient
-from app.integrations.sphere import SphereClient
+from app.integrations.sphere import SphereClient, replay_root_for
 from app.schemas.contracts import Confidence, Finding, RunState, Snapshot
 
 ROOT = Path(__file__).parent.parent
@@ -37,7 +37,7 @@ def analyst_state() -> RunState:
     ids = json.loads((FIX / "sphere_ids.json").read_text())
     template_id = next(u["template_id"] for u in ids["use_cases"]
                        if u["name"] == "funnel-hypothesis-generation")
-    client = SphereClient(mode="replay")
+    client = SphereClient(mode="replay", replay_root=replay_root_for("pd_checkout"))
     state = RunState(
         run_id=9001, journey="pd_checkout", demo_mode=True, status="analyzing",
         window_start="2026-08-27", window_end="2026-09-02",

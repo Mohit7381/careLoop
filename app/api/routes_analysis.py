@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.base import SessionLocal, get_session
 from app.db.models import AnalysisRun, RunArtifact
+from app.agents.scope_resolver import describe, pick_journey, resolve_scope
 from app.integrations.garuda_client import GarudaDeliveryError, send_report
+from app.journeys import all_journeys, load_journey
 from app.pipeline.prd_editor import apply_edit_instruction
+from fastapi.concurrency import run_in_threadpool
 from app.pipeline.runner import run_pipeline
 from app.schemas.api import (
     CreateRunRequest,
@@ -19,8 +22,16 @@ from app.schemas.api import (
     PrdChatRequest,
     PrdChatResponse,
     PrdSummary,
+    ResolveScopeRequest,
+    ResolveScopeResponse,
     RunDetailResponse,
+    RunListResponse,
+    RunSummary,
+    ScopeChatRequest,
+    ScopeChatResponse,
 )
+from app.schemas.contracts import RunScope
+from app.scope_resolver import resolve_dimensions
 
 router = APIRouter(prefix="/v1/analysis", tags=["analysis"])
 
@@ -41,6 +52,8 @@ def _default_window() -> tuple[str, str]:
 def _run_pipeline_in_new_session(
     run_id: int, window_start: str, window_end: str, demo_mode: bool,
     journey: str, prev_window_start: str | None, prev_window_end: str | None,
+    scope: dict | None = None,
+    requested_dimensions: list[str] | None = None,
 ) -> None:
     """A background asyncio task needs its own DB session — never share one across threads/tasks."""
     session = SessionLocal()
@@ -48,9 +61,90 @@ def _run_pipeline_in_new_session(
         run_pipeline(
             session, run_id, window_start, window_end, demo_mode,
             journey=journey, prev_window_start=prev_window_start, prev_window_end=prev_window_end,
+            scope=scope, requested_dimensions=requested_dimensions,
         )
     finally:
         session.close()
+
+
+def find_duplicate_run(in_flight, prompt: str | None):
+    """The run already in flight that asks the SAME question, or None.
+
+    Runs are prompt-scoped, so the duplicate key is (journey, window, prompt),
+    not (journey, window). Keying on the window alone returned 409 for a user
+    asking a different question about the same week while another run was
+    still going — three times in one session.
+    """
+    wanted = (prompt or "").strip().lower()
+    for run in in_flight:
+        theirs = (((run.config or {}).get("scope") or {}).get("prompt") or "").strip().lower()
+        if theirs == wanted:
+            return run
+    return None
+
+
+def _pick_journey(journey: str | None, prompt: str | None) -> tuple[str, list[str]]:
+    """'auto' (or empty) picks the journey from the prompt's own vocabulary."""
+    if journey and journey != "auto":
+        return journey, []
+    return pick_journey(prompt or "", all_journeys())
+
+
+def _resolve(journey: str, prompt: str | None) -> RunScope:
+    """Resolve a prompt against the journey's own vocabulary.
+
+    `CreateRunRequest.dimensions` is deliberately NOT folded in here. That
+    field names ROUTING CATEGORIES (payments, consultation, ...) and is a
+    post-run filter on which findings surface — Mohit's PR #9. `scope.dimensions`
+    names DRILL-DOWN CUTS (stock_status, item_count, ...) and narrows what the
+    Analyst explores. The two vocabularies are disjoint, so copying one into the
+    other either 422s at his validator or empties the AggregateTool whitelist.
+    A caller can use both: scope the run from the entry page, then filter the
+    report to a category.
+    """
+    if not prompt:
+        return RunScope()
+    cfg = load_journey(journey)
+    events = list((cfg.get("event_stage") or {}).keys())
+    return resolve_scope(prompt, cfg, events, cfg["drilldown_dimensions"])
+
+
+def _validate_dimensions(journey: str, dimensions: list[str] | None) -> list[str]:
+    """
+    Prompt-scoped analysis (decision #13, contracts.py): `dimensions` names
+    routing categories from the journey's own `routing:` table (e.g.
+    "payments", "consultation") — not arbitrary strings. Refused here, at
+    request time, rather than silently running unscoped or producing a
+    confusing zero-findings run with no explanation of why.
+    """
+    if not dimensions:
+        return []
+    valid = set(load_journey(journey)["routing"].keys())
+    unknown = [d for d in dimensions if d not in valid]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": f"unknown dimension(s) for journey '{journey}': {', '.join(unknown)}",
+                "valid_dimensions": sorted(valid),
+            },
+        )
+    return dimensions
+
+
+@router.post("/scope/chat", response_model=ScopeChatResponse)
+async def scope_chat(body: ScopeChatRequest) -> ScopeChatResponse:
+    """
+    The "confirm with the user" half of prompt-scoped analysis (decision
+    #13): resolves free text ("analyze cart abandonment dropoff") to the
+    structured `dimensions` list POST /runs already accepts, WITHOUT
+    creating a run — a caller shows `reply`/`dimensions` back to the user
+    for confirmation, then calls POST /runs with the confirmed list. Never
+    mutates anything, so unlike the run-creation and PRD-chat-edit
+    endpoints this doesn't need the app token.
+    """
+    dimensions, reply = resolve_dimensions(body.journey, body.message)
+    return ScopeChatResponse(dimensions=dimensions, reply=reply, resolved=bool(dimensions))
 
 
 @router.post("/runs", response_model=CreateRunResponse, dependencies=[Depends(require_app_token)])
@@ -60,28 +154,39 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     if not window_start or not window_end:
         window_start, window_end = _default_window()
 
-    existing = session.execute(
+    journey, journey_hits = _pick_journey(body.journey, body.prompt)
+    # Validated against the RESOLVED journey, not body.journey — "auto" is not
+    # a real journey to load a routing table for, and a caller who names both
+    # a journey and dimensions still means those dimensions against whichever
+    # journey actually gets picked.
+    dimensions = _validate_dimensions(journey, body.dimensions)
+    scope = _resolve(journey, body.prompt)
+    if journey_hits:
+        scope.matched_on.insert(0, f"journey:{journey} (via {', '.join(journey_hits[:3])})")
+    in_flight = session.execute(
         select(AnalysisRun).where(
-            AnalysisRun.journey == body.journey,
+            AnalysisRun.journey == journey,
             AnalysisRun.window_start == window_start,
             AnalysisRun.window_end == window_end,
             AnalysisRun.status.in_(
                 ["queued", "fetching", "analyzing", "scanning_code", "reporting", "drafting_prd"]
             ),
         )
-    ).scalar_one_or_none()
+    ).scalars().all()
+    existing = find_duplicate_run(in_flight, scope.prompt)
     if existing is not None:
         raise HTTPException(
             status_code=409,
-            detail={"message": "a run for this window is already in progress", "run_id": existing.id},
+            detail={"message": "the same question is already running for this window",
+                    "run_id": existing.id},
         )
 
     run = AnalysisRun(
-        journey=body.journey,
+        journey=journey,
         window_start=window_start,
         window_end=window_end,
         status="queued",
-        config={"dimensions": body.dimensions or []},
+        config={"dimensions": dimensions, "scope": scope.model_dump()},
     )
     session.add(run)
     session.commit()
@@ -90,11 +195,28 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     asyncio.create_task(
         asyncio.to_thread(
             _run_pipeline_in_new_session, run.id, window_start, window_end, settings.demo_mode,
-            body.journey, body.prev_window_start, body.prev_window_end,
+            journey, body.prev_window_start, body.prev_window_end, scope.model_dump(), dimensions,
         )
     )
 
-    return CreateRunResponse(run_id=run.id, status="queued")
+    return CreateRunResponse(run_id=run.id, status="queued", journey=journey,
+                             scope=scope.model_dump(), scope_summary=describe(scope))
+
+
+@router.post("/runs/resolve-scope", response_model=ResolveScopeResponse,
+             dependencies=[Depends(require_app_token)])
+def resolve_scope_only(body: ResolveScopeRequest) -> ResolveScopeResponse:
+    """Show what a prompt was understood to mean, without running anything.
+
+    Resolution is deliberately deterministic and cheap, so the UI can confirm
+    the reading with the user before spending a run on a misinterpretation.
+    """
+    journey, journey_hits = _pick_journey(body.journey, body.prompt)
+    scope = _resolve(journey, body.prompt)
+    if journey_hits:
+        scope.matched_on.insert(0, f"journey:{journey} (via {', '.join(journey_hits[:3])})")
+    return ResolveScopeResponse(scope=scope.model_dump(), summary=describe(scope, journey),
+                                matched_on=scope.matched_on, unresolved=scope.unresolved, journey=journey)
 
 
 def _read_artifact(run: AnalysisRun, kind: str) -> str | None:
@@ -111,6 +233,45 @@ def _rank1_prd_markdown(run: AnalysisRun) -> str | None:
     return Path(a.uri).read_text() if a else None
 
 
+def _run_summary(run: AnalysisRun) -> RunSummary:
+    scope = (run.config or {}).get("scope") or {}
+    top = sorted(run.findings, key=lambda f: f.rank)[0] if run.findings else None
+    return RunSummary(
+        run_id=run.id,
+        journey=run.journey,
+        window_start=run.window_start,
+        window_end=run.window_end,
+        status=run.status,
+        failed_stage=run.failed_stage,
+        prompt=scope.get("prompt"),
+        scope_summary=describe(RunScope(**scope), run.journey) if scope else None,
+        findings_count=len(run.findings),
+        top_finding=(
+            f"Failed at {run.failed_stage or 'an unknown stage'}" if run.status == "failed"
+            else (top.hypothesis if top else None)
+        ),
+        created_at=run.created_at.isoformat(),
+    )
+
+
+@router.get("/runs", response_model=RunListResponse)
+async def list_runs(
+    limit: int = Query(default=50, ge=1, le=200), session: Session = Depends(get_session)
+) -> RunListResponse:
+    """
+    Run history, newest first — the dashboard's table used to start empty on
+    every page load/new tab even though every run was already sitting in
+    analysis_runs; there was simply nothing serving them back. Read-only, no
+    app token needed (same as GET /runs/{id}). A summary shape, not the full
+    RunDetailResponse — a list is scanned, not read; the detail page is one
+    click away for anything more than status/journey/top-finding.
+    """
+    runs = session.execute(
+        select(AnalysisRun).order_by(AnalysisRun.created_at.desc()).limit(limit)
+    ).scalars().all()
+    return RunListResponse(runs=[_run_summary(r) for r in runs])
+
+
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
 async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDetailResponse:
     run = session.get(AnalysisRun, run_id)
@@ -125,6 +286,7 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
         status=run.status,
         failed_stage=run.failed_stage,
         config=run.config,
+        scope=(run.config or {}).get("scope"),
         snapshots=[
             {
                 "stage": s.stage,
@@ -147,18 +309,30 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
                 "evidence": f.evidence,
                 "confidence": f.confidence,
                 "confirm_via": f.confirm_via,
+                "journey_events": f.journey_events,
+                "drilldown_ref": f.drilldown_ref,
+                "theme": f.theme,
+                "theme_search_terms": f.theme_search_terms,
+                "review_count": f.review_count,
+                "top_quotes": f.top_quotes,
             }
             for f in run.findings
         ],
         code_gaps=run.code_gaps,
+        suggestions=run.suggestions,
         voc=run.voc,
         drilldown_trail=run.drilldown_trail,
+        findings_rejected=run.findings_rejected or [],
         artifacts=[{"kind": a.kind, "uri": a.uri} for a in run.artifacts],
         report_markdown=_read_artifact(run, "report_md"),
         prd_markdown=_rank1_prd_markdown(run),
         prds=[
-            PrdSummary(finding_rank=a.finding_rank, title=a.title, markdown=Path(a.uri).read_text(), edited=a.edited)
-            for a in sorted((a for a in run.artifacts if a.kind == "prd_md"), key=lambda a: a.finding_rank or 0)
+            # prd_md rows written before #6 have no finding_rank; they were always
+            # the #1 finding's PRD, so read them back as rank 1 instead of 500-ing
+            # every GET for an older run.
+            PrdSummary(finding_rank=a.finding_rank if a.finding_rank is not None else 1,
+                       title=a.title, markdown=Path(a.uri).read_text(), edited=bool(a.edited))
+            for a in sorted((a for a in run.artifacts if a.kind == "prd_md"), key=lambda a: a.finding_rank or 1)
         ],
     )
 
@@ -222,6 +396,16 @@ async def get_run_prd(
     return Path(prd.uri).read_text()
 
 
+def _prd_edit_llm(run: AnalysisRun):
+    """Live sphere only. Demo mode replays a recorded *generation*, which would
+    silently replace the reviewer's PRD with a different document — so without
+    LIVE_LLM there is no model here and the editor says so."""
+    from app.integrations.sphere import _live_llm_wanted, make_use_case_llm
+    if not _live_llm_wanted(True):
+        return None
+    return make_use_case_llm(get_settings().llm_use_case_prd_chat_edit, demo_mode=False, journey=run.journey)
+
+
 @router.post(
     "/runs/{run_id}/prd/{rank}/chat",
     response_model=PrdChatResponse,
@@ -246,7 +430,9 @@ async def chat_edit_prd(
         raise HTTPException(status_code=404, detail=f"no PRD drafted for finding #{rank} on this run")
 
     current = Path(artifact.uri).read_text()
-    result = apply_edit_instruction(current, body.message)
+    # A rewrite is a 30-50 s sphere call; keep it off the event loop so
+    # polling GETs keep answering while the reviewer waits.
+    result = await run_in_threadpool(apply_edit_instruction, current, body.message, _prd_edit_llm(run))
 
     Path(artifact.uri).write_text(result.markdown)
     artifact.edited = True

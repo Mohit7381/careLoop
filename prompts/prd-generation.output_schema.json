@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "required": [
+    "prd_markdown"
+  ],
+  "properties": {
+    "prd_markdown": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

@@ -15,3 +15,14 @@ JOURNEYS_DIR = Path("config/journeys")
 @lru_cache
 def load_journey(journey: str) -> dict:
     return yaml.safe_load((JOURNEYS_DIR / f"{journey}.yaml").read_text())
+
+
+def all_journeys() -> dict[str, dict]:
+    """Every journey config on disk, keyed by name."""
+    from pathlib import Path
+    import yaml
+    out = {}
+    for path in sorted(Path("config/journeys").glob("*.yaml")):
+        cfg = yaml.safe_load(path.read_text())
+        out[cfg.get("name", path.stem)] = cfg
+    return out

@@ -25,15 +25,30 @@ def test_golden_run(cohort_cuts, reviews):
             "evidence": ["255293", "76641", "391898", "152981"],
             "confirm_via": "A/B a prescription-cart resume flow; watch rx confirm rate"}]},
     ])
-    out = run_analyst(state, llm=lambda ctx: next(llm_script),
-                      cohort_cuts=cohort_cuts, reviews=reviews)
+    # The exploration floor keeps asking after this script says done, so hold
+    # the last response rather than raising StopIteration — the run must still
+    # visit every rate-bearing cut before it is allowed to conclude.
+    held = {}
+
+    def llm(ctx):
+        nonlocal held
+        try:
+            held = next(llm_script)
+        except StopIteration:
+            pass
+        return held
+
+    out = run_analyst(state, llm=llm, cohort_cuts=cohort_cuts, reviews=reviews)
 
     # warehouse finding survived the evidence gate
     wh = [f for f in out.findings if f.origin == "warehouse"]
     assert wh and wh[0].stage == "pharmacy_checkout"
-    # journey_events populated from real ct_events (decision #11) - "orders"
-    # in the hypothesis stems to the fixture's order_placed/order_abandoned
-    assert "order_placed" in wh[0].journey_events or "order_abandoned" in wh[0].journey_events
+    # journey_events populated from real ct_events (decision #11). The fixture
+    # now carries the REAL dotted CT names, so "confirm" in the hypothesis
+    # stems to the pharmacy confirm events rather than to a simplified alias.
+    assert wh[0].journey_events
+    assert all(e.startswith("pharmacy.") for e in wh[0].journey_events)
+    assert any("confirm" in e for e in wh[0].journey_events)
     # VoC escalations appended after warehouse ranks
     voc = [f for f in out.findings if f.origin == "voc"]
     assert {f.theme for f in voc} == {"payment/refund", "consultation/doctor"}
@@ -42,3 +57,56 @@ def test_golden_run(cohort_cuts, reviews):
     assert out.drilldown_trail and out.drilldown_trail[0].dimension == "consultation_required"
     assert out.status == "scanning_code"
     assert out.voc.reviews_meta["negatives"] == 92
+
+
+def test_rejected_findings_are_reported_not_swallowed(cohort_cuts, reviews):
+    """A live run once ended with zero warehouse findings and no explanation:
+    the model's only finding cited prose, the gate dropped it, nothing recorded
+    that. The rejection and its reason now travel with the run."""
+    import json
+    from app.schemas.contracts import RunState, Snapshot
+    state = RunState(run_id=1, journey="pd_checkout", window_start="a", window_end="b",
+                     status="analyzing",
+                     snapshot=Snapshot(**json.loads((FIX / "snapshot.json").read_text())))
+    llm = lambda ctx: {"done": True, "findings": [{
+        "hypothesis": "insufficient data", "stage": "insufficient-data", "confidence": "low",
+        "evidence": ["No funnel aggregates were provided."],
+        "confirm_via": "provide the aggregates and re-run the analysis"}]}
+    out = run_analyst(state, llm=llm, cohort_cuts=cohort_cuts, reviews=reviews)
+    assert not [f for f in out.findings if f.origin == "warehouse"]
+    assert out.findings_rejected and "no evidence" in out.findings_rejected[0]["reason"]
+
+
+def test_drilldown_sees_voc_signals_and_voc_findings_rank_last(cohort_cuts, reviews):
+    """The v7 prompt tells the model about voc_signals, so the drill-down must
+    actually receive them: review themes are classified BEFORE phase 2 now.
+    Ranks still put every VoC finding after every warehouse finding, and a
+    review count is never accepted as warehouse evidence."""
+    import json
+    from app.schemas.contracts import RunState, Snapshot
+    state = RunState(run_id=1, journey="pd_checkout", window_start="a", window_end="b",
+                     status="analyzing",
+                     snapshot=Snapshot(**json.loads((FIX / "snapshot.json").read_text())))
+    seen = []
+
+    def llm(ctx):
+        seen.append(ctx)
+        if len(seen) == 1:
+            return {"done": False, "next_question": {"dimension": "consultation_required",
+                                                     "rationale": "rx"}}
+        return {"done": True, "findings": [
+            {"hypothesis": "rx-gated orders confirm at 30.0% vs 39.0%", "stage": "pharmacy_checkout",
+             "confidence": "high", "evidence": ["255293", "76641"], "confirm_via": "A/B a resume nudge"},
+            {"hypothesis": "41 reviews say payment", "stage": "payments", "confidence": "high",
+             "evidence": ["41"], "confirm_via": "correlate reviews with funnel"}]}
+
+    out = run_analyst(state, llm=llm, cohort_cuts=cohort_cuts, reviews=reviews)
+
+    signals = seen[0]["voc_signals"]
+    assert signals and {"theme", "count", "escalated"} <= set(signals[0])
+    assert all(s["theme"] != "unmapped" for s in signals)
+    # the review-count "finding" was rejected: voc_signals is context, not evidence
+    assert any("41 reviews" in r["finding"] for r in out.findings_rejected)
+    wh = [f for f in out.findings if f.origin == "warehouse"]
+    voc = [f for f in out.findings if f.origin == "voc"]
+    assert wh and voc and min(f.rank for f in voc) > max(f.rank for f in wh)

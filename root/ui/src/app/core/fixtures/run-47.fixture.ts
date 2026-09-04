@@ -219,7 +219,14 @@ export const RUN_47_RESPONSE: RunDetailResponse = {
       "segments": [],
       "evidence": [],
       "confidence": "high",
-      "confirm_via": "Correlate the reviews' dates/app versions with the matching funnel segment; then A/B the proposed fix and watch the theme count fall"
+      "confirm_via": "Correlate the reviews' dates/app versions with the matching funnel segment; then A/B the proposed fix and watch the theme count fall",
+      "theme": "payment/refund",
+      "theme_search_terms": ["payment", "refund"],
+      "review_count": 41,
+      "top_quotes": [
+        "konsultasi mulai dari 24:26 dokter masih bertanya dan saya sedang mengetik jawaban. tapi di menit 23:54 sesi berakhir dan masalah belum selesai. sangat tidak membantu sia-sia membayar hanya untuk bikin tambah emosi. sangat marah sekali. permasalahan masih gantuk, padahal harga tidak sedikit dan wakt",
+        "jelek bngt pelayanannya, saya sudah bayar. Pas mulai konsul dokternya suruh kirim foto, sampai waktu habis ga ada jawaban sama sekali, sia sia saya ngeluarin uang, meskipun cuma 61rb tapi itu banyak loh. 61rb tanpa dapat apapun solusi dari dokternya???"
+      ]
     },
     {
       "rank": 5,
@@ -229,7 +236,14 @@ export const RUN_47_RESPONSE: RunDetailResponse = {
       "segments": [],
       "evidence": [],
       "confidence": "medium",
-      "confirm_via": "Correlate the reviews' dates/app versions with the matching funnel segment; then A/B the proposed fix and watch the theme count fall"
+      "confirm_via": "Correlate the reviews' dates/app versions with the matching funnel segment; then A/B the proposed fix and watch the theme count fall",
+      "theme": "consultation/doctor",
+      "theme_search_terms": ["consultation", "doctor"],
+      "review_count": 21,
+      "top_quotes": [
+        "saya konsultasi dgn dokternya, tpi responnya sangat lambat hanya menjawab 2 pertanyaan itu pun dengan singkat. Sy merasa kecewa karna mash ada beberapa pertanyaan yang belum dijawab sesi sudah berakhir.",
+        "Konsultasinya rata rata enak. cuman pas mau beli obat yang ada di resep, terakhir dokter bilang kalau resepnya hanya berlaku online. Artinya harus beli via halodoc, lebih mahal dari apotek langganan, ditambah lagi ongkos kirimnya 12rb via ojol kirim ke rumah. Padahal saya lagi di luar ada keperluan."
+      ]
     }
   ],
   "code_gaps": [

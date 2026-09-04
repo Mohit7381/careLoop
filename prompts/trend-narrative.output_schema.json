@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "required": [
+    "narrative_lines"
+  ],
+  "properties": {
+    "narrative_lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "delta_ref"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "delta_ref": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

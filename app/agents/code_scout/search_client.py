@@ -41,6 +41,14 @@ logger = logging.getLogger(__name__)
 
 SEARCH_BUDGET_PER_REPO = 5
 
+
+def normalise_term(term: str) -> str:
+    """GitLab blob search is literal: "payment timeout" matches nothing while
+    "timeout" hits six files in scrooge/payment-service. Reduce a multi-word
+    term to its longest token; single tokens pass through."""
+    term = (term or "").strip()
+    return max(term.split(), key=len) if " " in term else term
+
 _EXCLUDED_PATH_MARKERS = ("/test/", "/tests/", "/context/")
 _SOURCE_EXTENSIONS = (
     ".java", ".kt", ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rb", ".php", ".cs", ".swift",
@@ -150,7 +158,9 @@ class LiveGitlabSearchClient:
     ) -> tuple[Optional[GapLocation], int]:
         project_id = self._project_id(repo)
         searches_run = 0
-        for term in search_terms:
+        for term in (normalise_term(t) for t in search_terms):
+            if not term:
+                continue
             if searches_run >= SEARCH_BUDGET_PER_REPO:
                 break
             searches_run += 1

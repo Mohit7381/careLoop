@@ -9,7 +9,7 @@ drilldown_trail — the trail renders in the UI and is half the demo.
 """
 import json
 import re
-from typing import Any, Callable
+from typing import Optional, Any, Callable
 
 _NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
@@ -71,36 +71,80 @@ def _glued(s: str, start: int, end: int) -> bool:
     return (before.isalpha() or before == "_") or (after.isalpha() or after == "_")
 
 
+CUTS_PER_TURN = 2
+
+
 def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
                   phase1_summary: dict, journey_routing_keys: list[str],
-                  routing_for_gap: str, budget: int = BUDGET
+                  routing_for_gap: str, budget: int = BUDGET,
+                  voc_signals: Optional[list[dict]] = None,
                   ) -> tuple[list[Finding], list[DrilldownStep]]:
     trail: list[DrilldownStep] = []
     findings: list[Finding] = []
     for _ in range(budget + 1):  # +1: final synthesis turn after budget exhausts
+        tried = {s.dimension for s in trail}
+        untried_rate_bearing = [d for d in tool.rate_bearing_dimensions if d not in tried]
         ctx = {
             "top_gap": top_gap,
             "phase1": phase1_summary,
             "drilldown_trail": [s.model_dump() for s in trail],
             # only dimensions that actually HAVE cohort data — asking for others wastes budget
             "allowed_dimensions": tool.dimensions_with_data,
-            "dimensions_already_tried": sorted({s.dimension for s in trail}),
+            # of those, the ones carrying `converted` — the only cuts that can
+            # show one segment converting worse than another. Prefer these.
+            "rate_bearing_dimensions": tool.rate_bearing_dimensions,
+            "rate_bearing_not_yet_tried": untried_rate_bearing,
+            "dimensions_already_tried": sorted(tried),
             "budget_remaining": budget - len(trail),
+            # Review themes, classified BEFORE the drill-down so the model can
+            # use them to choose a cut. Context only: the evidence gate never
+            # adds these counts to `shown`, so a finding that cites one is
+            # rejected — funnel magnitudes stay warehouse-sourced.
+            "voc_signals": voc_signals or [],
         }
         out = llm(ctx)
         if out.get("findings"):
             findings = _parse_findings(out["findings"], journey_routing_keys, routing_for_gap)
-        if out.get("done") or len(trail) >= budget:
+
+        if len(trail) >= budget:
             break
-        nq = out.get("next_question") or {}
-        dim = nq.get("dimension", "")
-        result = tool.aggregate(top_gap.get("to_stage", "confirmed"), dim)
-        trail.append(DrilldownStep(
-            question=nq.get("rationale", f"cut by {dim}"),
-            dimension=dim,
-            result_rows=result.get("rows", []),
-            note=("no cohort data — pick from dimensions_with_data" if result.get("no_data")
-                  else "rejected: not whitelisted" if "error" in result
-                  else "distribution_only" if result.get("distribution_only") else None),
-        ))
+
+        # Up to CUTS_PER_TURN dimensions are aggregated per model turn. Each turn
+        # is a ~20 s sphere call and the turns are inherently sequential, so
+        # letting the model name a second dimension (next_question.also_dimension,
+        # template 21687 v8) halves the number of turns for the same trail.
+        if out.get("done"):
+            # EXPLORATION FLOOR. Concluding while a rate-bearing cut is still
+            # untried is the one stopping condition we do not accept: those are
+            # the only dimensions that can show a conversion gap, and a live run
+            # was observed declaring done=True after 3 of 10 turns having never
+            # looked at stock_status — which carries a 35.8pp spread against the
+            # 9pp one it settled for. The choice of WHICH untried dimension is
+            # deterministic (first alphabetically), not a second LLM call, so the
+            # floor cannot itself be argued away by the model.
+            if not untried_rate_bearing:
+                break
+            cuts = [(d, f"exploration floor: rate-bearing dimension '{d}' was never "
+                        f"tried, so the run cannot conclude yet")
+                    for d in untried_rate_bearing[:CUTS_PER_TURN]]
+        else:
+            nq = out.get("next_question") or {}
+            dim = nq.get("dimension", "")
+            cuts = [(dim, nq.get("rationale", f"cut by {dim}"))]
+            also = (nq.get("also_dimension") or "").strip()
+            if also and also != dim and also not in tried:
+                cuts.append((also, f"second cut this turn: {also}"))
+
+        for dim, rationale in cuts:
+            if len(trail) >= budget:
+                break
+            result = tool.aggregate(top_gap.get("to_stage", "confirmed"), dim)
+            trail.append(DrilldownStep(
+                question=rationale,
+                dimension=dim,
+                result_rows=result.get("rows", []),
+                note=("no cohort data — pick from dimensions_with_data" if result.get("no_data")
+                      else "rejected: not whitelisted" if "error" in result
+                      else "distribution_only" if result.get("distribution_only") else None),
+            ))
     return findings, trail

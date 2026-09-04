@@ -1,0 +1,119 @@
+# Journey #2 — online doctor consultation (added 2026-09-04).
+# A journey is configuration, not code (FR9): every agent reads what is
+# journey-specific from this file. Numbers behind these choices are in
+# fixtures/consultation/README.md.
+name: consultation
+description: Online doctor consultation — request to completed chat, including the payment step
+
+# Prompt vocabulary that selects THIS journey when a user does not name one.
+journey_keywords: [consultation, consultations, consult, doctor, doctors, dokter, konsultasi, chat, appointment, telemedicine, erx, prescription]
+
+stages:            # ordered; names match Fetcher's SnapshotRow.stage
+  - created
+  - confirmed      # payment done / auto-confirmed
+  - started        # doctor joined, chat began
+  - completed
+
+maturing_stages: []   # consults complete within the session; no right-censoring at 7 days
+
+# Every dimension here has cohort data with rates (tests enforce).
+drilldown_dimensions:
+  - payer
+  - interface_type
+  - consultation_trigger
+  - delivery_channel
+  - scheduling
+  - hour_of_day
+
+# Recorded-reason handling (phase 1). Nothing here is a re-creation artefact:
+# "abandoned by system" IS the finding, not noise to exclude.
+artifact_reasons: []
+reason_field: cancellation_reason
+
+# Which funnel stage each analytics event belongs to (scope resolution + Code Scout seeds).
+event_stage:
+  consultation.view.service_homepage:        created
+  consultation.click.service_icon:           created
+  consultation.view.category_page:           created
+  consultation.view.search_result_page:      created
+  consultation.view.product_detail_page:     created
+  consultation.view.patient_selection_page:  created
+  consultation.click.confirm_patient_button: created
+  consultation.view.schedule_selection_page: created
+  consultation.click.confirm_schedule_button: created
+  consultation.view.coupon_redemption_page:  created
+  consultation.click.attempt_coupon_button:  created
+  consultation.view.coupon_attempt_result:   created
+  consultation.view.payment_page:            created
+  consultation.click.confirm_payment_button: created
+  consultation.backend.transaction_confirmed: confirmed
+  consultation.click.chat_doctor_button:     started
+  consultation.backend.transaction_delivered: completed
+  consultation.view.rating_popup:            completed
+  consultation.click.submit_rating_button:   completed
+
+# How people refer to each cut. Nobody types "interface_type".
+dimension_aliases:
+  payer:                [cash, insurance, insurer, insured, free, payment method, paying, payer, bayar, asuransi]
+  interface_type:       [ios, iphone, android, web, browser, platform, device, app]
+  consultation_trigger: [instant, trigger, erx-driven, pharmacy-triggered]
+  delivery_channel:     [online, offline, digital clinic, dc, channel, clinic]
+  scheduling:           [scheduled, schedule, walk-in, walk in, walkin, appointment, jadwal]
+  hour_of_day:          [hour, hourly, evening, night, late, midnight, time of day, timing]
+
+# Code Scout seeds — every term verified against GitLab blob search on 2026-09-04
+# (hit counts in fixtures/consultation/README.md). Unverified terms burn a search.
+code_hints:
+  by_stage:
+    consultation:      [abandon, GET_ABANDON_CONSULTATION, timeout, reminder]   # 13 / 3 / 16 / 16 in bintan/consultation
+    payments:          [paymentFailed, payment]                                  # 7 / 20
+    re_engagement:     [notification, reminder]                                  # 14 / 16
+    pharmacy_checkout: [erx, prescription]                                       # 20 / 14
+  by_dimension:
+    payer:                [insurance, paymentFailed, payment]
+    scheduling:           [schedule, appointment]
+    delivery_channel:     [doctor, reassign]
+    consultation_trigger: [erx, prescription]
+    hour_of_day:          [timeout, reminder]
+
+default_routing: consultation   # where a finding goes when the model names a funnel stage, not a category
+
+# Code Scout routing: category -> candidate repos (exact-match keys)
+routing:
+  consultation:
+    - bintan/consultation
+  payments:
+    - scrooge/payment-service
+    - bintan/consultation
+  re_engagement:
+    - transformers/garuda
+  pharmacy_checkout:       # the erx hand-off into a pharmacy order
+    - timor/oms
+
+# VoC (phase 3): same Halodoc app reviews; the lexicon is shared with pd_checkout.
+voc:
+  app_id: com.linkdokter.halodoc.android
+  lang: id
+  country: id
+  escalation_threshold: 20
+  themes:
+    - name: consultation/doctor
+      routing_stage: consultation
+      search_terms: ["session end", "doctor response", missed_by_doctor, rejected_by_doctor]
+      keywords: [dokter, konsul, "sesi berakhir", resep, "tidak dijawab", "lama menunggu"]
+    - name: payment/refund
+      routing_stage: payments
+      search_terms: [payment_failed, refund, abandon, "payment timeout"]
+      keywords: [refund, pembayaran, bayar, "dana tidak", uang, saldo, tagihan, "gagal bayar", potong]
+    - name: app/technical
+      routing_stage: consultation
+      search_terms: [error, crash, timeout]
+      keywords: [error, aplikasi, login, otp, loading, crash, bug, verifikasi, update]
+    - name: cs/support
+      routing_stage: re_engagement
+      search_terms: [escalation, ticket]
+      keywords: ["customer service", "cs ", bantuan, "respon lambat"]
+    - name: price
+      routing_stage: payments
+      search_terms: [pricing, fee, late_night_fee]
+      keywords: [mahal, harga, "biaya admin", biaya]

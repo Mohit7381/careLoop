@@ -4,6 +4,9 @@
 name: pd_checkout
 description: Pharmacy delivery order journey — cart to delivered medicine
 
+# Prompt vocabulary that selects THIS journey when a user does not name one.
+journey_keywords: [pharmacy, pharmacies, cart, carts, checkout, order, orders, medicine, medicines, obat, apotek, basket, delivery, courier, stock, prescription-delivery, pd]
+
 stages:            # ordered funnel stages; names match Fetcher's SnapshotRow.stage
   - created
   - confirmed
@@ -13,15 +16,20 @@ maturing_stages:   # right-censored — Reporter labels, never raw-compares (App
   - delivered
 
 # Analyst phase-2 drill-down whitelist (aggregate() rejects anything else)
+# Every dimension listed here MUST have data in fixtures/{journey}/cohort_cuts.json.
+# `platform` was removed 2026-09-03: the only device columns live on the event
+# fact (device_manufacturer/os_version), which is the wrong grain to compute a
+# per-transaction conversion rate from — advertising a dimension the tool can
+# only answer with no_data wastes a drill-down turn.
 drilldown_dimensions:
   - pd_category
   - price_band
   - consultation_required
   - abandon_reason
-  - platform
   - hour_of_day
   - item_count
   - stock_status
+  - delivery_outcome
 
 # Recorded-reason handling (phase 1)
 artifact_reasons:          # re-creation artifacts, excluded from user-abandonment rates
@@ -30,6 +38,56 @@ artifact_reasons:          # re-creation artifacts, excluded from user-abandonme
   - "halodoc+ recreate"
   - "cs change payment method, new order will be created"
 reason_field: abandon_reason
+
+# Scope resolution (FR: prompt-scoped runs). BA-owned vocabulary — the resolver
+# invents nothing, it only matches a request against what is listed here.
+
+# Which funnel stage each analytics event belongs to. "after adding items to
+# cart" resolves through add_to_cart_button -> created -> the created->confirmed
+# transition. Without this the events match but anchor nothing.
+event_stage:
+  pharmacy.view.service_homepage:        created
+  pharmacy.view.search_result_page:      created
+  pharmacy.view.product_detail_page:     created
+  pharmacy.click.add_to_cart_button:     created
+  pharmacy.view.cart_review_page:        created
+  pharmacy.click.confirm_cart_button:    created
+  pharmacy.view.delivery_options_list:   created
+  pharmacy.view.payment_page:            created
+  pharmacy.click.confirm_payment_button: created
+  pharmacy.backend.transaction_abandoned: created
+  pharmacy.backend.transaction_confirmed: confirmed
+  pharmacy.backend.transaction_delivered: delivered
+
+# How people actually refer to each drill-down dimension. Nobody types
+# "stock_status"; they type "unfulfilled items" or "out of stock".
+dimension_aliases:
+  stock_status:          [stock, unfulfilled, unavailable, availability, fulfilment, fulfillment, kosong]
+  item_count:            [items, item, basket, quantity, multiple, cart size]
+  price_band:            [price, priced, expensive, cost, costly, mahal]
+  consultation_required: [prescription, prescriptions, rx, consultation, doctor, resep]
+  hour_of_day:           [hour, hourly, evening, morning, night, time of day, timing]
+  abandon_reason:        [reason, reasons, abandonment, abandoned]
+  pd_category:           [category, categories, product type]
+  delivery_outcome:      [delivery, delivered, cancelled, courier]
+
+# Code Scout search seeds. Analytics event names (pharmacy.click.add_to_cart_button)
+# and segment labels (3_to_5_items) exist in the app and the warehouse, never in
+# backend Java — a live run searched timor/oms for six of them and got zero hits.
+# These are terms that DO appear in the owning repos, each one verified against
+# GitLab blob search on 2026-09-04 (hit counts in comments). Add more only after
+# checking; an unverified hint burns a search turn on nothing.
+code_hints:
+  by_stage:                       # the routing category a finding lands in
+    pharmacy_checkout: [abandon, abandonOrder, timeToAbandon]   # 6 / 6 / 3 in timor/oms
+    payments:          [timeout]                                # 6 in scrooge/payment-service
+    consultation:      [session, abandon]                       # 14 / — in bintan/consultation
+  by_dimension:                   # the drill-down cut a finding cites
+    item_count:            [CartItem, quantity]                 # 7 / 2 in timor/oms
+    consultation_required: [erx, prescription]                  # 11 / 6 in timor/oms
+    stock_status:          [stock]                              # 1 in timor/oms
+
+default_routing: pharmacy_checkout   # where a finding goes when the model names a funnel stage, not a category
 
 # Code Scout routing: category -> candidate repos (exact-match keys; Appx A #2)
 routing:

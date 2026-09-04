@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "consultation_required",
+  "rationale": "This is a rate-bearing dimension (listed in rate_bearing_dimensions) and is untried. Rate-bearing cuts can reveal segments with systematically lower created\u2192confirmed conversion; testing 'consultation_required' first is most likely to show a segment-level conversion gap we can act on. Budget_remaining is sufficient to run this cut."
+ }
+}

@@ -39,11 +39,28 @@ export class RunDetailComponent {
   readonly liveError = this.runService.liveError;
 
 
+  /** True while the backend is still working on this run. */
+  readonly inFlight = computed(() => !['completed', 'failed'].includes(this.run().status));
+
+  /** Tone drives the pill colour; label shows the real backend stage. */
   readonly statusPill = computed(() => {
     const failed = this.stages().some((s) => s.status === 'failed');
     const allDone = this.stages().every((s) => s.status === 'done');
     return failed ? 'failed' : allDone ? 'completed' : 'analyzing';
   });
+  readonly statusLabel = computed(() =>
+    this.inFlight() ? this.run().status.replace(/_/g, ' ') : this.statusPill()
+  );
+
+  /** Journey name from the API, humanised; pharmacy is the historical default. */
+  readonly journeyLabel = computed(() => {
+    const j = (this.run() as unknown as { journey?: string }).journey ?? 'pd_checkout';
+    return j === 'pd_checkout' ? 'pharmacy delivery order journey' : `${j.replace(/_/g, ' ')} journey`;
+  });
+
+  readonly hasFunnel = computed(() => (this.run().snapshot?.stages?.length ?? 0) > 0);
+  readonly hasFindings = computed(() => (this.run().findings?.length ?? 0) > 0);
+  readonly hasCode = computed(() => (this.run().code_gaps?.length ?? 0) > 0);
 
   readonly prdReady = computed(() => this.stages().every((s) => s.status === 'done'));
 

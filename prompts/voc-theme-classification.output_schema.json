@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "required": [
+    "classifications"
+  ],
+  "properties": {
+    "classifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "review_id",
+          "theme",
+          "stage",
+          "severity",
+          "matched_phrase",
+          "english_gloss"
+        ],
+        "properties": {
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "theme": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "type": "string"
+          },
+          "review_id": {
+            "type": "string"
+          },
+          "english_gloss": {
+            "type": "string"
+          },
+          "matched_phrase": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

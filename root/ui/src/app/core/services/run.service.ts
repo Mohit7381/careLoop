@@ -22,6 +22,38 @@ export interface StageView {
  *  most of them (a 404 or a stale-contract payload is not unreachable). */
 export type Source = 'fixture' | 'live' | 'live-failed';
 
+/** POST /v1/analysis/runs/resolve-scope — the backend's reading of a prompt. */
+export interface ResolvedScope {
+  scope: {
+    prompt?: string | null;
+    from_stage?: string | null;
+    to_stage?: string | null;
+    dimensions?: string[];
+    review_days?: number | null;
+  };
+  summary: string;
+  matched_on: string[];
+  unresolved: string[];
+  /** Which journey the prompt was understood to be about (picked from the prompt when 'auto'). */
+  journey?: string;
+}
+
+/** GET /v1/analysis/runs — one row of run history. Deliberately not the
+ *  full RunDetailResponse: a list is scanned, not read. */
+export interface RunSummary {
+  run_id: number;
+  journey: string;
+  window_start: string;
+  window_end: string;
+  status: RunStatus;
+  failed_stage?: string | null;
+  prompt?: string | null;
+  scope_summary?: string | null;
+  findings_count: number;
+  top_finding?: string | null;
+  created_at: string;
+}
+
 const STAGE_LABELS: Record<StageKey, string> = {
   fetch: 'FETCH DATA',
   analyze: 'ANALYZE DROP-OFFS',
@@ -57,6 +89,9 @@ const STATUS_MAP: Record<Exclude<RunStatus, 'failed'>, StageStatus[]> = {
 const STAGE_KEYS: StageKey[] = ['fetch', 'analyze', 'code', 'prd'];
 const POLL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 10_000;
+// A PRD rewrite is a real model call on the backend (30-50 s); the generic
+// request timeout would abandon it while it is still working.
+const PRD_CHAT_TIMEOUT_MS = 90_000;
 const DELIVER_TIMEOUT_MS = 8_000;
 const MAX_RETRIES = 2;
 const API_BASE = '/v1/analysis/runs';
@@ -110,6 +145,7 @@ function toRunState(r: RunDetailResponse): RunState {
   const previous = r.snapshots.filter((s) => s.window === 'previous');
   return {
     run_id: r.run_id,
+    journey: r.journey,
     window_start: r.window_start,
     window_end: r.window_end,
     status: r.status,
@@ -295,6 +331,63 @@ export class RunService {
   }
 
   /**
+   * POST /v1/analysis/runs/resolve-scope — what a prompt is understood to mean,
+   * without running anything.
+   *
+   * Separate from createRun on purpose: resolution is deterministic and cheap,
+   * so the reading can be confirmed before a run is spent on a misreading. An
+   * unresolvable prompt is not an error — it means the full funnel is analysed,
+   * and the summary says so.
+   */
+  async resolveScope(prompt: string, journey = 'auto'): Promise<ResolvedScope | { error: string }> {
+    try {
+      return await firstValueFrom(
+        this.http
+          .post<ResolvedScope>(
+            `${API_BASE}/resolve-scope`,
+            { journey, prompt },
+            { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
+          )
+          .pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+    } catch (err) {
+      return { error: err instanceof HttpErrorResponse ? describeError(err) : 'request timed out' };
+    }
+  }
+
+  /** A one-shot read for the dashboard's row, without starting the poller. */
+  async fetchRun(runId: number): Promise<RunDetailResponse | null> {
+    try {
+      const body = await firstValueFrom(
+        this.http.get<unknown>(`${API_BASE}/${runId}`).pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      const result = validateRunDetail(body);
+      return result.ok ? result.run : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * GET /v1/analysis/runs — run history, newest first. No app token needed
+   * (read-only, same as fetchRun). Empty array on any failure: a dashboard
+   * that can't load history should read as "nothing yet", not throw up an
+   * error banner over the still-usable "ask a question" box above it.
+   */
+  async listRuns(limit = 50): Promise<RunSummary[]> {
+    try {
+      const body = await firstValueFrom(
+        this.http
+          .get<{ runs: RunSummary[] }>(API_BASE, { params: { limit } })
+          .pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      return body?.runs ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * POST /v1/analysis/runs — kicks off a real pipeline run.
    *
    * Requires the app token (GET does not). A 409 means a run for this window
@@ -303,23 +396,20 @@ export class RunService {
    * happens if someone clicks "New analysis" twice.
    */
   async createRun(
-    journey = 'pd_checkout',
-    dimensions?: string[]
-  ): Promise<{ runId: number; existing: boolean } | { error: string }> {
+    journey = 'auto',
+    prompt?: string
+  ): Promise<{ runId: number; existing: boolean; scopeSummary?: string; journey?: string } | { error: string }> {
     try {
       const res = await firstValueFrom(
         this.http
-          .post<{ run_id: number; status: RunStatus }>(
+          .post<{ run_id: number; status: RunStatus; scope_summary?: string; journey?: string }>(
             API_BASE,
-            // Only send `dimensions` when a scope was actually resolved — an
-            // empty array is a different request from an absent one, and the
-            // backend 422s on an unknown dimension.
-            dimensions?.length ? { journey, dimensions } : { journey },
+            prompt ? { journey, prompt } : { journey },
             { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
           )
           .pipe(timeout(REQUEST_TIMEOUT_MS))
       );
-      return { runId: res.run_id, existing: false };
+      return { runId: res.run_id, existing: false, scopeSummary: res.scope_summary, journey: res.journey };
     } catch (err) {
       if (err instanceof HttpErrorResponse) {
         const detail = err.error?.detail;
@@ -334,36 +424,6 @@ export class RunService {
         return { error: describeError(err) };
       }
       return { error: 'request timed out' };
-    }
-  }
-
-  /**
-   * POST /v1/analysis/scope/chat — turns a sentence into a structured scope.
-   *
-   * Resolves only; it creates nothing. The confirmed `dimensions` are then
-   * passed to createRun(). Deliberately a separate step so a misread scope
-   * is corrected before it costs a run, and so free-text never reaches the
-   * Analyst as prose — largest_drop() staying deterministic is what keeps
-   * the headline number un-hallucinated.
-   *
-   * Open (no Bearer), unlike the POST routes that create or mutate.
-   */
-  async resolveScope(
-    message: string,
-    journey = 'pd_checkout'
-  ): Promise<{ dimensions: string[]; reply: string; resolved: boolean } | { error: string }> {
-    try {
-      const res = await firstValueFrom(
-        this.http
-          .post<{ dimensions: string[]; reply: string; resolved: boolean }>(
-            '/v1/analysis/scope/chat',
-            { message, journey }
-          )
-          .pipe(timeout(REQUEST_TIMEOUT_MS))
-      );
-      return { dimensions: res?.dimensions ?? [], reply: res?.reply ?? '', resolved: !!res?.resolved };
-    } catch (err) {
-      return { error: err instanceof HttpErrorResponse ? describeError(err) : 'scope request timed out' };
     }
   }
 
@@ -446,7 +506,7 @@ export class RunService {
             { message },
             { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
           )
-          .pipe(timeout(REQUEST_TIMEOUT_MS))
+          .pipe(timeout(PRD_CHAT_TIMEOUT_MS))
       );
       this._run.update((run) => ({
         ...run,
@@ -464,7 +524,7 @@ export class RunService {
   }
 
   private failedStatuses(run: RunState): StageStatus[] {
-    const reached = run.code_gaps.length ? 3 : run.findings.length ? 2 : run.snapshot.stages.length ? 1 : 0;
+    const reached = (run.code_gaps?.length ?? 0) ? 3 : (run.findings?.length ?? 0) ? 2 : (run.snapshot?.stages?.length ?? 0) ? 1 : 0;
     const statuses: StageStatus[] = ['done', 'done', 'done', 'done'];
     for (let i = reached; i < 4; i++) statuses[i] = i === reached ? 'failed' : 'pending';
     return statuses;
@@ -475,22 +535,26 @@ export class RunService {
     if (status === 'failed') return 'failed';
     switch (key) {
       case 'fetch': {
-        // phase3_voc.py emits `total`; `pulled` was the pre-Rev-3 name, kept
-        // as a fallback so an older backend still reports a real number
-        // rather than silently reading 0.
-        const meta = run.voc.reviews_meta;
-        const reviews = meta['total'] ?? meta['pulled'] ?? 0;
-        return `${run.snapshot.stages.length} stage rows · ${reviews} reviews`;
+        // Backend keys are total/negatives; older fixtures said pulled/negative.
+        const meta = run.voc?.reviews_meta ?? {};
+        const pulled = meta['total'] ?? meta['pulled'];
+        const rows = run.snapshot?.stages?.length ?? 0;
+        if (status === 'running' || !rows) return 'fetching the funnel…';
+        return `${rows} stage rows · ${pulled ?? '—'} reviews`;
       }
-      case 'analyze':
+      case 'analyze': {
+        const findings = run.findings ?? [];
         return status === 'running'
-          ? `drilling down… (query ${run.drilldown_trail.length}/10)`
-          : `${run.findings.length} findings, ${run.findings.filter((f) => f.rank === 1).length ? 1 : 0} critical`;
+          ? `drilling down… (query ${run.drilldown_trail?.length ?? 0}/10)`
+          : `${findings.length} findings, ${findings.some((f) => f.rank === 1) ? 1 : 0} critical`;
+      }
       case 'code': {
-        const found = run.code_gaps.filter((g) => g.mechanism_found);
+        const gaps = run.code_gaps ?? [];
+        if (status === 'running') return 'searching the owning repos…';
+        const found = gaps.filter((g) => g.mechanism_found);
         const remedies = found.reduce((n, g) => n + (g.remedies?.length ?? 0), 0);
-        const suggestions = run.suggestions.length;
-        if (!run.code_gaps.length && !suggestions) return 'no code gaps yet';
+        const suggestions = run.suggestions?.length ?? 0;
+        if (!gaps.length && !suggestions) return 'no code gaps yet';
         const parts = [`${found.length} mechanism(s) pinned`, `${remedies} remedy verdict(s)`];
         if (suggestions) parts.push(`${suggestions} suggestion(s)`);
         return parts.join(' · ');

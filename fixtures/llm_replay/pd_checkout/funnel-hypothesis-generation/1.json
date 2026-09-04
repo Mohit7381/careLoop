@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "stock_status",
+  "rationale": "Stock-related artifact reasons appear in the reason_clusters ('items unavailable': 3907; artifact_total: 42107; artifact_share: 0.1743). Because stock_status is a rate-bearing, untried dimension, cutting by it may reveal segments (e.g., out_of_stock or low-stock items) with systematically lower created\u2192confirmed conversion that help explain the top gap. Consultation_required already shows a meaningful gap (rx_gated rate 0.3002 vs non_rx 0.3904), so testing stock_status next will show whether availability issues are an additional, actionable source of conversion loss."
+ }
+}

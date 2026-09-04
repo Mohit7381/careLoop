@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "interface_type",
+  "rationale": "Remaining rate-bearing cuts are interface_type and payer; prioritize interface_type because the low-converting, high-volume segments (instant: entered 181,651 -> converted 94,141, rate 0.5183; delivery_channel 'online': entered 173,053 -> converted 86,850, rate 0.5019) plus large user-side system terminations (phase1 user_reasons 'abandoned by system': 54,015 of user_total 90,419) point to possible client-side or app/web instability. Cutting by interface_type (e.g., mobile app vs web vs API) will show whether a particular interface concentrates the created->confirmed loss; if one interface converts materially worse, confirm with a targeted experiment (e.g., deploy a stability/queueing fix or altered messaging on that interface and measure created->confirmed uplift)."
+ }
+}

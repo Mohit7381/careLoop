@@ -1,57 +1,122 @@
 <div class="wrap">
-  <header class="head">
-    <div class="head-text">
-      <h1>Runs</h1>
-      <p class="sub">Funnel drop-off analysis across the pharmacy delivery journey.</p>
+  <div class="head">
+    <div>
+      <h1>CareLoop</h1>
+      <p class="sub">funnel drop-off analysis · ask a question</p>
     </div>
+    <div class="chip-env">data: prod snapshot · 27 Aug – 2 Sep 2026</div>
+  </div>
 
-    <div class="head-actions">
-      <span class="chip-env"><span class="dot" aria-hidden="true"></span>prod snapshot · 26 Aug – 2 Sep 2026</span>
-      <button class="btn btn-primary" type="button" [disabled]="creating()" (click)="newAnalysis()">
-        {{ creating() ? 'Starting…' : 'New analysis' }}
+  <!-- ask -->
+  <section class="ask">
+    <label class="ask-label" for="q">What do you want to know?</label>
+    <div class="ask-row">
+      <textarea
+        id="q"
+        rows="2"
+        placeholder="e.g. check how many and why the users are dropping off during the payments"
+        [ngModel]="prompt()"
+        (ngModelChange)="prompt.set($event)"
+        (keydown.meta.enter)="resolve()"
+        (keydown.control.enter)="resolve()"
+        [disabled]="resolving() || creating()"></textarea>
+      <button class="btn btn-primary" type="button" [disabled]="!canSubmit()" (click)="resolve()">
+        {{ resolving() ? 'Reading…' : 'Analyse' }}
       </button>
     </div>
-  </header>
 
-  @if (createError(); as err) {
-    <div class="create-error" role="alert">{{ err }}</div>
-  }
+    @if (!preview()) {
+      <div class="examples">
+        <span class="ex-label">try</span>
+        @for (ex of examples; track ex) {
+          <button class="ex" type="button" (click)="useExample(ex)">{{ ex }}</button>
+        }
+      </div>
+    }
 
-  <section class="runs">
-    <h2 class="section-label">Recent runs</h2>
+    <!-- what we understood, before anything runs -->
+    @if (preview(); as p) {
+      <div class="preview">
+        <div class="preview-head">
+          <span class="lbl">CareLoop understood</span>
+          <span class="preview-summary">{{ p.summary }}</span>
+        </div>
 
+        @if (p.matched_on.length) {
+          <div class="matched">
+            @for (m of p.matched_on; track m) {
+              <span class="tag mono">{{ m }}</span>
+            }
+          </div>
+        }
+
+        @if (p.unresolved.length) {
+          <ul class="unresolved">
+            @for (u of p.unresolved; track u) {
+              <li>{{ u }}</li>
+            }
+          </ul>
+        }
+
+        <div class="preview-actions">
+          <button class="btn btn-primary" type="button" [disabled]="creating()" (click)="run()">
+            {{ creating() ? 'Starting…' : 'Run this analysis' }}
+          </button>
+          <button class="btn btn-ghost" type="button" (click)="editQuestion()">Edit question</button>
+        </div>
+      </div>
+    }
+
+    @if (error(); as err) {
+      <div class="create-error">{{ err }}</div>
+    }
+  </section>
+
+  <!-- results -->
+  @if (hasRows()) {
     <div class="tablewrap">
       <table>
         <thead>
           <tr>
-            <th scope="col">Run</th>
-            <th scope="col">Window</th>
-            <th scope="col">Status</th>
-            <th scope="col">Top finding</th>
-            <th scope="col" class="num-col">Findings</th>
-            <th scope="col">Triggered</th>
+            <th>Run</th>
+            <th>Journey</th>
+            <th>Question</th>
+            <th>Status</th>
+            <th>Top finding</th>
+            <th class="num-col">Findings</th>
+            <th>Started</th>
           </tr>
         </thead>
         <tbody>
-          @for (row of rows; track row.id) {
-            <tr
-              class="row"
-              tabindex="0"
-              [attr.aria-label]="'Open run ' + row.id"
-              (click)="open(row.id)"
-              (keydown.enter)="open(row.id)"
-              (keydown.space)="$event.preventDefault(); open(row.id)"
-            >
-              <td class="c-run">#{{ row.id }}</td>
-              <td class="c-window">{{ row.window }}</td>
-              <td class="c-status"><span class="pill" [class]="row.status">{{ row.status }}</span></td>
-              <td class="c-finding">{{ row.topFinding }}</td>
-              <td class="c-count num-col">{{ row.findingsCount }}</td>
-              <td class="c-time">{{ row.timestamp }}</td>
+          @for (row of rows(); track row.id) {
+            <tr class="row" [class.pending]="row.status === 'analyzing'" (click)="open(row)">
+              <td class="mono">#{{ row.id }}</td>
+              <td class="mono">{{ row.journey }}</td>
+              <td class="question">
+                {{ row.prompt ?? 'Full funnel' }}
+                @if (row.scopeSummary) {
+                  <span class="scope mono">{{ row.scopeSummary }}</span>
+                }
+              </td>
+              <td><span class="pill" [class]="row.status">{{ row.status }}</span></td>
+              <td class="finding">{{ row.topFinding }}</td>
+              <td class="num-col mono">{{ row.findingsCount || '—' }}</td>
+              <td class="mono ink3">{{ row.timestamp }}</td>
             </tr>
           }
         </tbody>
       </table>
     </div>
-  </section>
+  } @else if (loadingHistory()) {
+    <div class="empty">
+      <p class="empty-title">Loading run history…</p>
+    </div>
+  } @else {
+    <div class="empty">
+      <p class="empty-title">No analyses yet</p>
+      <p class="empty-sub">
+        Ask a question above. CareLoop will show you what it understood before it runs anything.
+      </p>
+    </div>
+  }
 </div>

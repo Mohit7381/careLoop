@@ -11,7 +11,7 @@
  */
 
 export type FindingOrigin = 'warehouse' | 'voc';
-export type GapClass = 'logic_flaw' | 'missing_retention_hook' | 'ux_gap';
+export type GapClass = 'logic_flaw' | 'missing_retention_hook' | 'ux_gap' | 'unclassified';
 export type RunStatus =
   | 'queued' | 'fetching' | 'analyzing' | 'scanning_code'
   | 'reporting' | 'drafting_prd' | 'completed' | 'failed';
@@ -277,6 +277,7 @@ export interface RunDetailResponse {
 /** The view model the components render. */
 export interface RunState {
   run_id: number;
+  journey?: string;
   window_start: string;
   window_end: string;
   status: RunStatus;

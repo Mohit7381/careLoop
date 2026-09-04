@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": [
+    "prd_markdown",
+    "reply"
+  ],
+  "properties": {
+    "prd_markdown": {
+      "type": "string"
+    },
+    "reply": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

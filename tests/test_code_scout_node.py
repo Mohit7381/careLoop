@@ -108,7 +108,12 @@ def test_voc_origin_finding_uses_its_own_theme_search_terms(search_client, asses
 
     assert len(gaps) == 1
     gap = gaps[0]
-    assert gap.search_terms_used == ["abandon"]
+    # The theme term is searched, and nothing is derived from hypothesis prose
+    # ("reviews", "mention", "issues" never appear). The journey's verified
+    # code_hints for pharmacy_checkout are searched too, ahead of it.
+    assert "abandon" in gap.search_terms_used
+    assert gap.search_terms_used[:3] == ["abandon", "abandonOrder", "timeToAbandon"]
+    assert not {"reviews", "mention", "issues"} & set(gap.search_terms_used)
     assert gap.origin == "voc"
     # GAP 2 fixture is a real-but-weaker candidate, not fully hand-verified
     # like GAP 1 - still resolves mechanism_found=True per the fixture.
@@ -223,7 +228,10 @@ def test_a_failing_finding_does_not_abort_processing_of_other_findings(search_cl
     result = code_scout_node(state, search_client=search_client, assessor=assessor)
     gaps = result["code_gaps"]
 
-    # finding #1's LLM call failed -> zero gaps for it, but finding #2 still
-    # resolved its real gap - the failure didn't propagate.
+    # finding #1's assessor call failed, and the failure did not propagate:
+    # finding #2 still resolved its real gap. Finding #1 is no longer dropped
+    # either — the journey's code_hints for `consultation` are searched even
+    # when the assessor gives nothing, so a bad LLM call degrades the seeds
+    # rather than skipping the finding.
     assert gaps
-    assert all(g.finding_rank == 2 for g in gaps)
+    assert any(g.finding_rank == 2 for g in gaps)

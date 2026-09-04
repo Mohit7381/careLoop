@@ -29,6 +29,10 @@ class AnalysisRun(Base):
     code_gaps: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     voc: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     drilldown_trail: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    findings_rejected: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Code Scout's alternate flow (contracts.py decision #11) — tech/business/
+    # process improvement ideas, additive alongside code_gaps.
+    suggestions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=_utcnow, index=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(
@@ -77,6 +81,18 @@ class DropOffFinding(Base):
     evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     confidence: Mapped[str] = mapped_column(String(8), nullable=False)  # high | medium | low
     confirm_via: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Mirrors of the remaining app.schemas.contracts.Finding fields — were
+    # computed by the Analyst but dropped on the way into this table (only
+    # the warehouse-origin fields above were ever persisted), so a voc-origin
+    # finding lost its theme/review_count/quotes and rendered as "0 reviews
+    # · theme: —" in the UI no matter what the pipeline actually found.
+    journey_events: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    drilldown_ref: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    theme: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    theme_search_terms: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    review_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    top_quotes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     run: Mapped["AnalysisRun"] = relationship(back_populates="findings")
 
