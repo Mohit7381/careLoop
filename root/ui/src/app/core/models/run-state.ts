@@ -157,15 +157,6 @@ export interface Suggestion {
   searches_run?: number;
 }
 
-/** One generated PRD. The backend writes one per finding (up to a cap), so
- *  `prd_markdown` on the response is now just finding #1 for back-compat. */
-export interface PrdSummary {
-  finding_rank: number;
-  title: string;
-  markdown: string;
-  edited: boolean;
-}
-
 export interface StageDelta {
   stage: string;
   segment?: string | null;
@@ -239,6 +230,19 @@ export interface Snapshot {
   previous_stages: SnapshotRow[];
 }
 
+/** One PRD, tied to the finding it was drafted for — `PrdSummary` in
+ *  app/schemas/api.py. A run can produce more than one (up to
+ *  MAX_PRDS_PER_RUN in prd_generator.py), one per ranked finding.
+ *  `edited` is true once a chat-edit instruction has been applied to it
+ *  (POST /runs/{id}/prd/{rank}/chat) — the drawer uses this to show a
+ *  "edited" mark rather than silently losing the distinction. */
+export interface PrdSummary {
+  finding_rank: number;
+  title: string | null;
+  markdown: string;
+  edited: boolean;
+}
+
 /**
  * What GET /v1/analysis/runs/{id} actually returns — `RunDetailResponse` in
  * app/schemas/api.py, which is NOT the pipeline's internal RunState:
@@ -265,6 +269,7 @@ export interface RunDetailResponse {
   report_markdown?: string | null;
   /** Finding #1's PRD only — kept for back-compat now that `prds` exists. */
   prd_markdown?: string | null;
+  /** One per finding, up to MAX_PRDS_PER_RUN — absent on an older backend. */
   prds?: PrdSummary[];
   suggestions?: Suggestion[];
 }
@@ -283,9 +288,12 @@ export interface RunState {
   code_gaps: CodeGap[];
   /** Agent 3's generative output — improvement ideas, not diagnoses. */
   suggestions: Suggestion[];
-  prds: PrdSummary[];
   trend_report: TrendReport;
   voc: Voc;
   prd_draft: string | null;
+  /** One real PRD artifact per finding — [] on the frozen fixture and on an
+   *  older backend, in which case the drawer falls back to reconstructing a
+   *  structured view per finding from findings + code_gaps (see prd.model.ts). */
+  prds: PrdSummary[];
   artifacts: string[];
 }

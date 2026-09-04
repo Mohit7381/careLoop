@@ -68,19 +68,20 @@ def _remedies_block(gap: CodeGap) -> str:
     if not gap.remedies:
         return ""
     lines = ["\n\n**Remedy Loop verdicts (proposed fixes, verified against the code):**"]
-    for r in gap.remedies:
+    for i, r in enumerate(gap.remedies, start=1):
         n = len(r.searched_terms)
+        tag = f"FR-{i}:"
         if r.status == "absent":
-            lines.append(f"- **[FR candidate — not found in {n} search{'es' if n != 1 else ''}]** {r.proposal}")
+            lines.append(f"- {tag} **[FR candidate — not found in {n} search{'es' if n != 1 else ''}]** {r.proposal}")
         elif r.status == "exists":
             lines.append(
-                f"- **[Already built — do not re-propose]** {r.proposal} "
+                f"- {tag} **[Already built — do not re-propose]** {r.proposal} "
                 f"(`{r.evidence_file}:{r.evidence_line}`)"
             )
         elif r.status == "partial":
-            lines.append(f"- **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
+            lines.append(f"- {tag} **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
         else:
-            lines.append(f"- **[Unverified — no search ran, e.g. budget exhausted first]** {r.proposal}")
+            lines.append(f"- {tag} **[Unverified — no search ran, e.g. budget exhausted first]** {r.proposal}")
     return "\n".join(lines)
 
 
@@ -161,24 +162,35 @@ def _render_prd_llm_stub(
     return title, body
 
 
+MAX_PRDS_PER_RUN = 5
+
+
 def prd_generator_node(state: GraphState) -> GraphState:
+    """
+    Generates one PRD per finding, not just the #1 ranked one — capped at
+    MAX_PRDS_PER_RUN. `prd_draft` is kept as the #1 finding's markdown alone
+    (existing field, other consumers read it) for backward compatibility;
+    `prd_drafts` (new, additive) carries the full list.
+    """
     run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
-    top = run_state.top_finding()
+    findings = sorted(run_state.findings, key=lambda f: f.rank)[:MAX_PRDS_PER_RUN]
 
-    if top is None:
-        return {**state, "prd_draft": None, "status": "completed", "error": "no_finding_to_draft_prd_for"}
+    if not findings:
+        return {**state, "prd_draft": None, "prd_drafts": [], "status": "completed", "error": "no_finding_to_draft_prd_for"}
 
-    gaps = run_state.gaps_for(top.rank)
-    quotes = _collect_quotes(top, run_state.voc.per_finding_quotes)
+    drafts = []
+    for finding in findings:
+        gaps = run_state.gaps_for(finding.rank)
+        quotes = _collect_quotes(finding, run_state.voc.per_finding_quotes)
+        title, body = _render_prd_llm_stub(
+            finding,
+            gaps,
+            run_state.trend_report,
+            quotes,
+            run_id=run_state.run_id,
+            window_start=run_state.window_start,
+            window_end=run_state.window_end,
+        )
+        drafts.append({"finding_rank": finding.rank, "title": title, "markdown": body})
 
-    _title, body = _render_prd_llm_stub(
-        top,
-        gaps,
-        run_state.trend_report,
-        quotes,
-        run_id=run_state.run_id,
-        window_start=run_state.window_start,
-        window_end=run_state.window_end,
-    )
-
-    return {**state, "prd_draft": body, "status": "completed"}
+    return {**state, "prd_draft": drafts[0]["markdown"], "prd_drafts": drafts, "status": "completed"}

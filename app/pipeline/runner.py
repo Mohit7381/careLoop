@@ -63,10 +63,13 @@ def _persist_artifacts(session: Session, run_id: int, state: dict) -> None:
         path.write_text(artifact["content"])
         session.add(RunArtifact(run_id=run_id, kind="report_md", uri=str(path)))
 
-    if state.get("prd_draft"):
-        path = run_dir / "prd.md"
-        path.write_text(state["prd_draft"])
-        session.add(RunArtifact(run_id=run_id, kind="prd_md", uri=str(path)))
+    for draft in state.get("prd_drafts", []):
+        rank = draft["finding_rank"]
+        path = run_dir / f"prd_rank{rank}.md"
+        path.write_text(draft["markdown"])
+        session.add(
+            RunArtifact(run_id=run_id, kind="prd_md", uri=str(path), finding_rank=rank, title=draft.get("title"))
+        )
 
 
 def run_pipeline(
