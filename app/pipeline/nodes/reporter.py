@@ -242,7 +242,7 @@ def _narrative_llm(llm: LLMCall, rows: list[dict]) -> tuple[str, str]:
 def reporter_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> GraphState:
     if llm is None:
         llm = make_use_case_llm(get_settings().llm_use_case_trend_narrative,
-                                bool(state.get("demo_mode", True)))
+                                bool(state.get("demo_mode", True)), journey=state.get("journey"))
     snapshot = state["snapshot"]
     journey_cfg = load_journey(state.get("journey", "pd_checkout"))
     maturing_stages = set(journey_cfg.get("maturing_stages", []))

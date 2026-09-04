@@ -24,12 +24,20 @@ FIXTURES = Path("fixtures")
 
 
 def _default_routing_for_gap(gap: dict, journey_cfg: dict) -> str:
-    """Map the funnel drop location to a routing category (Analyst's explicit
-    decision, per the contract's routing-category design). Heuristic default:
-    the journey's first routing key; the abandon-timer gap in PD routes to
-    pharmacy_checkout where timor/oms owns order lifecycle."""
+    """The routing category a finding gets when the model names a funnel stage
+    instead of a category (it usually does).
+
+    Comes from the journey config's `default_routing`, falling back to the first
+    `routing:` key. It used to hardcode pharmacy_checkout whenever that key
+    existed — and the consultation journey has that key for the eRx hand-off,
+    so every consultation finding was routed to the pharmacy order service on
+    the first live consultation run.
+    """
     keys = list(journey_cfg["routing"].keys())
-    return "pharmacy_checkout" if "pharmacy_checkout" in keys else keys[0]
+    default = journey_cfg.get("default_routing")
+    if default in keys:
+        return default
+    return keys[0]
 
 
 def run_analyst(state: RunState,

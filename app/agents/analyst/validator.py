@@ -86,6 +86,16 @@ def _known_numbers(snapshot: Snapshot, trail: list[DrilldownStep]) -> set[float]
     return known
 
 
+def _same_number(cited: float, known: float) -> bool:
+    if abs(known) >= 1:                      # a count: exact after rounding
+        return abs(cited - known) <= 0.5
+    # A rate: known rates are rounded to 4 decimals, so the only legitimate
+    # difference is that rounding. 0.0005 let a PHARMACY loss share (0.6452)
+    # pass as CONSULTATION's 18:00 conversion (0.6447) — with ~50 cohort rates
+    # in the same band, a coincidence inside a 0.0005 window is likely.
+    return abs(cited - known) <= 0.0001
+
+
 def validate_finding(finding: Finding, snapshot: Snapshot,
                      trail: list[DrilldownStep],
                      shown: Optional[set[float]] = None) -> tuple[bool, str]:
@@ -103,14 +113,21 @@ def validate_finding(finding: Finding, snapshot: Snapshot,
         return False, "warehouse finding with no evidence items"
     known = _known_numbers(snapshot, trail) | (shown or set())
     rates = _known_rates(snapshot, trail) | {round(x, 4) for x in (shown or set()) if 0 < x < 1}
-    for item in finding.evidence:
-        if any(abs(item.value - k) <= _TOL * max(1.0, abs(k)) for k in known):
-            return True, "ok"
+    # EVERY evidence value must trace back, not just one. "Any one matches"
+    # meant a finding half made of invented numbers passed on the strength of
+    # its one real citation, and it is how a pharmacy finding survived on the
+    # consultation journey: one of its two values happened to coincide.
+    def _traces(value: float) -> bool:
+        if any(_same_number(value, k) for k in known):
+            return True
         # a rate must be the conversion of a row the model was shown — never a
         # coincidental ratio of two unrelated numbers (see _known_rates)
-        if 0 < item.value < 1 and any(abs(item.value - r) < 0.0005 for r in rates):
-            return True, "ok"
-    return False, "no evidence value matches any number in snapshot or drill-down trail"
+        return 0 < value < 1 and any(_same_number(value, r) for r in rates)
+
+    untraced = [item.value for item in finding.evidence if not _traces(item.value)]
+    if untraced:
+        return False, f"evidence values not in the shown data: {untraced[:4]}"
+    return True, "ok"
 
 
 def filter_findings(findings: list[Finding], snapshot: Snapshot,

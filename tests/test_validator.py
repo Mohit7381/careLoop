@@ -19,7 +19,7 @@ def test_cited_snapshot_number_passes(snapshot):
 def test_uncited_number_rejected(snapshot):
     f = _f(evidence=[EvidenceItem(type="snapshot", metric="made_up", value=123456789)])
     ok, why = validate_finding(f, snapshot, [])
-    assert not ok and "no evidence value" in why
+    assert not ok and "123456789" in why      # the reason names the untraced value
 
 
 def test_derivable_rate_passes(snapshot):
@@ -77,3 +77,16 @@ def test_a_rate_from_a_cut_the_run_never_answered_is_rejected(snapshot, cohort_c
                      value=round(row["converted"] / row["entered"], 4))]})
     ok, why = validate_finding(legit, snapshot, trail, shown=set())
     assert ok, why
+
+
+def test_a_close_count_from_another_journey_is_not_a_match(snapshot):
+    """Pharmacy's 229,622 confirmed is 1.3% from consultation's 226,615 created.
+    The old relative tolerance accepted it; cited numbers are verbatim by rule."""
+    from app.schemas.contracts import EvidenceItem, Finding
+    f = Finding(rank=1, origin="warehouse", stage="pharmacy_checkout", hypothesis="x",
+                confidence="high", confirm_via="run the obvious experiment",
+                evidence=[EvidenceItem(type="snapshot", metric="confirmed", value=229622 + 3000)])
+    ok, _ = validate_finding(f, snapshot, [], shown=set())
+    assert not ok
+    exact = f.model_copy(update={"evidence": [EvidenceItem(type="snapshot", metric="confirmed", value=229622)]})
+    assert validate_finding(exact, snapshot, [], shown=set())[0]

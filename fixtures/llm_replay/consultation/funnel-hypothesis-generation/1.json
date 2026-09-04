@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "scheduling",
+  "rationale": "Phase1 shows the largest gap is created->confirmed (lost 87,511, share_of_prev 0.3862; created->confirmed conversion 0.6138). The consultation_trigger cut shows a major disparity: 'instant' entered 181,651 -> converted 94,141 (rate 0.5183) while 'pd_erx_consultation' converted at 1.0 (entered 44,964 -> converted 44,963). Phase1 reason clusters also record large user-side system terminations (\"abandoned by system\": 54,015 of user_total 90,419), suggesting failures may be concentrated in trigger types that rely on immediate matching/queuing. Cut by scheduling to test whether scheduled vs unscheduled/instant bookings convert at materially different rates; if scheduling explains the gap, run an A/B test (e.g., change availability messaging or queue handling for instant bookings) to confirm uplift in created->confirmed conversion."
+ }
+}

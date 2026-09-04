@@ -62,7 +62,12 @@ REPLAY_DIR = Path(os.environ.get("LLM_REPLAY_DIR", "fixtures/llm_replay"))
 
 
 class SphereClient:
-    def __init__(self, mode: Optional[str] = None, service_type: str = "funnel-analysis"):
+    def __init__(self, mode: Optional[str] = None, service_type: str = "funnel-analysis",
+                 replay_root: Optional[Path] = None):
+        # Replays are recorded per JOURNEY: fixtures/llm_replay/<journey>/<use_case>/.
+        # A pharmacy recording replayed on the consultation journey asks for cuts
+        # that do not exist and cites numbers from the wrong funnel.
+        self.replay_root = replay_root or REPLAY_DIR
         self.mode = mode or os.environ.get("LLM_MODE", "sphere")
         self.service_type = service_type
         self._replay_counters: dict[str, int] = {}
@@ -93,12 +98,12 @@ class SphereClient:
         return resp.get("data") or {}
 
     def _replay(self, use_case: str) -> dict[str, Any]:
-        """Sequential replay: fixtures/llm_replay/<use_case>/<n>.json per call."""
+        """Sequential replay: <replay_root>/<use_case>/<n>.json per call."""
         n = self._replay_counters.get(use_case, 0)
         self._replay_counters[use_case] = n + 1
-        path = REPLAY_DIR / use_case / f"{n}.json"
+        path = self.replay_root / use_case / f"{n}.json"
         if not path.exists():  # exhausted -> last recorded response, or hard fail
-            last = sorted((REPLAY_DIR / use_case).glob("*.json"))
+            last = sorted((self.replay_root / use_case).glob("*.json"))
             if not last:
                 raise FileNotFoundError(f"no replay fixtures for {use_case} under {REPLAY_DIR}")
             path = last[-1]
@@ -108,7 +113,14 @@ class SphereClient:
 SPHERE_IDS_PATH = Path("fixtures/pd_checkout/sphere_ids.json")
 
 
-def make_use_case_llm(use_case: str, demo_mode: bool):
+def replay_root_for(journey: Optional[str]) -> Path:
+    """fixtures/llm_replay/<journey> when it exists, else the legacy flat layout."""
+    if journey and (REPLAY_DIR / journey).is_dir():
+        return REPLAY_DIR / journey
+    return REPLAY_DIR
+
+
+def make_use_case_llm(use_case: str, demo_mode: bool, journey: Optional[str] = None):
     """An `llm(ctx) -> dict` for one sphere use case, or None if unavailable.
 
     Returning None rather than raising is deliberate: the Reporter and the PRD
@@ -128,9 +140,10 @@ def make_use_case_llm(use_case: str, demo_mode: bool):
             return None
         client = SphereClient(mode="sphere")
     else:
-        if not (Path("fixtures/llm_replay") / use_case).exists():
-            return None                      # nothing recorded yet
-        client = SphereClient(mode="replay")
+        root = replay_root_for(journey)
+        if not (root / use_case).exists():
+            return None                      # nothing recorded yet for this journey
+        client = SphereClient(mode="replay", replay_root=root)
 
     def llm(ctx: dict[str, Any]) -> dict[str, Any]:
         key = TEMPLATE_PARAM.get(use_case)

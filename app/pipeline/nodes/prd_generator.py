@@ -280,7 +280,7 @@ def _with_draft_banner(body: str, run_id: int, window_start: str, window_end: st
 def prd_generator_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> GraphState:
     if llm is None:
         llm = make_use_case_llm(get_settings().llm_use_case_prd_generation,
-                                bool(state.get("demo_mode", True)))
+                                bool(state.get("demo_mode", True)), journey=state.get("journey"))
     run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
     top = run_state.top_finding()
 

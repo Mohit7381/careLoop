@@ -84,6 +84,8 @@ code_hints:
     consultation_required: [erx, prescription]                  # 11 / 6 in timor/oms
     stock_status:          [stock]                              # 1 in timor/oms
 
+default_routing: pharmacy_checkout   # where a finding goes when the model names a funnel stage, not a category
+
 # Code Scout routing: category -> candidate repos (exact-match keys; Appx A #2)
 routing:
   pharmacy_checkout:
