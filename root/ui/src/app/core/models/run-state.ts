@@ -81,11 +81,22 @@ export interface Finding {
   top_quotes?: string[];
 }
 
+/** One segment of an aggregate() call's result — app/agents/analyst/aggregate_tool.py's
+ *  actual return shape. A segment under the k=25 suppression floor carries only
+ *  `segment` + `suppressed`, never its real counts. */
+export interface DrilldownResultRow {
+  segment?: string | null;
+  entered?: number;
+  converted?: number;
+  rate?: number;
+  suppressed?: boolean;
+}
+
 /** Agent 2 phase-2 whitelisted aggregate() drill-down trail. */
 export interface DrilldownStep {
   question: string;
   dimension: string;
-  result_rows?: Record<string, unknown>[];
+  result_rows?: DrilldownResultRow[];
   note?: string | null;
 }
 

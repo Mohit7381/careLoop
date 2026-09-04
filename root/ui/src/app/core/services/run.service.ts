@@ -235,19 +235,11 @@ export class RunService {
   private readonly _revealOverride = signal<{ funnel: boolean; findings: boolean; code: boolean } | null>(null);
   readonly reveal = computed(() => this._revealOverride() ?? { funnel: true, findings: true, code: true });
 
-  /** How many drilldown_trail rows are visible right now, and how many the
-   *  Analyst stage reports as "used" while running. null = all visible. */
-  private readonly _trailProgress = signal<number | null>(null);
-  readonly trailVisibleCount = computed(() => this._trailProgress() ?? this._run().drilldown_trail.length);
-
   setStageOverride(view: StageView[] | null): void {
     this._demoOverride.set(view);
   }
   setReveal(reveal: { funnel: boolean; findings: boolean; code: boolean } | null): void {
     this._revealOverride.set(reveal);
-  }
-  setTrailProgress(count: number | null): void {
-    this._trailProgress.set(count);
   }
 
   /** Loads the frozen fixture. This is the default and the demo-safe path —
@@ -259,7 +251,6 @@ export class RunService {
     this._run.set(toRunState(RUN_47_RESPONSE));
     this._demoOverride.set(null);
     this._revealOverride.set(null);
-    this._trailProgress.set(null);
   }
 
   /**

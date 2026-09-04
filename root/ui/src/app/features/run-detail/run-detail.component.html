@@ -35,8 +35,6 @@
       @if (hasFindings()) {
         <app-findings-list
           [findings]="run().findings"
-          [drilldownTrail]="run().drilldown_trail"
-          [trailVisibleCount]="trailVisibleCount()"
           [voc]="run().voc"
         />
       } @else {

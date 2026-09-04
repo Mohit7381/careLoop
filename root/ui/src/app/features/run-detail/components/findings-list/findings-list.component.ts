@@ -1,8 +1,7 @@
 import { Component, input } from '@angular/core';
 
-import { DrilldownTrailComponent } from '../drilldown-trail/drilldown-trail.component';
 import { VocPanelComponent } from '../voc-panel/voc-panel.component';
-import { DrilldownStep, EvidenceItem, Finding, Voc } from '../../../../core/models/run-state';
+import { EvidenceItem, Finding, Voc } from '../../../../core/models/run-state';
 
 const SEV_BY_RANK: Record<number, { label: string; tone: string }> = {
   1: { label: 'CRITICAL', tone: 'crit' },
@@ -12,27 +11,18 @@ const SEV_BY_RANK: Record<number, { label: string; tone: string }> = {
 
 @Component({
   selector: 'app-findings-list',
-  imports: [DrilldownTrailComponent, VocPanelComponent],
+  imports: [VocPanelComponent],
   templateUrl: './findings-list.component.html',
   styleUrl: './findings-list.component.scss',
 })
 export class FindingsListComponent {
   readonly findings = input.required<Finding[]>();
-  readonly drilldownTrail = input.required<DrilldownStep[]>();
-  readonly trailVisibleCount = input<number>(Infinity);
   readonly voc = input.required<Voc>();
 
   /** Quotes are keyed by finding rank; only render the panel where there are
    *  actually quotes to show. */
   hasQuotes(rank: number): boolean {
     return (this.voc().per_finding_quotes?.[String(rank)]?.length ?? 0) > 0;
-  }
-
-  /** The drill-down trail describes the warehouse analysis, so it hangs off
-   *  the top warehouse finding — which is not always rank 1. */
-  topWarehouseRank(): number {
-    const w = this.findings().filter((f) => f.origin === 'warehouse').sort((a, b) => a.rank - b.rank);
-    return w[0]?.rank ?? this.sorted()[0]?.rank ?? 1;
   }
 
   sorted(): Finding[] {

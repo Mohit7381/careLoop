@@ -33,7 +33,6 @@ export class DemoPlaybackService {
       return;
     }
 
-    const trailLen = this.runService.run().drilldown_trail.length;
     const beat = (ms: number, statuses: StageStatus[], summaries: Partial<Record<'fetch' | 'analyze' | 'code' | 'prd', string>>) =>
       this.at(ms, () => this.apply(statuses, summaries));
 
@@ -45,16 +44,11 @@ export class DemoPlaybackService {
     beat(200, [R, P, P, P], { fetch: 'querying Metabase…' });
     beat(1500, [D, R, P, P], { analyze: 'clustering reasons…' });
     this.at(1500, () => this.runService.setReveal({ funnel: true, findings: false, code: false }));
-    this.at(1500, () => this.runService.setTrailProgress(0));
 
-    for (let i = 1; i <= trailLen; i++) {
-      this.at(2600 + i * 900, () => {
-        this.runService.setTrailProgress(i);
-        this.apply([D, R, P, P], { analyze: `drilling down… (query ${i}/10)` });
-      });
-    }
-
-    const tEnd = 2600 + trailLen * 900 + 900;
+    // Fixed pause standing in for the old per-query drill-down beats (removed
+    // with the "How the agent found it" panel) — keeps ANALYZE on screen long
+    // enough to read before CODE SCOUT starts.
+    const tEnd = 8000;
     this.at(tEnd - 300, () => this.runService.setReveal({ funnel: true, findings: true, code: false }));
     beat(tEnd, [D, D, R, P], { code: 'searching bintan/consultation…' });
     this.at(tEnd, () => this.runService.setReveal({ funnel: true, findings: true, code: false }));
@@ -66,7 +60,6 @@ export class DemoPlaybackService {
   private settleComplete(): void {
     this.clear();
     this.runService.setReveal(null);
-    this.runService.setTrailProgress(null);
     this.runService.setStageOverride(null);
   }
 
