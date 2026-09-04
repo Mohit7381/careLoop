@@ -123,6 +123,8 @@ function toRunState(r: RunDetailResponse): RunState {
     findings: r.findings ?? [],
     drilldown_trail: r.drilldown_trail ?? [],
     code_gaps: r.code_gaps ?? [],
+    suggestions: r.suggestions ?? [],
+    prds: r.prds ?? [],
     trend_report: { deltas: [], adoption: [], voc_theme_deltas: [], narrative: '' },
     voc: r.voc,
     prd_draft: r.prd_markdown ?? null,
@@ -292,13 +294,19 @@ export class RunService {
    * the caller can attach to it instead of dead-ending — which is what
    * happens if someone clicks "New analysis" twice.
    */
-  async createRun(journey = 'pd_checkout'): Promise<{ runId: number; existing: boolean } | { error: string }> {
+  async createRun(
+    journey = 'pd_checkout',
+    dimensions?: string[]
+  ): Promise<{ runId: number; existing: boolean } | { error: string }> {
     try {
       const res = await firstValueFrom(
         this.http
           .post<{ run_id: number; status: RunStatus }>(
             API_BASE,
-            { journey },
+            // Only send `dimensions` when a scope was actually resolved — an
+            // empty array is a different request from an absent one, and the
+            // backend 422s on an unknown dimension.
+            dimensions?.length ? { journey, dimensions } : { journey },
             { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
           )
           .pipe(timeout(REQUEST_TIMEOUT_MS))
@@ -311,9 +319,43 @@ export class RunService {
           return { runId: detail.run_id, existing: true };
         }
         if (err.status === 401) return { error: 'not authorised — check APP_TOKEN' };
+        if (err.status === 422) {
+          const msg = typeof detail === 'string' ? detail : 'unknown dimension for this journey';
+          return { error: `scope rejected — ${msg}` };
+        }
         return { error: describeError(err) };
       }
       return { error: 'request timed out' };
+    }
+  }
+
+  /**
+   * POST /v1/analysis/scope/chat — turns a sentence into a structured scope.
+   *
+   * Resolves only; it creates nothing. The confirmed `dimensions` are then
+   * passed to createRun(). Deliberately a separate step so a misread scope
+   * is corrected before it costs a run, and so free-text never reaches the
+   * Analyst as prose — largest_drop() staying deterministic is what keeps
+   * the headline number un-hallucinated.
+   *
+   * Open (no Bearer), unlike the POST routes that create or mutate.
+   */
+  async resolveScope(
+    message: string,
+    journey = 'pd_checkout'
+  ): Promise<{ dimensions: string[]; reply: string; resolved: boolean } | { error: string }> {
+    try {
+      const res = await firstValueFrom(
+        this.http
+          .post<{ dimensions: string[]; reply: string; resolved: boolean }>(
+            '/v1/analysis/scope/chat',
+            { message, journey }
+          )
+          .pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      return { dimensions: res?.dimensions ?? [], reply: res?.reply ?? '', resolved: !!res?.resolved };
+    } catch (err) {
+      return { error: err instanceof HttpErrorResponse ? describeError(err) : 'scope request timed out' };
     }
   }
 
@@ -332,7 +374,14 @@ export class RunService {
   }
 
   /**
-   * POST /v1/analysis/runs/{id}/deliver — NOT YET IMPLEMENTED on the
+   * POST /v1/analysis/runs/{id}/deliver.
+   *
+   * No UI surface calls this today — the "Approve & send to GChat" button was
+   * removed from the PRD drawer. Kept because the endpoint is real and
+   * documented, so a delivery affordance can return without re-deriving the
+   * client. Delete it if delivery is dropped for good.
+   *
+   * Historic note on the shape below: it was written when this
    * backend (not in the API table in the PRD). Optimistic by design: the
    * caller shows its own success state immediately and calls this in the
    * background, so a slow or dead Garuda/GChat integration can never
@@ -381,8 +430,11 @@ export class RunService {
       case 'code': {
         const found = run.code_gaps.filter((g) => g.mechanism_found);
         const remedies = found.reduce((n, g) => n + (g.remedies?.length ?? 0), 0);
-        if (!run.code_gaps.length) return 'no code gaps yet';
-        return `${found.length} mechanism(s) pinned · ${remedies} remedy verdict(s)`;
+        const suggestions = run.suggestions.length;
+        if (!run.code_gaps.length && !suggestions) return 'no code gaps yet';
+        const parts = [`${found.length} mechanism(s) pinned`, `${remedies} remedy verdict(s)`];
+        if (suggestions) parts.push(`${suggestions} suggestion(s)`);
+        return parts.join(' · ');
       }
       case 'prd':
         return run.prd_draft ? 'PRD draft ready' : 'PRD draft ready (built from findings)';

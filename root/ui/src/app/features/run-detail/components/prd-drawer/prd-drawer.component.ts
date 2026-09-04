@@ -148,25 +148,7 @@ export class PrdDrawerComponent {
     return `CareLoop_PRD_run${this.run().run_id}_${this.prd().title.replace(/\W+/g, '_')}.docx`;
   }
 
-  /**
-   * Optimistic by design — the toast fires before the network call
-   * resolves, so a slow or dead Garuda/GChat integration (no verified
-   * GChat channel type exists yet — see README "Known gaps") can never
-   * produce a dead moment on stage. It then upgrades or quietly downgrades
-   * once the (currently unimplemented) deliver endpoint responds.
-   */
-  async approve(): Promise<void> {
-    const channel = this.prd().channel;
-    this.close();
-    this.toast('Sent to ' + channel);
-    const res = await this.runService.deliver(this.run().run_id);
-    this.toast(res.delivered ? 'Delivered to ' + channel : 'Draft approved · delivery unavailable');
-  }
 
-  requestChanges(): void {
-    this.close();
-    this.toast('Sent back for changes');
-  }
 
   private toast(message: string): void {
     this.toastMessage.set(message);

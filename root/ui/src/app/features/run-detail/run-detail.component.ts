@@ -4,6 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DemoPlaybackService } from '../../core/services/demo-playback.service';
 import { RunService } from '../../core/services/run.service';
 import { CodeScoutPanelComponent } from './components/code-scout-panel/code-scout-panel.component';
+import { SuggestionsPanelComponent } from './components/suggestions-panel/suggestions-panel.component';
 import { FindingsListComponent } from './components/findings-list/findings-list.component';
 import { FunnelComponent } from './components/funnel/funnel.component';
 import { PipelineTrackerComponent } from './components/pipeline-tracker/pipeline-tracker.component';
@@ -19,7 +20,7 @@ import { PrdDrawerComponent } from './components/prd-drawer/prd-drawer.component
  */
 @Component({
   selector: 'app-run-detail',
-  imports: [RouterLink, PipelineTrackerComponent, FunnelComponent, FindingsListComponent, CodeScoutPanelComponent, PrdDrawerComponent],
+  imports: [RouterLink, PipelineTrackerComponent, FunnelComponent, FindingsListComponent, CodeScoutPanelComponent, SuggestionsPanelComponent, PrdDrawerComponent],
   templateUrl: './run-detail.component.html',
   styleUrl: './run-detail.component.scss',
 })

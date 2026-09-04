@@ -13,18 +13,17 @@
   <div class="dbody">
     @if (doc(); as d) {
       <!-- The real generated PRD (prd_markdown), split into editable sections. -->
-      <div class="editbar">
-        <button class="btn btn-sm" type="button" (click)="toggleEdit()">
-          {{ editing() ? 'Done editing' : 'Edit' }}
-        </button>
-        @if (editing()) {
-          <button class="btn btn-sm" type="button" (click)="addSection()">Add section</button>
-        }
-        @if (editedCount() > 0) {
-          <span class="editcount">{{ editedCount() }} section{{ editedCount() === 1 ? '' : 's' }} changed by you</span>
-          <button class="btn btn-sm" type="button" (click)="revertAll()">Revert all</button>
-        }
-      </div>
+      @if (editing() || editedCount() > 0) {
+        <div class="editbar">
+          @if (editing()) {
+            <button class="btn btn-sm" type="button" (click)="addSection()">Add section</button>
+          }
+          @if (editedCount() > 0) {
+            <span class="editcount">{{ editedCount() }} section{{ editedCount() === 1 ? '' : 's' }} changed by you</span>
+            <button class="btn btn-sm" type="button" (click)="revertAll()">Revert all</button>
+          }
+        </div>
+      }
 
       @if (editedCount() > 0) {
         <div class="unverified-note">
@@ -110,10 +109,13 @@
   </div>
 
   <div class="dfoot">
-    <button class="btn btn-primary" type="button" (click)="approve()">Approve &amp; send to GChat</button>
-    <button class="btn" type="button" (click)="requestChanges()">Request changes</button>
+    <button class="btn btn-primary" type="button" [disabled]="!doc()" (click)="toggleEdit()">
+      {{ editing() ? 'Done editing' : 'Edit' }}
+    </button>
     <button class="btn" type="button" (click)="downloadDocx()">Download .docx</button>
-    <span class="note mono">delivers to {{ prd().channel }}</span>
+    @if (editedCount() > 0) {
+      <span class="note mono">{{ editedCount() }} section{{ editedCount() === 1 ? '' : 's' }} changed by you · unverified</span>
+    }
   </div>
 </aside>
 
