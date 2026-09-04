@@ -226,6 +226,7 @@ export interface RunDetailResponse {
 /** The view model the components render. */
 export interface RunState {
   run_id: number;
+  journey?: string;
   window_start: string;
   window_end: string;
   status: RunStatus;

@@ -18,7 +18,7 @@
   <div class="runhead">
     <div>
       <div class="eyebrow"><a routerLink="/runs">Runs</a> / run detail</div>
-      <h1>Run #{{ run().run_id }} · pharmacy delivery order journey</h1>
+      <h1>Run #{{ run().run_id }} · {{ journeyLabel() }}</h1>
     </div>
     <div class="meta mono">run #{{ run().run_id }} · {{ run().window_start }} → {{ run().window_end }}</div>
     <div class="status-pill" [class]="statusPill()">{{ statusLabel() }}</div>

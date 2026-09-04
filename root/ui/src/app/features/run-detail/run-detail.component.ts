@@ -51,6 +51,12 @@ export class RunDetailComponent {
     this.inFlight() ? this.run().status.replace(/_/g, ' ') : this.statusPill()
   );
 
+  /** Journey name from the API, humanised; pharmacy is the historical default. */
+  readonly journeyLabel = computed(() => {
+    const j = (this.run() as unknown as { journey?: string }).journey ?? 'pd_checkout';
+    return j === 'pd_checkout' ? 'pharmacy delivery order journey' : `${j.replace(/_/g, ' ')} journey`;
+  });
+
   readonly hasFunnel = computed(() => (this.run().snapshot?.stages?.length ?? 0) > 0);
   readonly hasFindings = computed(() => (this.run().findings?.length ?? 0) > 0);
   readonly hasCode = computed(() => (this.run().code_gaps?.length ?? 0) > 0);

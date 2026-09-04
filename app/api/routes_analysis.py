@@ -11,8 +11,8 @@ from app.db.base import SessionLocal, get_session
 from app.db.models import AnalysisRun
 from app.integrations.garuda_client import GarudaDeliveryError, send_report
 from app.pipeline.runner import run_pipeline
-from app.agents.scope_resolver import describe, resolve_scope
-from app.journeys import load_journey
+from app.agents.scope_resolver import describe, pick_journey, resolve_scope
+from app.journeys import all_journeys, load_journey
 from app.schemas.api import (CreateRunRequest, CreateRunResponse, DeliverResponse,
                              ResolveScopeRequest, ResolveScopeResponse, RunDetailResponse)
 from app.schemas.contracts import RunScope
@@ -66,6 +66,13 @@ def find_duplicate_run(in_flight, prompt: str | None):
     return None
 
 
+def _pick_journey(journey: str | None, prompt: str | None) -> tuple[str, list[str]]:
+    """'auto' (or empty) picks the journey from the prompt's own vocabulary."""
+    if journey and journey != "auto":
+        return journey, []
+    return pick_journey(prompt or "", all_journeys())
+
+
 def _resolve(journey: str, prompt: str | None) -> RunScope:
     """Resolve a prompt against the journey's own vocabulary.
 
@@ -92,10 +99,13 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     if not window_start or not window_end:
         window_start, window_end = _default_window()
 
-    scope = _resolve(body.journey, body.prompt)
+    journey, journey_hits = _pick_journey(body.journey, body.prompt)
+    scope = _resolve(journey, body.prompt)
+    if journey_hits:
+        scope.matched_on.insert(0, f"journey:{journey} (via {', '.join(journey_hits[:3])})")
     in_flight = session.execute(
         select(AnalysisRun).where(
-            AnalysisRun.journey == body.journey,
+            AnalysisRun.journey == journey,
             AnalysisRun.window_start == window_start,
             AnalysisRun.window_end == window_end,
             AnalysisRun.status.in_(
@@ -112,7 +122,7 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
         )
 
     run = AnalysisRun(
-        journey=body.journey,
+        journey=journey,
         window_start=window_start,
         window_end=window_end,
         status="queued",
@@ -125,11 +135,11 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     asyncio.create_task(
         asyncio.to_thread(
             _run_pipeline_in_new_session, run.id, window_start, window_end, settings.demo_mode,
-            body.journey, body.prev_window_start, body.prev_window_end, scope.model_dump(),
+            journey, body.prev_window_start, body.prev_window_end, scope.model_dump(),
         )
     )
 
-    return CreateRunResponse(run_id=run.id, status="queued",
+    return CreateRunResponse(run_id=run.id, status="queued", journey=journey,
                              scope=scope.model_dump(), scope_summary=describe(scope))
 
 
@@ -141,9 +151,12 @@ def resolve_scope_only(body: ResolveScopeRequest) -> ResolveScopeResponse:
     Resolution is deliberately deterministic and cheap, so the UI can confirm
     the reading with the user before spending a run on a misinterpretation.
     """
-    scope = _resolve(body.journey, body.prompt)
-    return ResolveScopeResponse(scope=scope.model_dump(), summary=describe(scope),
-                                matched_on=scope.matched_on, unresolved=scope.unresolved)
+    journey, journey_hits = _pick_journey(body.journey, body.prompt)
+    scope = _resolve(journey, body.prompt)
+    if journey_hits:
+        scope.matched_on.insert(0, f"journey:{journey} (via {', '.join(journey_hits[:3])})")
+    return ResolveScopeResponse(scope=scope.model_dump(), summary=describe(scope, journey),
+                                matched_on=scope.matched_on, unresolved=scope.unresolved, journey=journey)
 
 
 def _read_artifact(run: AnalysisRun, kind: str) -> str | None:

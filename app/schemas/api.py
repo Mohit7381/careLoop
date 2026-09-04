@@ -22,10 +22,11 @@ class CreateRunResponse(BaseModel):
     status: RunStatus
     scope: Optional[dict[str, Any]] = None
     scope_summary: Optional[str] = None
+    journey: Optional[str] = None
 
 
 class ResolveScopeRequest(BaseModel):
-    journey: str = "pd_checkout"
+    journey: str = "auto"      # "auto" picks the journey from the prompt's vocabulary
     prompt: str
 
 
@@ -40,6 +41,7 @@ class ResolveScopeResponse(BaseModel):
     summary: str
     matched_on: list[str]
     unresolved: list[str]
+    journey: str = "pd_checkout"
 
 
 class RunDetailResponse(BaseModel):

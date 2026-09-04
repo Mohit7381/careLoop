@@ -90,3 +90,14 @@ def test_routing_categories_and_drilldown_cuts_are_disjoint_vocabularies():
     assert not (set(s.dimensions) & routing)
     # ... and everything the scope does put there is a real cut.
     assert set(s.dimensions) <= cuts
+
+
+def test_the_journey_is_picked_from_the_prompt():
+    from app.agents.scope_resolver import pick_journey
+    from app.journeys import all_journeys
+    js = all_journeys()
+    assert pick_journey("why do consultations get abandoned before the doctor joins", js)[0] == "consultation"
+    assert pick_journey("why are users dropping off after adding items to cart", js)[0] == "pd_checkout"
+    # "payment" alone decides nothing — both journeys have a payment step
+    assert pick_journey("why are payments failing", js)[0] == "pd_checkout"      # default
+    assert pick_journey("", js) == ("pd_checkout", [])

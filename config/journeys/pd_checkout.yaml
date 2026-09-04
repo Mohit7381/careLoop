@@ -4,6 +4,9 @@
 name: pd_checkout
 description: Pharmacy delivery order journey — cart to delivered medicine
 
+# Prompt vocabulary that selects THIS journey when a user does not name one.
+journey_keywords: [pharmacy, pharmacies, cart, carts, checkout, order, orders, medicine, medicines, obat, apotek, basket, delivery, courier, stock, prescription-delivery, pd]
+
 stages:            # ordered funnel stages; names match Fetcher's SnapshotRow.stage
   - created
   - confirmed

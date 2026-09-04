@@ -34,6 +34,8 @@ export interface ResolvedScope {
   summary: string;
   matched_on: string[];
   unresolved: string[];
+  /** Which journey the prompt was understood to be about (picked from the prompt when 'auto'). */
+  journey?: string;
 }
 
 const STAGE_LABELS: Record<StageKey, string> = {
@@ -124,6 +126,7 @@ function toRunState(r: RunDetailResponse): RunState {
   const previous = r.snapshots.filter((s) => s.window === 'previous');
   return {
     run_id: r.run_id,
+    journey: r.journey,
     window_start: r.window_start,
     window_end: r.window_end,
     status: r.status,
@@ -324,7 +327,7 @@ export class RunService {
    * unresolvable prompt is not an error — it means the full funnel is analysed,
    * and the summary says so.
    */
-  async resolveScope(prompt: string, journey = 'pd_checkout'): Promise<ResolvedScope | { error: string }> {
+  async resolveScope(prompt: string, journey = 'auto'): Promise<ResolvedScope | { error: string }> {
     try {
       return await firstValueFrom(
         this.http
@@ -354,20 +357,20 @@ export class RunService {
   }
 
   async createRun(
-    journey = 'pd_checkout',
+    journey = 'auto',
     prompt?: string
-  ): Promise<{ runId: number; existing: boolean; scopeSummary?: string } | { error: string }> {
+  ): Promise<{ runId: number; existing: boolean; scopeSummary?: string; journey?: string } | { error: string }> {
     try {
       const res = await firstValueFrom(
         this.http
-          .post<{ run_id: number; status: RunStatus; scope_summary?: string }>(
+          .post<{ run_id: number; status: RunStatus; scope_summary?: string; journey?: string }>(
             API_BASE,
             prompt ? { journey, prompt } : { journey },
             { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
           )
           .pipe(timeout(REQUEST_TIMEOUT_MS))
       );
-      return { runId: res.run_id, existing: false, scopeSummary: res.scope_summary };
+      return { runId: res.run_id, existing: false, scopeSummary: res.scope_summary, journey: res.journey };
     } catch (err) {
       if (err instanceof HttpErrorResponse) {
         const detail = err.error?.detail;

@@ -74,6 +74,25 @@ def _review_days(prompt: str) -> Optional[int]:
     return None
 
 
+def pick_journey(prompt: str, journeys: dict[str, dict], default: str = "pd_checkout") -> tuple[str, list[str]]:
+    """Choose the journey a prompt is about, from each journey's own
+    `journey_keywords`. Returns (journey, matched_keywords).
+
+    Deterministic and explained, like the rest of scope resolution: the winner
+    is the journey with the most keyword hits; a tie or no hits falls back to
+    `default`. "payment" is in neither list on purpose — both journeys have a
+    payment step, so it must not decide between them.
+    """
+    words = _tokens(prompt) | set(re.findall(r"[a-z]{2,3}\b", (prompt or "").lower()))
+    best, best_hits = default, []
+    for name, cfg in journeys.items():
+        kws = [k.lower() for k in (cfg.get("journey_keywords") or [])]
+        hits = sorted({k for k in kws if any(_shares_stem(k, w) if len(k) >= _MIN_TOKEN else k == w for w in words)})
+        if len(hits) > len(best_hits):
+            best, best_hits = name, hits
+    return best, best_hits
+
+
 def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
                   available_dimensions: list[str]) -> RunScope:
     """Resolve `prompt` against this journey's own vocabulary.
@@ -147,10 +166,11 @@ def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
     return scope
 
 
-def describe(scope: RunScope) -> str:
+def describe(scope: RunScope, journey: Optional[str] = None) -> str:
     """One line a human can confirm or reject before the run starts."""
+    where = f" ({journey.replace('_', ' ')} journey)" if journey else ""
     if not scope.is_scoped():
-        return "Could not scope this request — the full funnel will be analysed."
+        return f"Could not scope this request — the full funnel will be analysed{where}."
     bits = []
     if scope.from_stage:
         bits.append(f"the {scope.from_stage} to {scope.to_stage} drop")
@@ -158,4 +178,4 @@ def describe(scope: RunScope) -> str:
         bits.append("cut by " + ", ".join(scope.dimensions))
     if scope.review_days:
         bits.append(f"reviews from the last {scope.review_days} days")
-    return "Analysing " + "; ".join(bits) + "."
+    return "Analysing " + "; ".join(bits) + f"{where}."

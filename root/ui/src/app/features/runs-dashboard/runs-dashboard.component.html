@@ -79,6 +79,7 @@
         <thead>
           <tr>
             <th>Run</th>
+            <th>Journey</th>
             <th>Question</th>
             <th>Status</th>
             <th>Top finding</th>
@@ -90,6 +91,7 @@
           @for (row of rows(); track row.id) {
             <tr class="row" [class.pending]="row.status === 'analyzing'" (click)="open(row)">
               <td class="mono">#{{ row.id }}</td>
+              <td class="mono">{{ row.journey }}</td>
               <td class="question">
                 {{ row.prompt ?? 'Full funnel' }}
                 @if (row.scopeSummary) {

@@ -6,6 +6,7 @@ import { ResolvedScope, RunService } from '../../core/services/run.service';
 
 interface RunRow {
   id: number;
+  journey: string;
   prompt: string | null;
   scopeSummary: string;
   window: string;
@@ -56,6 +57,7 @@ export class RunsDashboardComponent {
     'why are users dropping off after adding items to cart',
     'check how many and why the users are dropping off during the payments',
     'why do orders with unfulfilled items fail, last 10-15 days of reviews',
+    'why do consultations get abandoned before the doctor joins',
   ];
 
   useExample(text: string): void {
@@ -93,7 +95,7 @@ export class RunsDashboardComponent {
 
     const asked = this.prompt().trim();
     const summary = this.preview()?.summary ?? '';
-    const res = await this.runService.createRun('pd_checkout', asked || undefined);
+    const res = await this.runService.createRun('auto', asked || undefined);
     this.creating.set(false);
 
     if ('error' in res) {
@@ -104,6 +106,7 @@ export class RunsDashboardComponent {
     this.rows.update((rows) => [
       {
         id: res.runId,
+        journey: res.journey ?? this.preview()?.journey ?? 'pd_checkout',
         prompt: asked || null,
         scopeSummary: res.scopeSummary ?? summary,
         window: '—',

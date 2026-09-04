@@ -18,7 +18,7 @@ def test_replay_root_falls_back_when_a_journey_has_no_recordings(tmp_path):
 def test_factory_returns_none_for_a_journey_without_a_recording(monkeypatch):
     monkeypatch.setattr("app.integrations.sphere._live_llm_wanted", lambda demo: False)
     assert make_use_case_llm("funnel-hypothesis-generation", demo_mode=True, journey="pd_checkout") is not None
-    assert make_use_case_llm("funnel-hypothesis-generation", demo_mode=True, journey="consultation") is None
+    assert make_use_case_llm("funnel-hypothesis-generation", demo_mode=True, journey="journey_that_does_not_exist") is None
 
 
 def test_client_replays_from_the_given_root():
