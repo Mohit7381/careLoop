@@ -1,0 +1,8 @@
+{
+ "done": false,
+ "findings": null,
+ "next_question": {
+  "dimension": "hour_of_day",
+  "rationale": "hour_of_day is the only remaining rate-bearing, untried dimension. Testing it can show whether created\u2192confirmed conversion varies by time and whether low-conversion segments concentrate in particular hours \u2014 information that would interact with the gaps we already see and point to operational fixes. Evidence to consider when cutting by hour: top gap is from created\u2192confirmed (created=647191 -> confirmed=229622 conversion_from_previous=0.3548; lost=417569 share_of_prev=0.6452). Consultation_required already shows a meaningful gap (rx_gated: entered=255293 converted=76641 rate=0.3002 vs non_rx: entered=391898 converted=152981 rate=0.3904). stock_status reveals extremely low conversion for unfulfilled/partially-fulfilled baskets (has_unfulfilled_item: entered=19728 converted=1831 rate=0.0928; has_partially_fulfilled_item: entered=2191 converted=16 rate=0.0073). item_count shows 1_item: entered=315934 converted=139707 rate=0.4422 and 3_to_5_items: entered=176399 converted=43996 rate=0.2494. If low-conversion hours align with RX-heavy or fulfillment-problem baskets, targeted changes (e.g., consultant availability, fulfillment scheduling) would be suggested. Please return the created\u2192confirmed cut by hour_of_day."
+ }
+}

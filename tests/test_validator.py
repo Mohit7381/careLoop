@@ -19,7 +19,7 @@ def test_cited_snapshot_number_passes(snapshot):
 def test_uncited_number_rejected(snapshot):
     f = _f(evidence=[EvidenceItem(type="snapshot", metric="made_up", value=123456789)])
     ok, why = validate_finding(f, snapshot, [])
-    assert not ok and "no evidence value" in why
+    assert not ok and "123456789" in why      # the reason names the untraced value
 
 
 def test_derivable_rate_passes(snapshot):
@@ -46,3 +46,47 @@ def test_voc_finding_needs_review_count(snapshot):
     bad = _f(origin="voc", stage="payments", review_count=None)
     assert validate_finding(good, snapshot, [])[0]
     assert not validate_finding(bad, snapshot, [])[0]
+
+
+def test_a_rate_from_a_cut_the_run_never_answered_is_rejected(snapshot, cohort_cuts):
+    """Found on a scoped demo run: the scope allowed only item_count, the trail
+    shows stock_status REJECTED, yet a finding citing the stock rates
+    0.0928 / 0.0073 was kept. The old rule accepted any rate that ANY two known
+    numbers happened to divide to — 1433 / 201617 = 0.0071, an "ITEMS
+    UNAVAILABLE" reason count over last week's confirmed count. Not evidence.
+    """
+    from app.schemas.contracts import DrilldownStep, EvidenceItem, Finding
+    trail = [
+        DrilldownStep(question="q", dimension="stock_status", result_rows=[],
+                      note="rejected: not whitelisted"),
+        DrilldownStep(question="q", dimension="item_count",
+                      result_rows=cohort_cuts["item_count"]["rows"]),
+    ]
+    smuggled = Finding(
+        rank=3, origin="warehouse", stage="pharmacy_checkout", hypothesis="stock",
+        confidence="high", confirm_via="hold stock-outs and measure confirm rate",
+        evidence=[EvidenceItem(type="drilldown", metric="rate", value=0.0928),
+                  EvidenceItem(type="drilldown", metric="rate", value=0.0073)])
+    ok, why = validate_finding(smuggled, snapshot, trail, shown=set())
+    assert not ok, why
+
+    # ...while a rate the run DID show, item_count's 1_item conversion, passes
+    row = next(r for r in cohort_cuts["item_count"]["rows"] if r["segment"] == "1_item")
+    legit = smuggled.model_copy(update={"evidence": [
+        EvidenceItem(type="drilldown", metric="1_item rate",
+                     value=round(row["converted"] / row["entered"], 4))]})
+    ok, why = validate_finding(legit, snapshot, trail, shown=set())
+    assert ok, why
+
+
+def test_a_close_count_from_another_journey_is_not_a_match(snapshot):
+    """Pharmacy's 229,622 confirmed is 1.3% from consultation's 226,615 created.
+    The old relative tolerance accepted it; cited numbers are verbatim by rule."""
+    from app.schemas.contracts import EvidenceItem, Finding
+    f = Finding(rank=1, origin="warehouse", stage="pharmacy_checkout", hypothesis="x",
+                confidence="high", confirm_via="run the obvious experiment",
+                evidence=[EvidenceItem(type="snapshot", metric="confirmed", value=229622 + 3000)])
+    ok, _ = validate_finding(f, snapshot, [], shown=set())
+    assert not ok
+    exact = f.model_copy(update={"evidence": [EvidenceItem(type="snapshot", metric="confirmed", value=229622)]})
+    assert validate_finding(exact, snapshot, [], shown=set())[0]

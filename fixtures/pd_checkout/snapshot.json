@@ -90,24 +90,52 @@
  ],
  "ct_events": [
   {
-   "event_name": "product_view",
-   "count": 658599
+   "event_name": "pharmacy.view.service_homepage",
+   "count": 608478
   },
   {
-   "event_name": "cart_add",
-   "count": 627831
+   "event_name": "pharmacy.view.search_result_page",
+   "count": 806198
   },
   {
-   "event_name": "cart_view",
-   "count": 802025
+   "event_name": "pharmacy.view.product_detail_page",
+   "count": 665850
   },
   {
-   "event_name": "order_placed",
-   "count": 90377
+   "event_name": "pharmacy.click.add_to_cart_button",
+   "count": 633229
   },
   {
-   "event_name": "order_abandoned",
-   "count": 242415
+   "event_name": "pharmacy.view.cart_review_page",
+   "count": 809611
+  },
+  {
+   "event_name": "pharmacy.click.confirm_cart_button",
+   "count": 96743
+  },
+  {
+   "event_name": "pharmacy.view.delivery_options_list",
+   "count": 73578
+  },
+  {
+   "event_name": "pharmacy.view.payment_page",
+   "count": 357166
+  },
+  {
+   "event_name": "pharmacy.click.confirm_payment_button",
+   "count": 96395
+  },
+  {
+   "event_name": "pharmacy.backend.transaction_abandoned",
+   "count": 244715
+  },
+  {
+   "event_name": "pharmacy.backend.transaction_confirmed",
+   "count": 125400
+  },
+  {
+   "event_name": "pharmacy.backend.transaction_delivered",
+   "count": 109528
   }
  ]
 }

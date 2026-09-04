@@ -1,0 +1,238 @@
+{
+ "payer": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "cash",
+    "entered": 154950,
+    "converted": 72093
+   },
+   {
+    "segment": "free",
+    "entered": 49463,
+    "converted": 49463
+   },
+   {
+    "segment": "insurance",
+    "entered": 22202,
+    "converted": 17548
+   }
+  ],
+  "source": "monetization.modeled_fact_consultation_transaction via de-central (read-only Metabase, Redshift db 39); converted = transaction_confirmed_time not null; payer = insurance if insurance_provider_guid not null, free if is_free, else cash. window 2026-08-27..09-02 (prev 2026-08-20..26), transaction_created_time, is_test=false, one row per transaction_id"
+ },
+ "interface_type": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "ios",
+    "entered": 109903,
+    "converted": 69930
+   },
+   {
+    "segment": "android",
+    "entered": 88139,
+    "converted": 53566
+   },
+   {
+    "segment": "web",
+    "entered": 18101,
+    "converted": 6443
+   },
+   {
+    "segment": "(unknown)",
+    "entered": 10472,
+    "converted": 9165
+   }
+  ],
+  "source": "monetization.modeled_fact_consultation_transaction via de-central (read-only Metabase, Redshift db 39); converted = transaction_confirmed_time not null; interface_type column as-is. window 2026-08-27..09-02 (prev 2026-08-20..26), transaction_created_time, is_test=false, one row per transaction_id"
+ },
+ "consultation_trigger": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "instant",
+    "entered": 181651,
+    "converted": 94141
+   },
+   {
+    "segment": "pd_erx_consultation",
+    "entered": 44964,
+    "converted": 44963
+   }
+  ],
+  "source": "monetization.modeled_fact_consultation_transaction via de-central (read-only Metabase, Redshift db 39); converted = transaction_confirmed_time not null; consultation_trigger; pd_erx_consultation = consults spawned from a pharmacy order, auto-confirmed. window 2026-08-27..09-02 (prev 2026-08-20..26), transaction_created_time, is_test=false, one row per transaction_id"
+ },
+ "delivery_channel": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "online",
+    "entered": 173053,
+    "converted": 86850
+   },
+   {
+    "segment": "pd_erx_consultation",
+    "entered": 44964,
+    "converted": 44963
+   },
+   {
+    "segment": "digital_clinic_extended",
+    "entered": 8018,
+    "converted": 6711
+   },
+   {
+    "segment": "offline",
+    "entered": 408,
+    "converted": 408
+   },
+   {
+    "segment": "digital_clinic",
+    "entered": 172,
+    "converted": 172
+   }
+  ],
+  "source": "monetization.modeled_fact_consultation_transaction via de-central (read-only Metabase, Redshift db 39); converted = transaction_confirmed_time not null; consultation_delivery_channel; NOTE digital_clinic_extended confirms 83.7% but only 60.8% START (4,879) \u2014 a confirmed->started leak unique to that channel. window 2026-08-27..09-02 (prev 2026-08-20..26), transaction_created_time, is_test=false, one row per transaction_id"
+ },
+ "scheduling": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "walk_in",
+    "entered": 211023,
+    "converted": 132511
+   },
+   {
+    "segment": "scheduled",
+    "entered": 15592,
+    "converted": 6593
+   }
+  ],
+  "source": "monetization.modeled_fact_consultation_transaction via de-central (read-only Metabase, Redshift db 39); converted = transaction_confirmed_time not null; consultation_scheduling_form; scheduled consults also start at only 35.2% (5,485). window 2026-08-27..09-02 (prev 2026-08-20..26), transaction_created_time, is_test=false, one row per transaction_id"
+ },
+ "hour_of_day": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "00",
+    "entered": 3816,
+    "converted": 2051
+   },
+   {
+    "segment": "01",
+    "entered": 2425,
+    "converted": 1269
+   },
+   {
+    "segment": "02",
+    "entered": 1648,
+    "converted": 846
+   },
+   {
+    "segment": "03",
+    "entered": 1240,
+    "converted": 740
+   },
+   {
+    "segment": "04",
+    "entered": 1661,
+    "converted": 940
+   },
+   {
+    "segment": "05",
+    "entered": 3645,
+    "converted": 2236
+   },
+   {
+    "segment": "06",
+    "entered": 7064,
+    "converted": 4526
+   },
+   {
+    "segment": "07",
+    "entered": 9793,
+    "converted": 6456
+   },
+   {
+    "segment": "08",
+    "entered": 12060,
+    "converted": 7919
+   },
+   {
+    "segment": "09",
+    "entered": 12726,
+    "converted": 8262
+   },
+   {
+    "segment": "10",
+    "entered": 12625,
+    "converted": 8064
+   },
+   {
+    "segment": "11",
+    "entered": 12232,
+    "converted": 7621
+   },
+   {
+    "segment": "12",
+    "entered": 11436,
+    "converted": 7210
+   },
+   {
+    "segment": "13",
+    "entered": 11657,
+    "converted": 7411
+   },
+   {
+    "segment": "14",
+    "entered": 11261,
+    "converted": 7254
+   },
+   {
+    "segment": "15",
+    "entered": 11401,
+    "converted": 7077
+   },
+   {
+    "segment": "16",
+    "entered": 11792,
+    "converted": 7208
+   },
+   {
+    "segment": "17",
+    "entered": 12363,
+    "converted": 7861
+   },
+   {
+    "segment": "18",
+    "entered": 14287,
+    "converted": 9211
+   },
+   {
+    "segment": "19",
+    "entered": 15419,
+    "converted": 10088
+   },
+   {
+    "segment": "20",
+    "entered": 14766,
+    "converted": 9169
+   },
+   {
+    "segment": "21",
+    "entered": 13847,
+    "converted": 7244
+   },
+   {
+    "segment": "22",
+    "entered": 11367,
+    "converted": 5121
+   },
+   {
+    "segment": "23",
+    "entered": 6084,
+    "converted": 3320
+   }
+  ],
+  "source": "monetization.modeled_fact_consultation_transaction via de-central (read-only Metabase, Redshift db 39); converted = transaction_confirmed_time not null; hour of transaction_created_time, already Jakarta local (NOT UTC \u2014 see pd_checkout README). Late evening (21-23h) converts markedly worse; late_night_fee_amount exists on the fact and is the obvious next cut. window 2026-08-27..09-02 (prev 2026-08-20..26), transaction_created_time, is_test=false, one row per transaction_id"
+ }
+}

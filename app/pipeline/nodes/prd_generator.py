@@ -12,11 +12,20 @@ it for a real sphere-platform call (use case:
 settings.llm_use_case_prd_generation) when ready — keep the "<=2 quotes,
 labelled anecdotal" and "unconfirmed assumptions -> Section 8" rules.
 """
+import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Union
+from typing import Any, Callable, Optional, Union
 
+from app.agents.evidence_gate import unsupported_numbers
+from app.config import get_settings
+from app.integrations.sphere import make_use_case_llm
 from app.pipeline.state import GraphState
 from app.schemas.contracts import CodeGap, Finding, RunState, TrendReport, VocQuote
+
+logger = logging.getLogger("careloop.prd")
+LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
 
 TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "templates" / "prd_template.md"
 
@@ -27,6 +36,10 @@ GAP_CLASS_SOLUTION_HINTS = {
         "(push/WA/email) before the flow terminates, instead of silently killing it."
     ),
     "ux_gap": "Close the experience gap at the cited surface — the mechanism works, but the user isn't guided through it.",
+    "unclassified": (
+        "The mechanism was located at the cited line but could not be auto-classified — review it "
+        "and classify (logic flaw / missing retention hook / UX gap) before proposing a fix."
+    ),
 }
 
 
@@ -162,35 +175,165 @@ def _render_prd_llm_stub(
     return title, body
 
 
+def _prd_inputs(finding, gaps, trend, quotes, run_id, window_start, window_end) -> dict:
+    """Exactly what the drafting model is allowed to know.
+
+    Remedy verdicts are passed as structured `status` values, not prose. The
+    model may word a requirement however it likes; whether the fix is already
+    built is decided by the Remedy Loop and cannot be upgraded by writing more
+    confidently — which is the failure this pipeline has corrected twice
+    already ("confirmed missing" on an unsearched remedy).
+    """
+    gap = gaps[0] if gaps else None
+    return {
+        "run_id": run_id,
+        "window": {"start": window_start, "end": window_end},
+        "finding": {
+            "rank": finding.rank, "origin": finding.origin, "stage": finding.stage,
+            "hypothesis": finding.hypothesis, "confidence": finding.confidence,
+            "confirm_via": finding.confirm_via,
+            "segments": [{"dimension": s.dimension, "value": s.value} for s in finding.segments],
+            "evidence": [{"metric": e.metric, "value": e.value} for e in finding.evidence],
+            "review_count": finding.review_count, "theme": finding.theme,
+        },
+        "code_gap": None if gap is None else {
+            "repo": gap.repo, "service": gap.service, "file": gap.file, "line": gap.line,
+            "mechanism_found": gap.mechanism_found, "gap_class": gap.gap_class,
+            "gap_statement": gap.gap_statement, "no_match_reason": gap.no_match_reason,
+            "proposed_change_location": gap.proposed_change_location,
+            "remedies": [{"proposal": r.proposal, "status": r.status,
+                          "evidence_file": r.evidence_file,
+                          "searches_run": len(r.searched_terms)} for r in gap.remedies],
+        },
+        "trend_narrative": trend.narrative,
+        "anecdotal_quotes": [{"text": getattr(q, "text", str(q)),
+                              "rating": getattr(q, "rating", None)} for q in quotes[:2]],
+        "rules": [
+            "Every number must come from these inputs. Do not compute new totals.",
+            "Express targets relatively ('recover 5% of X'), never as an invented absolute count.",
+            "A remedy's status is given; never restate an absent remedy as confirmed or built.",
+            "No angle brackets anywhere in the output.",
+            "Format each of the eight sections as a markdown heading: '## 1. Overview', "
+            "'## 2. Goals & Success Metrics', and so on. Functional requirements are list "
+            "items beginning '- FR-1:', '- FR-2:'.",
+        ],
+    }
+
+
+def _render_prd_llm(llm: LLMCall, inputs: dict) -> tuple[str, str]:
+    """Returns (markdown, source). Falls back rather than shipping bad prose."""
+    try:
+        out = llm({"prd_inputs": inputs})
+    except Exception as exc:                       # first-ever caller of 21691
+        logger.warning("prd-generation call failed (%s) — deterministic PRD", exc)
+        return "", f"llm_error:{type(exc).__name__}"
+
+    body = (out.get("prd_markdown") or "").strip()
+    if len(body) < 200:
+        logger.warning("prd-generation returned %d chars — deterministic PRD", len(body))
+        return "", "too_short"
+
+    invented = unsupported_numbers(body, inputs)
+    if invented:
+        logger.warning("prd-generation cited ungrounded numbers %s — deterministic PRD", invented)
+        return "", f"ungrounded_numbers:{invented}"
+    return normalise_headings(body), "llm"
+
+
+_BARE_SECTION = re.compile(r"^\s*(\d{1,2})[.)]?\s+([A-Z][^\n]{2,80})$")
+
+
+def normalise_headings(body: str) -> str:
+    """Make the eight sections render as headings.
+
+    Run 8's model-written draft titled its sections "1 Overview (What /
+    Problem / Users / Out of Scope)" with no markdown marker, so the PRD
+    drawer rendered them as plain paragraphs. If the draft has no ## headings
+    at all, a line that is just a section number and a title becomes one.
+    Drafts that already use markdown headings are left alone.
+    """
+    if re.search(r"^##\s", body, re.M):
+        return body
+    out = []
+    for line in body.splitlines():
+        m = _BARE_SECTION.match(line)
+        out.append(f"## {m.group(1)}. {m.group(2).strip()}" if m else line)
+    return "\n".join(out)
+
+
+def _with_draft_banner(body: str, run_id: int, window_start: str, window_end: str,
+                       confidence: str) -> str:
+    """The banner is ours, not the model's.
+
+    It is the one line that stops a generated document being mistaken for an
+    approved one, so it is prepended deterministically and any model-authored
+    version is dropped — a drafting model must not be able to omit or soften it.
+    """
+    banner = (f"> **DRAFT — needs human review.** Generated by CareLoop run `{run_id}` on "
+              f"`{window_start}`–`{window_end}`. Hypothesis confidence: `{confidence}`. "
+              f"Never auto-filed as a ticket or MR.")
+    kept = [ln for ln in body.splitlines() if "DRAFT" not in ln or not ln.lstrip().startswith(">")]
+    return "\n".join([kept[0], "", banner, ""] + kept[1:]) if kept and kept[0].startswith("#") \
+        else "\n".join([banner, ""] + kept)
+
+
 MAX_PRDS_PER_RUN = 5
+# Drafts are independent of each other, so they are rendered concurrently —
+# five sequential ~40 s sphere calls would add over three minutes to a run.
+PRD_RENDER_WORKERS = 3
 
 
-def prd_generator_node(state: GraphState) -> GraphState:
+def _draft_for(finding: Finding, run_state: RunState, llm: Optional[LLMCall]) -> dict:
+    """One PRD for one finding: model-written when the draft survives the
+    evidence gate, deterministic template otherwise. `source` says which."""
+    gaps = run_state.gaps_for(finding.rank)
+    quotes = _collect_quotes(finding, run_state.voc.per_finding_quotes)
+    title, deterministic = _render_prd_llm_stub(
+        finding, gaps, run_state.trend_report, quotes,
+        run_id=run_state.run_id,
+        window_start=run_state.window_start,
+        window_end=run_state.window_end,
+    )
+    body, source = "", "deterministic"
+    if llm is not None:
+        inputs = _prd_inputs(finding, gaps, run_state.trend_report, quotes,
+                             run_state.run_id, run_state.window_start, run_state.window_end)
+        body, source = _render_prd_llm(llm, inputs)
+        if body:
+            body = _with_draft_banner(body, run_state.run_id, run_state.window_start,
+                                      run_state.window_end, finding.confidence)
+    if not body:
+        body, source = deterministic, (source if source != "llm" else "deterministic")
+    return {"finding_rank": finding.rank, "title": title, "markdown": body, "source": source}
+
+
+def prd_generator_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> GraphState:
     """
     Generates one PRD per finding, not just the #1 ranked one — capped at
     MAX_PRDS_PER_RUN. `prd_draft` is kept as the #1 finding's markdown alone
     (existing field, other consumers read it) for backward compatibility;
     `prd_drafts` (new, additive) carries the full list.
+
+    Each draft goes through the `prd-generation` sphere use case (live) or its
+    recorded replay (demo) and is accepted only if every number it cites is in
+    its own inputs; otherwise that finding gets the deterministic template and
+    `source` records why. The DRAFT banner is always ours.
     """
+    if llm is None:
+        llm = make_use_case_llm(get_settings().llm_use_case_prd_generation,
+                                bool(state.get("demo_mode", True)), journey=state.get("journey"))
     run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
     findings = sorted(run_state.findings, key=lambda f: f.rank)[:MAX_PRDS_PER_RUN]
 
     if not findings:
-        return {**state, "prd_draft": None, "prd_drafts": [], "status": "completed", "error": "no_finding_to_draft_prd_for"}
+        return {**state, "prd_draft": None, "prd_drafts": [], "status": "completed",
+                "error": "no_finding_to_draft_prd_for"}
 
-    drafts = []
-    for finding in findings:
-        gaps = run_state.gaps_for(finding.rank)
-        quotes = _collect_quotes(finding, run_state.voc.per_finding_quotes)
-        title, body = _render_prd_llm_stub(
-            finding,
-            gaps,
-            run_state.trend_report,
-            quotes,
-            run_id=run_state.run_id,
-            window_start=run_state.window_start,
-            window_end=run_state.window_end,
-        )
-        drafts.append({"finding_rank": finding.rank, "title": title, "markdown": body})
+    if llm is None or len(findings) == 1:
+        drafts = [_draft_for(f, run_state, llm) for f in findings]
+    else:
+        with ThreadPoolExecutor(max_workers=PRD_RENDER_WORKERS) as pool:
+            drafts = list(pool.map(lambda f: _draft_for(f, run_state, llm), findings))
 
-    return {**state, "prd_draft": drafts[0]["markdown"], "prd_drafts": drafts, "status": "completed"}
+    return {**state, "prd_draft": drafts[0]["markdown"], "prd_drafts": drafts,
+            "prd_source": drafts[0]["source"], "status": "completed"}

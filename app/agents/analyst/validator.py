@@ -31,6 +31,45 @@ def collect_numbers(obj: Any) -> set[float]:
     return out
 
 
+def _row_rates(entered, converted) -> set[float]:
+    """The rates one row legitimately implies: its own conversion, and the
+    complementary loss share. Nothing across rows."""
+    out: set[float] = set()
+    try:
+        e, c = float(entered), float(converted)
+    except (TypeError, ValueError):
+        return out
+    if e > 0:
+        out.add(round(c / e, 4))
+        out.add(round(1 - c / e, 4))
+    return out
+
+
+def _known_rates(snapshot: Snapshot, trail: list[DrilldownStep]) -> set[float]:
+    """Rates the model could have derived honestly.
+
+    Replaces an any-pair ratio test that accepted a rate if ANY two known
+    numbers divided to it. With ~40 known numbers that is ~1,400 pairs, and a
+    finding citing 0.0073 for a cut the run never answered passed because
+    1433 (an "ITEMS UNAVAILABLE" reason count) / 201617 (last week's confirmed
+    count) happens to equal it. A ratio of two unrelated numbers is not
+    evidence, so a rate now has to be the conversion (or loss share) of ONE
+    row the model was actually shown, or an explicit rate/share field on it.
+    """
+    rates: set[float] = set()
+    for row in list(snapshot.stages) + list(snapshot.previous_stages):
+        rates |= _row_rates(row.entered, row.converted)
+    for step in trail:
+        for row in step.result_rows:
+            if "entered" in row and "converted" in row:
+                rates |= _row_rates(row.get("entered"), row.get("converted"))
+            for key in ("rate", "share", "share_of_prev", "conversion_from_previous"):
+                v = row.get(key)
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    rates.add(round(float(v), 4))
+    return rates
+
+
 def _known_numbers(snapshot: Snapshot, trail: list[DrilldownStep]) -> set[float]:
     known: set[float] = set()
     for row in list(snapshot.stages) + list(snapshot.previous_stages):
@@ -45,6 +84,16 @@ def _known_numbers(snapshot: Snapshot, trail: list[DrilldownStep]) -> set[float]
                 if isinstance(v, (int, float)) and not isinstance(v, bool):
                     known.add(float(v))
     return known
+
+
+def _same_number(cited: float, known: float) -> bool:
+    if abs(known) >= 1:                      # a count: exact after rounding
+        return abs(cited - known) <= 0.5
+    # A rate: known rates are rounded to 4 decimals, so the only legitimate
+    # difference is that rounding. 0.0005 let a PHARMACY loss share (0.6452)
+    # pass as CONSULTATION's 18:00 conversion (0.6447) — with ~50 cohort rates
+    # in the same band, a coincidence inside a 0.0005 window is likely.
+    return abs(cited - known) <= 0.0001
 
 
 def validate_finding(finding: Finding, snapshot: Snapshot,
@@ -63,16 +112,22 @@ def validate_finding(finding: Finding, snapshot: Snapshot,
     if not finding.evidence:
         return False, "warehouse finding with no evidence items"
     known = _known_numbers(snapshot, trail) | (shown or set())
-    for item in finding.evidence:
-        if any(abs(item.value - k) <= _TOL * max(1.0, abs(k)) for k in known):
-            return True, "ok"
-        # rates: accept a value derivable as a ratio of two known numbers
-        if 0 < item.value < 1:
-            for a in known:
-                for b in known:
-                    if b and abs(a / b - item.value) < 0.0005:
-                        return True, "ok"
-    return False, "no evidence value matches any number in snapshot or drill-down trail"
+    rates = _known_rates(snapshot, trail) | {round(x, 4) for x in (shown or set()) if 0 < x < 1}
+    # EVERY evidence value must trace back, not just one. "Any one matches"
+    # meant a finding half made of invented numbers passed on the strength of
+    # its one real citation, and it is how a pharmacy finding survived on the
+    # consultation journey: one of its two values happened to coincide.
+    def _traces(value: float) -> bool:
+        if any(_same_number(value, k) for k in known):
+            return True
+        # a rate must be the conversion of a row the model was shown — never a
+        # coincidental ratio of two unrelated numbers (see _known_rates)
+        return 0 < value < 1 and any(_same_number(value, r) for r in rates)
+
+    untraced = [item.value for item in finding.evidence if not _traces(item.value)]
+    if untraced:
+        return False, f"evidence values not in the shown data: {untraced[:4]}"
+    return True, "ok"
 
 
 def filter_findings(findings: list[Finding], snapshot: Snapshot,

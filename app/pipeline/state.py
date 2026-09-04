@@ -23,15 +23,18 @@ class GraphState(TypedDict, total=False):
     status: str
     demo_mode: bool
     failed_stage: Optional[str]
+    scope: dict[str, Any]
 
     snapshot: dict[str, Any]           # Agent 1 (Fetcher) — Alief
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
     drilldown_trail: list[dict[str, Any]]
+    findings_rejected: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]    # Agent 3 (Code Scout) — Harshit
     trend_report: dict[str, Any]       # Reporter — Mohit
     voc: dict[str, Any]
     prd_draft: Optional[str]           # PRD Generator — Mohit; #1 finding's PRD only, kept for back-compat
     prd_drafts: list[dict[str, Any]]   # PRD Generator — Mohit; one per finding (up to MAX_PRDS_PER_RUN), NEW
+    prd_source: str                    # how the #1 draft was produced: llm | deterministic | rejection reason
     artifacts: list[dict[str, str]]    # [{kind, uri}]
 
     error: Optional[str]
@@ -45,6 +48,7 @@ def initial_state(
     journey: str = "pd_checkout",
     prev_window_start: Optional[str] = None,
     prev_window_end: Optional[str] = None,
+    scope: Optional[dict[str, Any]] = None,
 ) -> GraphState:
     return GraphState(
         run_id=run_id,
@@ -56,9 +60,11 @@ def initial_state(
         status="fetching",
         demo_mode=demo_mode,
         failed_stage=None,
+        scope=scope or {},
         snapshot={},
         findings=[],
         drilldown_trail=[],
+        findings_rejected=[],
         code_gaps=[],
         trend_report={},
         voc={},

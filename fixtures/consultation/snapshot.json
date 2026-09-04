@@ -1,0 +1,230 @@
+{
+ "stages": [
+  {
+   "stage": "created",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 226615,
+   "converted": 139104
+  },
+  {
+   "stage": "confirmed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 139104,
+   "converted": 133628
+  },
+  {
+   "stage": "started",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 133628,
+   "converted": 133592
+  },
+  {
+   "stage": "completed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 133592,
+   "converted": 133592
+  }
+ ],
+ "previous_stages": [
+  {
+   "stage": "created",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 211695,
+   "converted": 133646
+  },
+  {
+   "stage": "confirmed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 133646,
+   "converted": 129561
+  },
+  {
+   "stage": "started",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 129561,
+   "converted": 129528
+  },
+  {
+   "stage": "completed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 129528,
+   "converted": 129528
+  }
+ ],
+ "segments": [
+  "all"
+ ],
+ "reasons": [
+  {
+   "cancellation_reason": "abandoned by system",
+   "cancellation_reason_group": "system_cancelled",
+   "count": 54015
+  },
+  {
+   "cancellation_reason": "abandon",
+   "cancellation_reason_group": "customer_abandoned",
+   "count": 28405
+  },
+  {
+   "cancellation_reason": "abandoned from the patient selection screen",
+   "cancellation_reason_group": "customer_abandoned",
+   "count": 4134
+  },
+  {
+   "cancellation_reason": "abandoned from the order summary screen",
+   "cancellation_reason_group": "customer_abandoned",
+   "count": 918
+  },
+  {
+   "cancellation_reason": "terlalu lama menunggu",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 677
+  },
+  {
+   "cancellation_reason": "rejected_by_doctor",
+   "cancellation_reason_group": "doctor_cancelled",
+   "count": 462
+  },
+  {
+   "cancellation_reason": "ingin berkonsultasi dengan dokter lain",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 374
+  },
+  {
+   "cancellation_reason": "missed_by_doctor",
+   "cancellation_reason_group": "system_cancelled",
+   "count": 334
+  },
+  {
+   "cancellation_reason": "saya ingin berkonsultasi dengan dokter lain.",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 310
+  },
+  {
+   "cancellation_reason": "saya hanya ingin konsultasi dengan dokter ini tapi dokter sedang sibuk.",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 246
+  },
+  {
+   "cancellation_reason": "lainnya",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 178
+  },
+  {
+   "cancellation_reason": "saya ingin mengubah jadwal",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 118
+  },
+  {
+   "cancellation_reason": "script_cancellations",
+   "cancellation_reason_group": "system_cancelled",
+   "count": 104
+  },
+  {
+   "cancellation_reason": "salah memilih dokter",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 49
+  },
+  {
+   "cancellation_reason": "saya berubah pikiran",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 43
+  },
+  {
+   "cancellation_reason": "saya sudah tidak perlu berkonsultasi.",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 26
+  },
+  {
+   "cancellation_reason": "dokter sedang sibuk",
+   "cancellation_reason_group": "customer_cancelled",
+   "count": 26
+  }
+ ],
+ "ct_events": [
+  {
+   "event_name": "consultation.view.service_homepage",
+   "count": 637786
+  },
+  {
+   "event_name": "consultation.view.patient_selection_page",
+   "count": 445006
+  },
+  {
+   "event_name": "consultation.view.product_detail_page",
+   "count": 436463
+  },
+  {
+   "event_name": "consultation.view.category_page",
+   "count": 353966
+  },
+  {
+   "event_name": "consultation.click.service_icon",
+   "count": 240635
+  },
+  {
+   "event_name": "consultation.click.confirm_patient_button",
+   "count": 158809
+  },
+  {
+   "event_name": "consultation.backend.transaction_delivered",
+   "count": 135752
+  },
+  {
+   "event_name": "consultation.view.payment_page",
+   "count": 119585
+  },
+  {
+   "event_name": "consultation.click.chat_doctor_button",
+   "count": 117691
+  },
+  {
+   "event_name": "consultation.view.search_result_page",
+   "count": 89629
+  },
+  {
+   "event_name": "consultation.view.rating_popup",
+   "count": 71247
+  },
+  {
+   "event_name": "consultation.backend.transaction_confirmed",
+   "count": 54627
+  },
+  {
+   "event_name": "consultation.view.coupon_redemption_page",
+   "count": 42918
+  },
+  {
+   "event_name": "consultation.view.schedule_selection_page",
+   "count": 39437
+  },
+  {
+   "event_name": "consultation.click.confirm_schedule_button",
+   "count": 25740
+  },
+  {
+   "event_name": "consultation.view.coupon_attempt_result",
+   "count": 25557
+  },
+  {
+   "event_name": "consultation.click.submit_rating_button",
+   "count": 21056
+  },
+  {
+   "event_name": "consultation.click.attempt_coupon_button",
+   "count": 9298
+  },
+  {
+   "event_name": "consultation.click.confirm_payment_button",
+   "count": 5969
+  }
+ ]
+}

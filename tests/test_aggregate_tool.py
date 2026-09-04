@@ -30,8 +30,23 @@ def test_k_floor_suppresses_small_segments(cohort_cuts, journey_cfg):
 
 
 def test_no_data_dimension_is_distinct_from_not_whitelisted(cohort_cuts, journey_cfg):
-    tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
-    out = tool.aggregate("confirmed", "platform")  # whitelisted, but no cohort data
+    """Whitelisted-but-dataless must read as no_data, not as a rejection.
+
+    Uses an explicit whitelist rather than the journey config: every dimension
+    the config lists is now required to have cohort data (the config used to
+    advertise four it could not answer), so there is deliberately no dataless
+    dimension left in it to point at.
+    """
+    whitelist = [*journey_cfg["drilldown_dimensions"], "dimension_with_no_fixture"]
+    tool = AggregateTool(cohort_cuts, whitelist)
+    out = tool.aggregate("confirmed", "dimension_with_no_fixture")
     assert out.get("no_data") is True
-    assert "platform" not in out["dimensions_with_data"]
+    assert "dimension_with_no_fixture" not in out["dimensions_with_data"]
     assert "consultation_required" in out["dimensions_with_data"]
+
+
+def test_every_whitelisted_dimension_has_data(cohort_cuts, journey_cfg):
+    """The config is a promise the fixture has to keep — a dimension the LLM is
+    told it may query, that then answers no_data, burns a drill-down turn."""
+    dataless = [d for d in journey_cfg["drilldown_dimensions"] if d not in cohort_cuts]
+    assert not dataless, f"whitelisted but no cohort data: {dataless}"

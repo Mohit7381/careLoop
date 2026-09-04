@@ -11,12 +11,63 @@ from pathlib import Path
 from typing import Any, Optional
 
 SPHERE_BASE = os.environ.get("SPHERE_BASE_URL", "http://sphere-platform.stage-k8s.halodoc.com")
-APP_TOKEN = os.environ.get("SPHERE_APP_TOKEN", "")
+# The single parameter each template's user_message renders. Sphere substitutes
+# only the placeholder the template names; every other key is silently ignored
+# and the prompt renders EMPTY. A live run went exactly that way — the model
+# replied "analysis_context is empty" and the run produced zero findings with
+# no error anywhere. call() now refuses a mismatched key instead.
+TEMPLATE_PARAM: dict[str, str] = {
+    "funnel-hypothesis-generation": "analysis_context",
+    "voc-theme-classification":     "reviews_batch",
+    "code-gap-assessment":          "code_context",
+    "trend-narrative":              "delta_table",
+    "prd-generation":               "prd_inputs",
+}
+
+
+class TemplateParamError(ValueError):
+    """The caller sent keys the template cannot render."""
+
+
+def _check_params(use_case: str, params: dict[str, Any]) -> None:
+    expected = TEMPLATE_PARAM.get(use_case)
+    if expected is None:
+        return
+    if set(params) != {expected}:
+        raise TemplateParamError(
+            f"{use_case}: template renders only {{{expected}}} but caller sent "
+            f"{sorted(params)} — the prompt would be empty")
+
+
+def _app_token() -> str:
+    """Shell env wins; otherwise the .env-backed settings.
+
+    Three names had grown for one secret (SPHERE_APP_TOKEN in the shell,
+    sphere_platform_app_token in settings, SPHERE_PLATFORM_API_KEY in
+    .env.example) and a module-level read of only the first meant a token
+    placed in .env never reached this client. Resolved lazily so the API
+    server picks it up from .env without an exported shell variable.
+    """
+    tok = os.environ.get("SPHERE_APP_TOKEN", "")
+    if tok:
+        return tok
+    from app.config import get_settings  # local import: config must not import us
+    return get_settings().sphere_platform_app_token or ""
+
+
+def _live_llm_wanted(demo_mode: bool) -> bool:
+    from app.config import get_settings
+    return (not demo_mode) or bool(get_settings().live_llm)
 REPLAY_DIR = Path(os.environ.get("LLM_REPLAY_DIR", "fixtures/llm_replay"))
 
 
 class SphereClient:
-    def __init__(self, mode: Optional[str] = None, service_type: str = "funnel-analysis"):
+    def __init__(self, mode: Optional[str] = None, service_type: str = "funnel-analysis",
+                 replay_root: Optional[Path] = None):
+        # Replays are recorded per JOURNEY: fixtures/llm_replay/<journey>/<use_case>/.
+        # A pharmacy recording replayed on the consultation journey asks for cuts
+        # that do not exist and cites numbers from the wrong funnel.
+        self.replay_root = replay_root or REPLAY_DIR
         self.mode = mode or os.environ.get("LLM_MODE", "sphere")
         self.service_type = service_type
         self._replay_counters: dict[str, int] = {}
@@ -27,6 +78,7 @@ class SphereClient:
         return self._live(use_case, template_id, params)
 
     def _live(self, use_case: str, template_id: int, params: dict[str, str]) -> dict[str, Any]:
+        _check_params(use_case, params)
         body = {
             "service_type": self.service_type,
             "use_case": use_case,
@@ -36,7 +88,7 @@ class SphereClient:
         req = urllib.request.Request(
             f"{SPHERE_BASE}/v1/chat-ai/requests/validation",
             method="POST",
-            headers={"X-APP-TOKEN": APP_TOKEN, "Content-Type": "application/json"},
+            headers={"X-APP-TOKEN": _app_token(), "Content-Type": "application/json"},
             data=json.dumps(body).encode(),
         )
         with urllib.request.urlopen(req, timeout=90) as r:
@@ -46,13 +98,63 @@ class SphereClient:
         return resp.get("data") or {}
 
     def _replay(self, use_case: str) -> dict[str, Any]:
-        """Sequential replay: fixtures/llm_replay/<use_case>/<n>.json per call."""
+        """Sequential replay: <replay_root>/<use_case>/<n>.json per call."""
         n = self._replay_counters.get(use_case, 0)
         self._replay_counters[use_case] = n + 1
-        path = REPLAY_DIR / use_case / f"{n}.json"
+        path = self.replay_root / use_case / f"{n}.json"
         if not path.exists():  # exhausted -> last recorded response, or hard fail
-            last = sorted((REPLAY_DIR / use_case).glob("*.json"))
+            last = sorted((self.replay_root / use_case).glob("*.json"))
             if not last:
                 raise FileNotFoundError(f"no replay fixtures for {use_case} under {REPLAY_DIR}")
             path = last[-1]
         return json.loads(path.read_text())
+
+
+SPHERE_IDS_PATH = Path("fixtures/pd_checkout/sphere_ids.json")
+
+
+def replay_root_for(journey: Optional[str]) -> Path:
+    """fixtures/llm_replay/<journey> when it exists, else the legacy flat layout."""
+    if journey and (REPLAY_DIR / journey).is_dir():
+        return REPLAY_DIR / journey
+    return REPLAY_DIR
+
+
+def make_use_case_llm(use_case: str, demo_mode: bool, journey: Optional[str] = None):
+    """An `llm(ctx) -> dict` for one sphere use case, or None if unavailable.
+
+    Returning None rather than raising is deliberate: the Reporter and the PRD
+    generator both fall back to their deterministic renderers, and a missing
+    replay fixture or an unset token should degrade the prose, never fail the
+    run. Demo mode replays a recorded session; live mode calls sphere.
+    """
+    try:
+        ids = json.loads(SPHERE_IDS_PATH.read_text())
+        template_id = next(u["template_id"] for u in ids["use_cases"]
+                           if u["name"] == use_case)
+    except Exception:
+        return None
+
+    if _live_llm_wanted(demo_mode):
+        if not _app_token():
+            return None
+        client = SphereClient(mode="sphere")
+    else:
+        root = replay_root_for(journey)
+        if not (root / use_case).exists():
+            return None                      # nothing recorded yet for this journey
+        client = SphereClient(mode="replay", replay_root=root)
+
+    def llm(ctx: dict[str, Any]) -> dict[str, Any]:
+        key = TEMPLATE_PARAM.get(use_case)
+        if key and set(ctx) == {key}:
+            value = ctx[key]
+            params = {key: json.dumps(value) if isinstance(value, (dict, list)) else str(value)}
+        elif key:
+            params = {key: json.dumps(ctx)}       # whole context under the one placeholder
+        else:
+            params = {k: (json.dumps(v) if isinstance(v, (dict, list)) else str(v))
+                      for k, v in ctx.items()}
+        return client.call(use_case, template_id, params)
+
+    return llm

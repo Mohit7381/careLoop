@@ -66,6 +66,43 @@ def largest_drop(table: list[dict]) -> Optional[dict]:
     return worst
 
 
+def gap_for_transition(table: list[dict], from_stage: str, to_stage: str) -> Optional[dict]:
+    """The same shape largest_drop returns, for a transition the user asked for.
+
+    Deliberately NOT a search over the table for the biggest anything — the
+    stages are given, and the arithmetic is identical to largest_drop's, so a
+    scoped run is as un-arguable as an unscoped one.
+    """
+    for prev, cur in zip(table, table[1:]):
+        if prev["stage"] == from_stage and cur["stage"] == to_stage:
+            lost = prev["count"] - cur["count"]
+            return {"from_stage": prev["stage"], "to_stage": cur["stage"], "lost": lost,
+                    "share_of_prev": round(lost / prev["count"], 4) if prev["count"] else 0.0}
+    return None
+
+
+def censoring_caveats(stages: list[str], maturing_stages: list[str]) -> list[str]:
+    """Plain-language warnings the drill-down model must see.
+
+    A live run called the confirmed->delivered step "relatively healthy" at
+    69.23%. That rate is right-censored: most of the shortfall is orders that
+    have not reached a terminal state yet, not orders that were lost. The
+    Reporter already knows this through maturing_stages; the Analyst was never
+    told, so it read an artefact of the window as a finding.
+    """
+    out = []
+    for stage in maturing_stages:
+        if stage not in stages or stages.index(stage) == 0:
+            continue
+        prev = stages[stages.index(stage) - 1]
+        out.append(
+            f"The {prev} -> {stage} conversion is RIGHT-CENSORED in this window: a large share "
+            f"of {prev} orders have not reached a terminal state yet, so the rate understates "
+            f"eventual {stage} and must not be read as a health signal or cited as a gap."
+        )
+    return out
+
+
 def cluster_reasons(reasons: list[ReasonRow], artifact_reasons: list[str]) -> dict:
     """Case-normalized reason clusters, with re-creation artifacts split out."""
     artifacts_norm = {normalize_reason(a) for a in artifact_reasons}

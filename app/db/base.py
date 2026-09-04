@@ -18,7 +18,19 @@ def init_db() -> None:
     from app.db import models  # noqa: F401  (register models on Base.metadata)
 
     Base.metadata.create_all(bind=engine)
+    _ensure_column("analysis_runs", "findings_rejected", "JSON NOT NULL DEFAULT '[]'")
     _backfill_drop_off_finding_columns()
+
+
+def _ensure_column(table: str, column: str, ddl_type: str) -> None:
+    """create_all never alters an existing table. Until a migration tool
+    lands, add a missing column in place so an existing careloop.db keeps
+    working after a pull. Idempotent; SQLite and MySQL both accept the form."""
+    from sqlalchemy import inspect, text
+    if column in {c["name"] for c in inspect(engine).get_columns(table)}:
+        return
+    with engine.begin() as conn:
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
 
 
 def _backfill_drop_off_finding_columns() -> None:

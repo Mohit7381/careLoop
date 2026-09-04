@@ -1,8 +1,0 @@
-{
- "done": false,
- "findings": null,
- "next_question": {
-  "dimension": "pd_category",
-  "rationale": "We still have a large unexplained chunk of the top gap: total lost from created->confirmed is 417,569 (share_of_prev 0.6452) but known reason clusters only sum to 199,417 (user_total) + 42,107 (artifact_total) = 241,524 \u2014 leaving ~176,045 unallocated. The price_band cut shows loss concentrated in higher bands (75k_200k: 90,851; gte_200k: 66,220; 25k_75k: 62,875; lt_25k: 24,769), suggesting price / category may matter. Cut by pd_category next to see whether the remaining/unallocated loss (and the bulk of the price-band losses) concentrates in specific product categories (which would point toward category-specific issues like pricing, stock, or messaging) versus being spread across categories (which would point more to UX/flow or funnel-level problems). This will tell us whether to pursue category-targeted fixes (e.g., pricing/inventory experiments) or platform-level experiments."
- }
-}

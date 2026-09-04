@@ -57,7 +57,11 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 FindingOrigin = Literal["warehouse", "voc"]
-GapClass = Literal["logic_flaw", "missing_retention_hook", "ux_gap"]
+# "unclassified": the mechanism WAS located (file:line) but the model's class
+# was not one of the three and could not be mapped, or the assessment call
+# failed outright. It exists so a found mechanism is never reported as
+# mechanism_found=False — a live run did exactly that nine times out of nine.
+GapClass = Literal["logic_flaw", "missing_retention_hook", "ux_gap", "unclassified"]
 Confidence = Literal["high", "medium", "low"]
 RunStatus = Literal[
     "queued", "fetching", "analyzing", "scanning_code",
@@ -73,7 +77,7 @@ SuggestionType = Literal["tech", "business", "process"]
 # two misreports "we didn't check" as "there was nothing to check" (review S3).
 VerificationStatus = Literal["exists", "absent", "partial", "not_applicable", "unverified"]
 
-_GAP_CLASSES = {"logic_flaw", "missing_retention_hook", "ux_gap"}
+_GAP_CLASSES = {"logic_flaw", "missing_retention_hook", "ux_gap", "unclassified"}
 
 
 def validate_routing_stage(stage: str, journey_routing_keys: list[str]) -> str:
@@ -310,6 +314,28 @@ class Snapshot(BaseModel):
     previous_stages: list[SnapshotRow] = Field(default_factory=list)
 
 
+class RunScope(BaseModel):
+    """What a user asked for, resolved into constraints the pipeline can obey.
+
+    A free-text prompt must never reach the Analyst as prose: phase1.largest_drop
+    is deterministic, and that is load-bearing — it is why the headline number
+    cannot be argued into existence. So a prompt is resolved into this, shown
+    back to the user, and then applied as constraints.
+
+    Every field is optional; an unscoped run leaves them all None and behaves
+    exactly as before.
+    """
+
+    prompt: Optional[str] = None            # what the user actually typed
+    from_stage: Optional[str] = None        # target transition, overriding largest_drop
+    to_stage: Optional[str] = None
+    dimensions: list[str] = Field(default_factory=list)   # restrict the drill-down
+    review_days: Optional[int] = None       # "the last 10-15 days of reviews"
+    matched_on: list[str] = Field(default_factory=list)   # why the resolver chose this
+    unresolved: list[str] = Field(default_factory=list)   # asked for, could not honour
+
+    def is_scoped(self) -> bool:
+        return bool(self.from_stage or self.dimensions or self.review_days)
 class PrdDraft(BaseModel):
     """One PRD, tied to the finding it was drafted for (decision #12: more
     than one finding can produce a PRD in the same run — up to
@@ -318,6 +344,7 @@ class PrdDraft(BaseModel):
     finding_rank: int
     title: str
     markdown: str
+    source: str = "deterministic"   # "llm" | "deterministic" | why the model draft was rejected
 
 
 class RunState(BaseModel):
@@ -344,8 +371,14 @@ class RunState(BaseModel):
     status: RunStatus = "queued"
     failed_stage: Optional[str] = None    # no-silent-partial-success rule
 
+    scope: RunScope = Field(default_factory=RunScope)
+
     snapshot: Snapshot = Field(default_factory=Snapshot)
     findings: list[Finding] = Field(default_factory=list)
+    # Findings the evidence gate refused, with the reason. A run that ends with
+    # zero warehouse findings must be able to say why — a live run once dropped
+    # its only finding ("insufficient data", prose evidence) in total silence.
+    findings_rejected: list[dict[str, Any]] = Field(default_factory=list)
     drilldown_trail: list[DrilldownStep] = Field(default_factory=list)
     code_gaps: list[CodeGap] = Field(default_factory=list)
     suggestions: list[Suggestion] = Field(default_factory=list)  # decision #11
@@ -353,6 +386,7 @@ class RunState(BaseModel):
     voc: Voc = Field(default_factory=Voc)
     prd_draft: Optional[str] = None                              # #1 finding's PRD only — kept for back-compat
     prd_drafts: list[PrdDraft] = Field(default_factory=list)      # one per finding — decision #12, NEW
+    prd_source: str = "deterministic"   # how the #1 draft was produced: llm | deterministic | rejection reason
     artifacts: list[str] = Field(default_factory=list)
 
     def top_finding(self) -> Optional[Finding]:
