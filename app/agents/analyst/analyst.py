@@ -179,7 +179,8 @@ def run_analyst(state: RunState,
     findings, trail, growth_ideas = run_drilldown(
         llm, tool, gap or {}, summary, routing_keys,
         _default_routing_for_gap(gap or {}, cfg), voc_signals=voc_signals,
-        top_strength=top_strength, positive_voc_signals=positive_voc_signals)
+        top_strength=top_strength, positive_voc_signals=positive_voc_signals,
+        user_question=state.scope.prompt, user_intent=state.scope.intent)
 
     # ---- evidence gate (accepts every number the model was shown) ----
     shown = collect_numbers(summary) | collect_numbers(gap or {})

@@ -57,6 +57,29 @@ def _overlaps(label_tokens: set[str], words: set[str]) -> bool:
     return any(_shares_stem(lt, w) for lt in label_tokens for w in words)
 
 
+_GROWTH_WORDS = {
+    "increase", "increasing", "grow", "growing", "growth", "boost", "boosting", "expand", "expanding",
+    "more", "improve", "improving", "lift", "raise", "acquire", "acquisition", "upsell", "revenue",
+    "tambah", "meningkatkan", "naikkan", "pertumbuhan",          # id: add / increase / raise / growth
+}
+_GROWTH_OBJECTS = {"transaction", "transactions", "orders", "bookings", "consultations", "consults", "sales",
+                   "conversion", "conversions", "volume", "revenue", "users", "customers", "adoption", "retention"}
+
+
+def resolve_intent(prompt: str) -> tuple[str, list[str]]:
+    """"how can I increase transactions on consultations" is a growth question,
+    not a drop-off diagnosis. Deterministic, like everything else here: a growth
+    verb next to a growth object. Returns (intent, matched words). The intent
+    changes what the Analyst is asked to prioritise (which cuts, which growth
+    ideas), never which numbers it is shown."""
+    words = set(re.findall(r"[a-z]+", (prompt or "").lower()))
+    verbs = sorted(words & _GROWTH_WORDS)
+    objects = sorted(words & _GROWTH_OBJECTS)
+    if verbs and objects:
+        return "growth", verbs + objects
+    return "diagnosis", []
+
+
 def _review_days(prompt: str) -> Optional[int]:
     """"past 10-15 days" -> 15. A range resolves to its upper bound: the user is
     describing roughly how far back to look, and fetching the wider window and
@@ -109,6 +132,12 @@ def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
 
     # --- reviews: how far back ---
     scope.review_days = _review_days(prompt)
+
+    # --- intent: diagnosis (default) or growth ---
+    intent, hits = resolve_intent(prompt)
+    scope.intent = intent
+    if intent == "growth":
+        scope.matched_on.append(f"intent:growth (via {', '.join(hits)})")
 
     # --- dimensions the user named, by name or by how people actually say it ---
     aliases: dict[str, list[str]] = journey_cfg.get("dimension_aliases") or {}
@@ -175,8 +204,10 @@ def resolve_scope(prompt: str, journey_cfg: dict, ct_event_names: list[str],
 def describe(scope: RunScope, journey: Optional[str] = None) -> str:
     """One line a human can confirm or reject before the run starts."""
     where = f" ({journey.replace('_', ' ')} journey)" if journey else ""
+    growth = " Read as a growth question: the Analyst will prioritise growth ideas alongside the drop-off findings." \
+        if getattr(scope, "intent", "diagnosis") == "growth" else ""
     if not scope.is_scoped():
-        return f"Could not scope this request — the full funnel will be analysed{where}."
+        return f"Could not scope this request — the full funnel will be analysed{where}.{growth}"
     bits = []
     if scope.from_stage:
         bits.append(f"the {scope.from_stage} to {scope.to_stage} drop")
@@ -184,4 +215,4 @@ def describe(scope: RunScope, journey: Optional[str] = None) -> str:
         bits.append("cut by " + ", ".join(scope.dimensions))
     if scope.review_days:
         bits.append(f"reviews from the last {scope.review_days} days")
-    return "Analysing " + "; ".join(bits) + f"{where}."
+    return "Analysing " + "; ".join(bits) + f"{where}.{growth}"

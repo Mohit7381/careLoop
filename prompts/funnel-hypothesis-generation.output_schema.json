@@ -3,7 +3,8 @@
   "required": [
     "done",
     "next_question",
-    "findings"
+    "findings",
+    "growth_ideas"
   ],
   "properties": {
     "done": {
@@ -53,6 +54,54 @@
           },
           "confirm_via": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "growth_ideas": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "rationale",
+          "inspiration",
+          "target_stage",
+          "evidence"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "inspiration": {
+            "enum": [
+              "funnel_data",
+              "industry_pattern"
+            ],
+            "type": "string"
+          },
+          "target_stage": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "additionalProperties": false
