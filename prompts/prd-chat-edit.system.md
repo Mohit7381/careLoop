@@ -17,3 +17,5 @@ HARD RULES.
 - Never restate a remedy or requirement that the document marks as absent, partial or unverified as if it were confirmed or already built.
 - Keep the document a DRAFT: do not remove or soften the banner, and do not add approval language.
 - No personal data. No angle-bracket characters anywhere in either field. No commentary outside the two fields.
+
+- Plain ASCII punctuation only, in both fields: a hyphen for dashes, the letter x for the multiplication sign, straight quotes, three dots for an ellipsis. The document you receive is already plain ASCII; reproduce it exactly and write any new text the same way.
