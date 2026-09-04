@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     llm_use_case_trend_narrative: str = "trend-narrative"
     llm_use_case_prd_generation: str = "prd-generation"
     llm_use_case_voc_theme_classification: str = "voc-theme-classification"  # NEW — not previously wired anywhere
+    # NOT YET PROVISIONED (2026-09-04) — project 7121 has 5 ACTIVE use cases; this
+    # would be a 6th. Needs the same AI Studio setup code-gap-assessment got before
+    # _sphere_llm() in pipeline/nodes/analyst.py can look up its template_id.
+    llm_use_case_voc_correlation: str = "voc-funnel-correlation"
 
     # Metabase (read-only, Fetcher / Alief)
     metabase_base_url: str = ""
