@@ -12,12 +12,11 @@ it for a real sphere-platform call (use case:
 settings.llm_use_case_prd_generation) when ready — keep the "<=2 quotes,
 labelled anecdotal" and "unconfirmed assumptions -> Section 8" rules.
 """
-from pathlib import Path
-from typing import Union
-
 import logging
 import re
-from typing import Any, Callable, Optional
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, Callable, Optional, Union
 
 from app.agents.evidence_gate import unsupported_numbers
 from app.config import get_settings
@@ -82,19 +81,20 @@ def _remedies_block(gap: CodeGap) -> str:
     if not gap.remedies:
         return ""
     lines = ["\n\n**Remedy Loop verdicts (proposed fixes, verified against the code):**"]
-    for r in gap.remedies:
+    for i, r in enumerate(gap.remedies, start=1):
         n = len(r.searched_terms)
+        tag = f"FR-{i}:"
         if r.status == "absent":
-            lines.append(f"- **[FR candidate — not found in {n} search{'es' if n != 1 else ''}]** {r.proposal}")
+            lines.append(f"- {tag} **[FR candidate — not found in {n} search{'es' if n != 1 else ''}]** {r.proposal}")
         elif r.status == "exists":
             lines.append(
-                f"- **[Already built — do not re-propose]** {r.proposal} "
+                f"- {tag} **[Already built — do not re-propose]** {r.proposal} "
                 f"(`{r.evidence_file}:{r.evidence_line}`)"
             )
         elif r.status == "partial":
-            lines.append(f"- **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
+            lines.append(f"- {tag} **[Needs a closer look — partial match]** {r.proposal} — {r.evidence_file or 'related code found'}")
         else:
-            lines.append(f"- **[Unverified — no search ran, e.g. budget exhausted first]** {r.proposal}")
+            lines.append(f"- {tag} **[Unverified — no search ran, e.g. budget exhausted first]** {r.proposal}")
     return "\n".join(lines)
 
 
@@ -277,35 +277,63 @@ def _with_draft_banner(body: str, run_id: int, window_start: str, window_end: st
         else "\n".join([banner, ""] + kept)
 
 
-def prd_generator_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> GraphState:
-    if llm is None:
-        llm = make_use_case_llm(get_settings().llm_use_case_prd_generation,
-                                bool(state.get("demo_mode", True)), journey=state.get("journey"))
-    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
-    top = run_state.top_finding()
+MAX_PRDS_PER_RUN = 5
+# Drafts are independent of each other, so they are rendered concurrently —
+# five sequential ~40 s sphere calls would add over three minutes to a run.
+PRD_RENDER_WORKERS = 3
 
-    if top is None:
-        return {**state, "prd_draft": None, "status": "completed", "error": "no_finding_to_draft_prd_for"}
 
-    gaps = run_state.gaps_for(top.rank)
-    quotes = _collect_quotes(top, run_state.voc.per_finding_quotes)
-
-    _title, deterministic = _render_prd_llm_stub(
-        top, gaps, run_state.trend_report, quotes,
+def _draft_for(finding: Finding, run_state: RunState, llm: Optional[LLMCall]) -> dict:
+    """One PRD for one finding: model-written when the draft survives the
+    evidence gate, deterministic template otherwise. `source` says which."""
+    gaps = run_state.gaps_for(finding.rank)
+    quotes = _collect_quotes(finding, run_state.voc.per_finding_quotes)
+    title, deterministic = _render_prd_llm_stub(
+        finding, gaps, run_state.trend_report, quotes,
         run_id=run_state.run_id,
         window_start=run_state.window_start,
         window_end=run_state.window_end,
     )
-
     body, source = "", "deterministic"
     if llm is not None:
-        inputs = _prd_inputs(top, gaps, run_state.trend_report, quotes,
+        inputs = _prd_inputs(finding, gaps, run_state.trend_report, quotes,
                              run_state.run_id, run_state.window_start, run_state.window_end)
         body, source = _render_prd_llm(llm, inputs)
         if body:
             body = _with_draft_banner(body, run_state.run_id, run_state.window_start,
-                                      run_state.window_end, top.confidence)
+                                      run_state.window_end, finding.confidence)
     if not body:
         body, source = deterministic, (source if source != "llm" else "deterministic")
+    return {"finding_rank": finding.rank, "title": title, "markdown": body, "source": source}
 
-    return {**state, "prd_draft": body, "status": "completed", "prd_source": source}
+
+def prd_generator_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> GraphState:
+    """
+    Generates one PRD per finding, not just the #1 ranked one — capped at
+    MAX_PRDS_PER_RUN. `prd_draft` is kept as the #1 finding's markdown alone
+    (existing field, other consumers read it) for backward compatibility;
+    `prd_drafts` (new, additive) carries the full list.
+
+    Each draft goes through the `prd-generation` sphere use case (live) or its
+    recorded replay (demo) and is accepted only if every number it cites is in
+    its own inputs; otherwise that finding gets the deterministic template and
+    `source` records why. The DRAFT banner is always ours.
+    """
+    if llm is None:
+        llm = make_use_case_llm(get_settings().llm_use_case_prd_generation,
+                                bool(state.get("demo_mode", True)), journey=state.get("journey"))
+    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
+    findings = sorted(run_state.findings, key=lambda f: f.rank)[:MAX_PRDS_PER_RUN]
+
+    if not findings:
+        return {**state, "prd_draft": None, "prd_drafts": [], "status": "completed",
+                "error": "no_finding_to_draft_prd_for"}
+
+    if llm is None or len(findings) == 1:
+        drafts = [_draft_for(f, run_state, llm) for f in findings]
+    else:
+        with ThreadPoolExecutor(max_workers=PRD_RENDER_WORKERS) as pool:
+            drafts = list(pool.map(lambda f: _draft_for(f, run_state, llm), findings))
+
+    return {**state, "prd_draft": drafts[0]["markdown"], "prd_drafts": drafts,
+            "prd_source": drafts[0]["source"], "status": "completed"}

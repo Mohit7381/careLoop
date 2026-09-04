@@ -1,0 +1,44 @@
+@if (groups().length) {
+  <div class="sugg-summary mono">
+    {{ counts().total }} suggestion{{ counts().total === 1 ? '' : 's' }} ·
+    {{ counts().tech }} technical · {{ counts().other }} business / process
+  </div>
+
+  @for (group of groups(); track group.findingRank) {
+    <div class="sugggroup">
+      <div class="group-head">
+        <span class="finding-ref">finding #{{ group.findingRank }}</span>
+        <span class="mono repo">{{ group.suggestions[0].repo }}</span>
+      </div>
+
+      @for (s of group.suggestions; track s.title) {
+        <div class="sugg" [class]="s.suggestion_type">
+          <div class="sugg-head">
+            <span class="typebadge" [class]="s.suggestion_type">{{ typeLabel(s.suggestion_type) }}</span>
+            <span class="sugg-title">{{ s.title }}</span>
+            <span class="verify" [class]="verificationTone(s.verification_status)">
+              {{ verificationLabel(s.verification_status) }}
+            </span>
+          </div>
+
+          <p class="sugg-desc">{{ s.description }}</p>
+          <p class="sugg-rationale"><b>Why</b>{{ s.rationale }}</p>
+
+          <div class="sugg-foot mono">
+            <span class="verify-copy">{{ verificationCopy(s.verification_status) }}</span>
+            @if (showsEvidence(s)) {
+              <span>{{ s.evidence_file }}@if (s.evidence_line) {:{{ s.evidence_line }}}</span>
+            }
+            @if (s.searches_run) {
+              <span>{{ s.searches_run }} search{{ s.searches_run === 1 ? '' : 'es' }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+} @else {
+  <div class="sugggroup empty">
+    <div class="group-head"><span class="mono repo">no suggestions on this run</span></div>
+  </div>
+}

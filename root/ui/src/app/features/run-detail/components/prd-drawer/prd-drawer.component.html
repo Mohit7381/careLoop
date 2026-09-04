@@ -2,6 +2,25 @@
 
 <aside class="drawer" [class.open]="open()" aria-label="PRD draft">
   <div class="dbanner">{{ prd().banner }}</div>
+
+  @if (prdRanks().length > 1) {
+    <div class="dtabs" role="tablist" aria-label="Findings with a PRD">
+      @for (rank of prdRanks(); track rank) {
+        <button
+          type="button"
+          class="dtab"
+          role="tab"
+          [class.active]="rank === selectedRank()"
+          [attr.aria-selected]="rank === selectedRank()"
+          (click)="selectRank(rank)"
+        >
+          #{{ rank }}
+          @if (isEdited(rank)) {<span class="dtab-edited" title="Edited via chat">●</span>}
+        </button>
+      }
+    </div>
+  }
+
   <div class="dhead">
     <div>
       <h2>{{ prd().title }}</h2>
@@ -11,54 +30,146 @@
   </div>
 
   <div class="dbody">
-    <div class="dsec">
-      <h3>Overview</h3>
-      <p>{{ prd().overview }}</p>
-    </div>
+    @if (doc(); as d) {
+      <!-- The generated PRD for the selected finding, split into sections.
+           Read mode renders them; Edit turns each into an in-place editor. -->
+      @if (editing() || editedCount() > 0) {
+        <div class="editbar">
+          @if (editing()) {
+            <button class="btn btn-sm" type="button" (click)="addSection()">Add section</button>
+          }
+          @if (editedCount() > 0) {
+            <span class="editcount">{{ editedCount() }} section{{ editedCount() === 1 ? '' : 's' }} changed by you</span>
+            <button class="btn btn-sm" type="button" (click)="revertAll()">Revert all</button>
+          }
+        </div>
+      }
 
-    <div class="dsec">
-      <h3>Goals</h3>
-      <div class="tblwrap">
-        <table>
-          <thead><tr><th>Goal</th><th>Target</th></tr></thead>
-          <tbody>
-            @for (g of prd().goals; track g[0]) {
-              <tr><td class="name">{{ g[0] }}</td><td>{{ g[1] }}</td></tr>
+      @if (editedCount() > 0) {
+        <div class="unverified-note">
+          Your typed changes are <b>not verified against the code</b>. A chat edit goes through the
+          backend and comes back checked; anything you type here does not, and stays marked as yours.
+        </div>
+      }
+
+      @for (s of d.sections; track s.id) {
+        <section class="prdsec" [class.touched]="isSectionEdited(s)">
+          <div class="sechead">
+            @if (editing()) {
+              <input class="headinput" [value]="s.heading" (input)="onHeadingInput(s, $any($event.target).value)" />
+            } @else {
+              <h3>{{ s.heading }}</h3>
             }
-          </tbody>
-        </table>
+            @if (isSectionEdited(s)) {
+              <span class="humanbadge">{{ originLabel(s) }}</span>
+            }
+            @if (editing()) {
+              <span class="secactions">
+                <button class="btn btn-xs" type="button" (click)="move(s.id, -1)" title="Move up">&uarr;</button>
+                <button class="btn btn-xs" type="button" (click)="move(s.id, 1)" title="Move down">&darr;</button>
+                @if (s.origin === 'human-edited') {
+                  <button class="btn btn-xs" type="button" (click)="revertSection(s.id)">Revert</button>
+                }
+                <button class="btn btn-xs danger" type="button" (click)="removeSection(s.id)" title="Delete">&#10005;</button>
+              </span>
+            }
+          </div>
+          @if (editing()) {
+            <textarea class="secbody" rows="6" [value]="s.body"
+                      (input)="onSectionInput(s, $any($event.target).value)"></textarea>
+          } @else {
+            <pre class="secbody-read">{{ s.body }}</pre>
+          }
+        </section>
+      }
+    } @else {
+      <!-- No markdown for this finding — structured fallback from findings + code_gaps. -->
+      <div class="dsec">
+        <h3>Overview</h3>
+        <p>{{ prd().overview }}</p>
       </div>
-    </div>
 
-    <div class="dsec">
-      <h3>Functional requirements</h3>
-      <div class="frlist">
-        @for (f of prd().requirements; track f[0]) {
-          <div class="fr"><span class="id mono">{{ f[0] }}</span><span>{{ f[1] }}</span></div>
+      <div class="dsec">
+        <h3>Goals</h3>
+        <div class="tblwrap">
+          <table>
+            <thead><tr><th>Goal</th><th>Target</th></tr></thead>
+            <tbody>
+              @for (g of prd().goals; track g[0]) {
+                <tr><td class="name">{{ g[0] }}</td><td>{{ g[1] }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="dsec">
+        <h3>Functional requirements</h3>
+        <div class="frlist">
+          @for (f of prd().requirements; track f[0]) {
+            <div class="fr"><span class="id mono">{{ f[0] }}</span><span>{{ f[1] }}</span></div>
+          }
+        </div>
+      </div>
+
+      <div class="dsec">
+        <h3>Open questions</h3>
+        <div class="tblwrap">
+          <table>
+            <thead><tr><th>Question</th><th>Owner</th></tr></thead>
+            <tbody>
+              @for (q of prd().openQuestions; track q[0]) {
+                <tr><td class="name">{{ q[0] }}</td><td class="mono owner">{{ q[1] }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+
+    <!-- Chat editing: asks the backend to make the change and re-verify it.
+         The other half of the pair — typed section edits above are direct
+         but unverified; this one is checked but indirect. -->
+    <div class="dsec dchat">
+      <h3>Ask for a change</h3>
+      @if (!chatAvailable()) {
+        <p class="dchat-hint">
+          Chat editing needs a live run — this is a fixture PRD, so there's nothing on the backend to
+          edit. You can still edit sections directly above.
+        </p>
+      } @else {
+        @if (chatLog().length) {
+          <div class="dchat-log">
+            @for (m of chatLog(); track $index) {
+              <div class="dchat-msg" [class.assistant]="m.role === 'assistant'">{{ m.text }}</div>
+            }
+          </div>
         }
-      </div>
-    </div>
-
-    <div class="dsec">
-      <h3>Open questions</h3>
-      <div class="tblwrap">
-        <table>
-          <thead><tr><th>Question</th><th>Owner</th></tr></thead>
-          <tbody>
-            @for (q of prd().openQuestions; track q[0]) {
-              <tr><td class="name">{{ q[0] }}</td><td class="mono owner">{{ q[1] }}</td></tr>
-            }
-          </tbody>
-        </table>
-      </div>
+        <form class="dchat-form" (submit)="$event.preventDefault(); sendChat()">
+          <input
+            class="dchat-input"
+            type="text"
+            placeholder="e.g. &quot;title: Rescue rx-gated checkout&quot; or &quot;remove FR-2&quot;"
+            [value]="chatInput()"
+            (input)="chatInput.set($any($event.target).value)"
+            [disabled]="chatBusy()"
+          />
+          <button class="btn" type="submit" [disabled]="chatBusy() || !chatInput().trim()">
+            {{ chatBusy() ? 'Sending…' : 'Send' }}
+          </button>
+        </form>
+      }
     </div>
   </div>
 
   <div class="dfoot">
-    <button class="btn btn-primary" type="button" (click)="approve()">Approve &amp; send to GChat</button>
-    <button class="btn" type="button" (click)="requestChanges()">Request changes</button>
+    <button class="btn btn-primary" type="button" [disabled]="!doc()" (click)="toggleEdit()">
+      {{ editing() ? 'Done editing' : 'Edit' }}
+    </button>
     <button class="btn" type="button" (click)="downloadDocx()">Download .docx</button>
-    <span class="note mono">delivers to {{ prd().channel }}</span>
+    @if (editedCount() > 0) {
+      <span class="note mono">{{ editedCount() }} section{{ editedCount() === 1 ? '' : 's' }} changed by you · unverified</span>
+    }
   </div>
 </aside>
 

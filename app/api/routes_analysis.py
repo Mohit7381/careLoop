@@ -2,19 +2,29 @@ import asyncio
 import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db.base import SessionLocal, get_session
-from app.db.models import AnalysisRun
+from app.db.models import AnalysisRun, RunArtifact
 from app.integrations.garuda_client import GarudaDeliveryError, send_report
+from app.pipeline.prd_editor import apply_edit_instruction
 from app.pipeline.runner import run_pipeline
 from app.agents.scope_resolver import describe, pick_journey, resolve_scope
 from app.journeys import all_journeys, load_journey
-from app.schemas.api import (CreateRunRequest, CreateRunResponse, DeliverResponse,
-                             ResolveScopeRequest, ResolveScopeResponse, RunDetailResponse)
+from app.schemas.api import (
+    CreateRunRequest,
+    CreateRunResponse,
+    DeliverResponse,
+    PrdChatRequest,
+    PrdChatResponse,
+    PrdSummary,
+    ResolveScopeRequest,
+    ResolveScopeResponse,
+    RunDetailResponse,
+)
 from app.schemas.contracts import RunScope
 
 router = APIRouter(prefix="/v1/analysis", tags=["analysis"])
@@ -164,6 +174,15 @@ def _read_artifact(run: AnalysisRun, kind: str) -> str | None:
     return Path(artifact.uri).read_text() if artifact else None
 
 
+def _prd_artifact(run: AnalysisRun, finding_rank: int) -> RunArtifact | None:
+    return next((a for a in run.artifacts if a.kind == "prd_md" and a.finding_rank == finding_rank), None)
+
+
+def _rank1_prd_markdown(run: AnalysisRun) -> str | None:
+    a = _prd_artifact(run, 1)
+    return Path(a.uri).read_text() if a else None
+
+
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
 async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDetailResponse:
     run = session.get(AnalysisRun, run_id)
@@ -216,7 +235,11 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
         findings_rejected=run.findings_rejected or [],
         artifacts=[{"kind": a.kind, "uri": a.uri} for a in run.artifacts],
         report_markdown=_read_artifact(run, "report_md"),
-        prd_markdown=_read_artifact(run, "prd_md"),
+        prd_markdown=_rank1_prd_markdown(run),
+        prds=[
+            PrdSummary(finding_rank=a.finding_rank, title=a.title, markdown=Path(a.uri).read_text(), edited=a.edited)
+            for a in sorted((a for a in run.artifacts if a.kind == "prd_md"), key=lambda a: a.finding_rank or 0)
+        ],
     )
 
 
@@ -244,7 +267,7 @@ async def deliver_run(run_id: int, session: Session = Depends(get_session)) -> D
             run_id=run.id,
             report_summary=report_md[:500],
             report_link=f"/v1/analysis/runs/{run.id}/report",
-            prd_link=f"/v1/analysis/runs/{run.id}" if _read_artifact(run, "prd_md") else None,
+            prd_link=f"/v1/analysis/runs/{run.id}" if _rank1_prd_markdown(run) else None,
         )
         return DeliverResponse(run_id=run.id, delivered=True, detail="sent")
     except GarudaDeliveryError as exc:
@@ -265,13 +288,49 @@ async def get_run_report(run_id: int, session: Session = Depends(get_session)) -
 
 
 @router.get("/runs/{run_id}/prd")
-async def get_run_prd(run_id: int, session: Session = Depends(get_session)) -> str:
+async def get_run_prd(
+    run_id: int, rank: int = Query(default=1, ge=1), session: Session = Depends(get_session)
+) -> str:
     run = session.get(AnalysisRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")
 
-    prd = next((a for a in run.artifacts if a.kind == "prd_md"), None)
+    prd = _prd_artifact(run, rank)
     if prd is None:
-        raise HTTPException(status_code=404, detail="no PRD drafted for this run's top finding yet")
+        raise HTTPException(status_code=404, detail=f"no PRD drafted for finding #{rank} on this run")
 
     return Path(prd.uri).read_text()
+
+
+@router.post(
+    "/runs/{run_id}/prd/{rank}/chat",
+    response_model=PrdChatResponse,
+    dependencies=[Depends(require_app_token)],
+)
+async def chat_edit_prd(
+    run_id: int, rank: int, body: PrdChatRequest, session: Session = Depends(get_session)
+) -> PrdChatResponse:
+    """
+    Chat-style editing for a drafted PRD — a human asks for a change in
+    plain language instead of hand-editing markdown. See
+    app/pipeline/prd_editor.py for exactly what it can and can't do
+    autonomously; it's honest about the difference rather than faking a
+    full LLM rewrite.
+    """
+    run = session.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    artifact = _prd_artifact(run, rank)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail=f"no PRD drafted for finding #{rank} on this run")
+
+    current = Path(artifact.uri).read_text()
+    result = apply_edit_instruction(current, body.message)
+
+    Path(artifact.uri).write_text(result.markdown)
+    artifact.edited = True
+    artifact.edited_at = datetime.datetime.utcnow()
+    session.commit()
+
+    return PrdChatResponse(finding_rank=rank, reply=result.reply, markdown=result.markdown, applied=result.applied)

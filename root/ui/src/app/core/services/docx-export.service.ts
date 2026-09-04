@@ -15,7 +15,13 @@ import { RunState } from '../models/run-state';
  */
 @Injectable({ providedIn: 'root' })
 export class DocxExportService {
-  async download(run: RunState, prd: PrdView): Promise<void> {
+  /**
+   * `markdown`, when supplied, is the document currently on screen — the
+   * real prd_markdown plus any edits the user made. Exporting that rather
+   * than the structured reconstruction means the download always matches
+   * what was being read, edits included.
+   */
+  async download(run: RunState, prd: PrdView, markdown?: string): Promise<void> {
     const zip = new JSZip();
 
     zip.file(
@@ -59,6 +65,35 @@ export class DocxExportService {
       URL.revokeObjectURL(url);
       a.remove();
     }, 1500);
+  }
+
+  /** Render generated markdown to OOXML paragraphs: headings bold and
+   *  larger, list items bulleted, everything else a plain paragraph. Good
+   *  enough for a PRD; this is not a general markdown engine. */
+  private markdownXml(markdown: string): string {
+    const out: string[] = [];
+    for (const raw of markdown.split('\n')) {
+      const line = raw.trimEnd();
+      if (!line.trim()) continue;
+      const h = /^(#{1,4})\s+(.*)$/.exec(line);
+      if (h) {
+        const size = h[1].length === 1 ? 36 : h[1].length === 2 ? 28 : 24;
+        out.push(this.para(h[2], { size, bold: true, before: 220, after: 90 }));
+        continue;
+      }
+      if (/^[-*]\s+/.test(line)) {
+        out.push(this.para('•  ' + line.replace(/^[-*]\s+/, ''), { size: 22, after: 60 }));
+        continue;
+      }
+      if (/^\|/.test(line)) {
+        // Table rows render as monospace-ish plain lines rather than a real
+        // OOXML table — readable, and avoids a half-built table renderer.
+        out.push(this.para(line.replace(/\|/g, ' '), { size: 20, after: 40 }));
+        continue;
+      }
+      out.push(this.para(line.replace(/\*\*(.+?)\*\*/g, '$1'), { size: 22 }));
+    }
+    return out.join('');
   }
 
   private bodyXml(run: RunState, prd: PrdView): string {

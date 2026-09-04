@@ -336,6 +336,15 @@ class RunScope(BaseModel):
 
     def is_scoped(self) -> bool:
         return bool(self.from_stage or self.dimensions or self.review_days)
+class PrdDraft(BaseModel):
+    """One PRD, tied to the finding it was drafted for (decision #12: more
+    than one finding can produce a PRD in the same run — up to
+    MAX_PRDS_PER_RUN in prd_generator.py — not just the #1 ranked one)."""
+
+    finding_rank: int
+    title: str
+    markdown: str
+    source: str = "deterministic"   # "llm" | "deterministic" | why the model draft was rejected
 
 
 class RunState(BaseModel):
@@ -375,7 +384,9 @@ class RunState(BaseModel):
     suggestions: list[Suggestion] = Field(default_factory=list)  # decision #11
     trend_report: TrendReport = Field(default_factory=TrendReport)
     voc: Voc = Field(default_factory=Voc)
-    prd_draft: Optional[str] = None
+    prd_draft: Optional[str] = None                              # #1 finding's PRD only — kept for back-compat
+    prd_drafts: list[PrdDraft] = Field(default_factory=list)      # one per finding — decision #12, NEW
+    prd_source: str = "deterministic"   # how the #1 draft was produced: llm | deterministic | rejection reason
     artifacts: list[str] = Field(default_factory=list)
 
     def top_finding(self) -> Optional[Finding]:

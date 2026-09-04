@@ -4,7 +4,7 @@ import { EMPTY, Subscription, firstValueFrom, timer } from 'rxjs';
 import { catchError, switchMap, tap, timeout } from 'rxjs/operators';
 
 import { RUN_47_RESPONSE } from '../fixtures/run-47.fixture';
-import { RunDetailResponse, RunState, RunStatus, SnapshotRow, Voc } from '../models/run-state';
+import { PrdSummary, RunDetailResponse, RunState, RunStatus, SnapshotRow } from '../models/run-state';
 import { environment } from '../../../environments/environment';
 
 export type StageKey = 'fetch' | 'analyze' | 'code' | 'prd';
@@ -140,18 +140,19 @@ function toRunState(r: RunDetailResponse): RunState {
     findings: r.findings ?? [],
     drilldown_trail: r.drilldown_trail ?? [],
     code_gaps: r.code_gaps ?? [],
+    suggestions: r.suggestions ?? [],
     trend_report: { deltas: [], adoption: [], voc_theme_deltas: [], narrative: '' },
-    // An in-flight run has voc: {} — no reviews_meta, no themes. Fill the shape
-    // here so no component dereferences undefined. That dereference used to
-    // throw inside the `stages` computed, and Angular then kept the computed's
-    // LAST GOOD VALUE — the fixture — so a running live run rendered the
-    // fixture's "COMPLETED, 5 findings" under the live run's own header.
+    // An in-flight run returns `voc: {}` — Phase 3 has not run yet.
+    // validateRunDetail only proves `voc` is an object, not that it is
+    // populated, so default each field here and every consumer can read the
+    // shape unconditionally instead of guarding at each call site.
     voc: {
-      reviews_meta: (r.voc as Partial<Voc> | undefined)?.reviews_meta ?? {},
-      themes: (r.voc as Partial<Voc> | undefined)?.themes ?? [],
-      per_finding_quotes: (r.voc as Partial<Voc> | undefined)?.per_finding_quotes ?? {},
+      reviews_meta: r.voc?.reviews_meta ?? {},
+      themes: r.voc?.themes ?? [],
+      per_finding_quotes: r.voc?.per_finding_quotes ?? {},
     },
     prd_draft: r.prd_markdown ?? null,
+    prds: r.prds ?? [],
     artifacts: (r.artifacts ?? []).map((a) => a.uri),
   };
 }
@@ -311,14 +312,6 @@ export class RunService {
   }
 
   /**
-   * POST /v1/analysis/runs — kicks off a real pipeline run.
-   *
-   * Requires the app token (GET does not). A 409 means a run for this window
-   * is already in progress and carries that run's id in `detail.run_id`, so
-   * the caller can attach to it instead of dead-ending — which is what
-   * happens if someone clicks "New analysis" twice.
-   */
-  /**
    * POST /v1/analysis/runs/resolve-scope — what a prompt is understood to mean,
    * without running anything.
    *
@@ -356,6 +349,14 @@ export class RunService {
     }
   }
 
+  /**
+   * POST /v1/analysis/runs — kicks off a real pipeline run.
+   *
+   * Requires the app token (GET does not). A 409 means a run for this window
+   * is already in progress and carries that run's id in `detail.run_id`, so
+   * the caller can attach to it instead of dead-ending — which is what
+   * happens if someone clicks "New analysis" twice.
+   */
   async createRun(
     journey = 'auto',
     prompt?: string
@@ -378,6 +379,10 @@ export class RunService {
           return { runId: detail.run_id, existing: true };
         }
         if (err.status === 401) return { error: 'not authorised — check APP_TOKEN' };
+        if (err.status === 422) {
+          const msg = typeof detail === 'string' ? detail : 'unknown dimension for this journey';
+          return { error: `scope rejected — ${msg}` };
+        }
         return { error: describeError(err) };
       }
       return { error: 'request timed out' };
@@ -399,7 +404,14 @@ export class RunService {
   }
 
   /**
-   * POST /v1/analysis/runs/{id}/deliver — NOT YET IMPLEMENTED on the
+   * POST /v1/analysis/runs/{id}/deliver.
+   *
+   * No UI surface calls this today — the "Approve & send to GChat" button was
+   * removed from the PRD drawer. Kept because the endpoint is real and
+   * documented, so a delivery affordance can return without re-deriving the
+   * client. Delete it if delivery is dropped for good.
+   *
+   * Historic note on the shape below: it was written when this
    * backend (not in the API table in the PRD). Optimistic by design: the
    * caller shows its own success state immediately and calls this in the
    * background, so a slow or dead Garuda/GChat integration can never
@@ -425,6 +437,51 @@ export class RunService {
       return { delivered: !!res?.delivered, detail: res?.detail };
     } catch {
       return { delivered: false, detail: 'delivery endpoint unreachable' };
+    }
+  }
+
+  /**
+   * POST /v1/analysis/runs/{id}/prd/{rank}/chat — chat-style PRD editing
+   * (prd_editor.py). Recognises a handful of concrete instructions ("title:
+   * ...", "remove FR-3"); anything else gets appended to the PRD as an
+   * unresolved reviewer request and an honest reply saying so — there is no
+   * LLM rewrite path wired up yet, so this never fabricates an edit it
+   * didn't actually make.
+   *
+   * Only meaningful against a live run (the PRD has to exist as a
+   * `RunArtifact` row/file on the backend); callers should gate this behind
+   * `source() === 'live'`, same discipline as `deliver()`.
+   *
+   * On success, patches the local `prds[]` signal in place so the drawer
+   * reflects the edit without a re-poll.
+   */
+  async chatOnPrd(
+    runId: number,
+    rank: number,
+    message: string
+  ): Promise<{ reply: string; markdown: string; applied: boolean } | { error: string }> {
+    try {
+      const res = await firstValueFrom(
+        this.http
+          .post<{ finding_rank: number; reply: string; markdown: string; applied: boolean }>(
+            `${API_BASE}/${runId}/prd/${rank}/chat`,
+            { message },
+            { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
+          )
+          .pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      this._run.update((run) => ({
+        ...run,
+        prds: run.prds.map((p): PrdSummary => (p.finding_rank === rank ? { ...p, markdown: res.markdown, edited: true } : p)),
+      }));
+      return { reply: res.reply, markdown: res.markdown, applied: res.applied };
+    } catch (err) {
+      if (err instanceof HttpErrorResponse) {
+        if (err.status === 401) return { error: 'not authorised — check APP_TOKEN' };
+        if (err.status === 404) return { error: 'no PRD found for this run/finding' };
+        return { error: describeError(err) };
+      }
+      return { error: 'request timed out' };
     }
   }
 
@@ -458,8 +515,11 @@ export class RunService {
         if (status === 'running') return 'searching the owning repos…';
         const found = gaps.filter((g) => g.mechanism_found);
         const remedies = found.reduce((n, g) => n + (g.remedies?.length ?? 0), 0);
-        if (!gaps.length) return 'no code gaps yet';
-        return `${found.length} mechanism(s) pinned · ${remedies} remedy verdict(s)`;
+        const suggestions = run.suggestions?.length ?? 0;
+        if (!gaps.length && !suggestions) return 'no code gaps yet';
+        const parts = [`${found.length} mechanism(s) pinned`, `${remedies} remedy verdict(s)`];
+        if (suggestions) parts.push(`${suggestions} suggestion(s)`);
+        return parts.join(' · ');
       }
       case 'prd':
         return run.prd_draft ? 'PRD draft ready' : 'PRD draft ready (built from findings)';

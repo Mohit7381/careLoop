@@ -23,6 +23,16 @@ export type Confidence = 'high' | 'medium' | 'low';
  *  a different claim from "absent" — see Remedy.status. */
 export type RemedyStatus = 'exists' | 'absent' | 'partial';
 
+/** A Suggestion is an improvement idea, not necessarily a code change.
+ *  "business" and "process" carry no code evidence by design. */
+export type SuggestionType = 'tech' | 'business' | 'process';
+
+/** Wider than RemedyStatus: `not_applicable` means there is nothing to
+ *  verify (a process change), `unverified` means we could have checked and
+ *  did not. Collapsing those two into one label loses the distinction the
+ *  backend spent live runs earning. */
+export type VerificationStatus = 'exists' | 'absent' | 'partial' | 'not_applicable' | 'unverified';
+
 /** Routing category — NOT a funnel-stage id. Exact-match key into the Code
  *  Scout routing table (bintan/consultation, timor/oms, ...). A finding's
  *  funnel-stage name lives in its own hypothesis/evidence text instead. */
@@ -123,6 +133,30 @@ export interface Remedy {
   iterations?: number;
 }
 
+/** Agent 3's generative output — an improvement proposal per finding, which
+ *  may be technical, commercial or procedural. Distinct from CodeGap, which
+ *  is diagnostic ("here is the mechanism"). A finding can produce none. */
+export interface Suggestion {
+  finding_rank: number;
+  origin: FindingOrigin;
+  stage: RoutingStage;
+  service: string;
+  repo: string;
+
+  suggestion_type: SuggestionType;
+  title: string;
+  description: string;
+  /** Why this addresses the drop-off — ties the idea back to the finding. */
+  rationale: string;
+
+  verification_status: VerificationStatus;
+  evidence_file?: string | null;
+  evidence_line?: number | null;
+
+  search_terms_used?: string[];
+  searches_run?: number;
+}
+
 export interface StageDelta {
   stage: string;
   segment?: string | null;
@@ -196,6 +230,19 @@ export interface Snapshot {
   previous_stages: SnapshotRow[];
 }
 
+/** One PRD, tied to the finding it was drafted for — `PrdSummary` in
+ *  app/schemas/api.py. A run can produce more than one (up to
+ *  MAX_PRDS_PER_RUN in prd_generator.py), one per ranked finding.
+ *  `edited` is true once a chat-edit instruction has been applied to it
+ *  (POST /runs/{id}/prd/{rank}/chat) — the drawer uses this to show a
+ *  "edited" mark rather than silently losing the distinction. */
+export interface PrdSummary {
+  finding_rank: number;
+  title: string | null;
+  markdown: string;
+  edited: boolean;
+}
+
 /**
  * What GET /v1/analysis/runs/{id} actually returns — `RunDetailResponse` in
  * app/schemas/api.py, which is NOT the pipeline's internal RunState:
@@ -220,7 +267,11 @@ export interface RunDetailResponse {
   drilldown_trail: DrilldownStep[];
   artifacts: { kind: string; uri: string }[];
   report_markdown?: string | null;
+  /** Finding #1's PRD only — kept for back-compat now that `prds` exists. */
   prd_markdown?: string | null;
+  /** One per finding, up to MAX_PRDS_PER_RUN — absent on an older backend. */
+  prds?: PrdSummary[];
+  suggestions?: Suggestion[];
 }
 
 /** The view model the components render. */
@@ -236,8 +287,14 @@ export interface RunState {
   drilldown_trail: DrilldownStep[];
   /** Agent 3's output, with Remedy Loop verdicts nested per gap. */
   code_gaps: CodeGap[];
+  /** Agent 3's generative output — improvement ideas, not diagnoses. */
+  suggestions: Suggestion[];
   trend_report: TrendReport;
   voc: Voc;
   prd_draft: string | null;
+  /** One real PRD artifact per finding — [] on the frozen fixture and on an
+   *  older backend, in which case the drawer falls back to reconstructing a
+   *  structured view per finding from findings + code_gaps (see prd.model.ts). */
+  prds: PrdSummary[];
   artifacts: string[];
 }

@@ -22,6 +22,19 @@ export class FindingsListComponent {
   readonly trailVisibleCount = input<number>(Infinity);
   readonly voc = input.required<Voc>();
 
+  /** Quotes are keyed by finding rank; only render the panel where there are
+   *  actually quotes to show. */
+  hasQuotes(rank: number): boolean {
+    return (this.voc().per_finding_quotes?.[String(rank)]?.length ?? 0) > 0;
+  }
+
+  /** The drill-down trail describes the warehouse analysis, so it hangs off
+   *  the top warehouse finding — which is not always rank 1. */
+  topWarehouseRank(): number {
+    const w = this.findings().filter((f) => f.origin === 'warehouse').sort((a, b) => a.rank - b.rank);
+    return w[0]?.rank ?? this.sorted()[0]?.rank ?? 1;
+  }
+
   sorted(): Finding[] {
     return [...this.findings()].sort((a, b) => a.rank - b.rank);
   }
