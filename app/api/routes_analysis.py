@@ -129,6 +129,12 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
                 "evidence": f.evidence,
                 "confidence": f.confidence,
                 "confirm_via": f.confirm_via,
+                "journey_events": f.journey_events,
+                "drilldown_ref": f.drilldown_ref,
+                "theme": f.theme,
+                "theme_search_terms": f.theme_search_terms,
+                "review_count": f.review_count,
+                "top_quotes": f.top_quotes,
             }
             for f in run.findings
         ],
