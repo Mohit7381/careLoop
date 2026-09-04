@@ -5,6 +5,7 @@ The Analyst receives this via injection, so tests use StubLLM instead.
 Project/template ids: fixtures/pd_checkout/funnel_analysis_ids.json.
 """
 import json
+import logging
 import os
 import time
 import urllib.error
@@ -32,8 +33,19 @@ class TemplateParamError(ValueError):
     """The caller sent keys the template cannot render."""
 
 
+logger = logging.getLogger("careloop.sphere")
+
+
 class SphereRequestFailed(RuntimeError):
-    """Sphere returned a terminal failure status, or the HTTP call itself failed."""
+    """A sphere call that did not return SUCCESS. `status` is the HTTP status
+    when the failure was an HTTP error (504 = the ingress cut a slow call),
+    None for connection errors and timeouts."""
+
+    def __init__(self, message: str, status: Optional[int] = None):
+        super().__init__(message)
+        self.status = status
+
+
 
 
 class SphereRequestTimedOut(RuntimeError):
@@ -59,6 +71,8 @@ _TERMINAL_FAILURE_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
 # The ingress in front of sphere closes held connections at ~60 s, so anything
 # past that is the ingress's 504, not ours — keep individual calls small instead.
 CREATE_TIMEOUT_S = 75
+RETRYABLE_HTTP = {502, 503, 504}   # the ingress in front of sphere, not sphere itself
+RETRY_PAUSE_S = 3
 POLL_TIMEOUT_S = 15      # one status check — comfortably inside any ~60s ingress cutoff
 POLL_INTERVAL_S = 2.0
 MAX_POLL_SECONDS = 180.0  # generous: real calls have been observed taking 45-75s+
@@ -152,9 +166,28 @@ class SphereClient:
             "template_id": template_id,  # required — output_schema is not applied without it
             "params": params,
         }
-        created = self._request("POST", "/v1/chat-ai/requests", body=body, timeout=CREATE_TIMEOUT_S)
+        created = self._create_with_one_retry(use_case, body)
         data = self._data_or_poll(use_case, created)
         return data
+
+    def _create_with_one_retry(self, use_case: str, body: dict) -> dict[str, Any]:
+        """One retry on a TRANSIENT failure only: a gateway cut (502/503/504) or a
+        connection error/timeout. Runs 30 and 37 died on their first Analyst
+        turn because one call crossed the ~60 s ingress limit; the identical
+        call succeeded on the next run. A 4xx (bad params, schema) and a
+        FAILED-inside-200 are not retried — they will fail the same way twice."""
+        for attempt in (1, 2):
+            try:
+                return self._request("POST", "/v1/chat-ai/requests", body=body, timeout=CREATE_TIMEOUT_S)
+            except SphereRequestFailed as exc:
+                transient = exc.status is None or exc.status in RETRYABLE_HTTP
+                if attempt == 1 and transient:
+                    logger.warning("sphere call for %s failed transiently (%s) — retrying once after %ss",
+                                   use_case, exc, RETRY_PAUSE_S)
+                    time.sleep(RETRY_PAUSE_S)
+                    continue
+                raise
+        raise AssertionError("unreachable")
 
     def _data_or_poll(self, use_case: str, resp: dict[str, Any]) -> dict[str, Any]:
         status = resp.get("status")
@@ -197,7 +230,9 @@ class SphereClient:
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return json.loads(r.read())
-        except urllib.error.URLError as exc:
+        except urllib.error.HTTPError as exc:
+            raise SphereRequestFailed(f"sphere {method} {path} failed: {exc}", status=exc.code) from exc
+        except urllib.error.URLError as exc:            # DNS, refused, socket timeout
             raise SphereRequestFailed(f"sphere {method} {path} failed: {exc}") from exc
 
     def _replay(self, use_case: str) -> dict[str, Any]:
