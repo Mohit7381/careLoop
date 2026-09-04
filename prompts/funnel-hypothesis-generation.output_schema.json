@@ -65,7 +65,8 @@
       ],
       "required": [
         "dimension",
-        "rationale"
+        "rationale",
+        "also_dimension"
       ],
       "properties": {
         "dimension": {
