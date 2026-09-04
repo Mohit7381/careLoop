@@ -1,0 +1,88 @@
+{
+  "type": "object",
+  "required": [
+    "done",
+    "next_question",
+    "findings"
+  ],
+  "properties": {
+    "done": {
+      "type": "boolean"
+    },
+    "findings": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "required": [
+          "hypothesis",
+          "stage",
+          "segments",
+          "evidence",
+          "confidence",
+          "confirm_via"
+        ],
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "type": "string"
+          },
+          "hypothesis": {
+            "type": "string"
+          },
+          "confirm_via": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "next_question": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "dimension",
+        "rationale"
+      ],
+      "properties": {
+        "dimension": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "also_dimension": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

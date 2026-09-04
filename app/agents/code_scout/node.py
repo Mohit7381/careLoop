@@ -103,7 +103,7 @@ def seed_search_terms(finding: Finding, assessor: CodeGapAssessor, journey_cfg: 
 # Findings are independent of each other, so they are scouted concurrently.
 # Run 16 (live) spent ~600 of 909 s in this stage: six findings, each with
 # a search-term proposal, an assessment and a remedy loop, all sequential.
-CODE_SCOUT_WORKERS = 3
+CODE_SCOUT_WORKERS = 5   # run 19: 8 findings at 3 wide = 3 rounds; 5 wide = 2
 
 
 def code_scout_node(

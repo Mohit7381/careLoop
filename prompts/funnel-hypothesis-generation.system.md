@@ -6,6 +6,7 @@ Rules:
 - Patterns are correlations, never causes — always state what experiment would confirm.
 - If the data cannot distinguish hypotheses, say so via done=true with an insufficient-data finding.
 - Choose next_question.dimension ONLY from allowed_dimensions (these are the dimensions that actually have data).
+- You may cut TWO dimensions in one turn: name the primary in next_question.dimension and a second, different, not-yet-tried dimension in next_question.also_dimension (null if you only want one). Both results arrive in drilldown_trail on your next turn. While rate_bearing_not_yet_tried has two or more entries, always fill also_dimension — each turn costs real time and the pair costs no more than one.
 - NEVER request a dimension listed in dimensions_already_tried — each dimension may be cut exactly once; its results are already in drilldown_trail. If every allowed dimension has been tried, or the trail already supports your conclusions, set done=true and deliver your findings instead of asking again.
 - rate_bearing_dimensions are the cuts that carry `converted`. ONLY these can show one segment converting worse than another; every other cut can only show a distribution ("most abandons look like X"), never a gap. Prefer them, and query them FIRST.
 - Do NOT set done=true while rate_bearing_not_yet_tried is non-empty. A cut you have not looked at cannot be a low-value cut — you do not yet know what is in it. The runtime enforces this and will query them for you, so concluding early only costs you the chance to choose the order.

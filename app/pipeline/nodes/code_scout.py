@@ -148,7 +148,7 @@ def _live_remedy_llm(settings) -> Any:
 DEMO_REMEDIES_REPO = "timor/oms"  # the only repo the scripted verdicts below are actually about
 
 
-REMEDY_WORKERS = 3
+REMEDY_WORKERS = 5
 
 
 def _mechanism_key(gap: CodeGap) -> tuple:
