@@ -15,7 +15,9 @@ from app.schemas.contracts import (
     AdoptionDelta,
     CodeGap,
     Finding,
+    GrowthIdea,
     RunState,
+    ShippedFix,
     StageDelta,
     Suggestion,
     VocThemeDelta,
@@ -298,6 +300,60 @@ def _suggestions_section(suggestions: list[Suggestion]) -> str:
 
 # ------------------------------------------------------------------ node ---
 
+def _growth_ideas_section(ideas: list[GrowthIdea]) -> str:
+    if not ideas:
+        return "## 6. Growth Ideas\n\n_none proposed this run_\n\n**Summary:** none.\n"
+    lines = []
+    for g in ideas:
+        tag = "grounded in this run's data" if g.inspiration == "funnel_data" else "general industry pattern, not Halodoc-specific data"
+        target = f" [{g.target_stage}]" if g.target_stage else ""
+        lines.append(f"- **{g.title}**{target} _({tag})_ — {g.description} {g.rationale}")
+    funnel_grounded = sum(1 for g in ideas if g.inspiration == "funnel_data")
+    return f"""## 6. Growth Ideas
+
+{chr(10).join(lines)}
+
+**Summary:** {len(ideas)} idea(s) proposed, {funnel_grounded} grounded in this run's own data.
+"""
+
+
+def _shipped_fixes_section(fixes: list[ShippedFix]) -> str:
+    if not fixes:
+        return "## 7. Shipped Fixes & Measured Impact\n\n_none detected this run_\n\n**Summary:** none.\n"
+    lines = []
+    for sf in fixes:
+        commit = f"`{sf.commit.short_sha}` by {sf.commit.author} on {sf.commit.date} — \"{sf.commit.message}\""
+        if sf.metric_name is not None:
+            direction = "up" if sf.pct_change >= 0 else "down"
+            impact = (f"{sf.metric_name}: {sf.previous_value}{sf.metric_unit} → "
+                     f"{sf.current_value}{sf.metric_unit} ({direction} {abs(sf.pct_change)}%)")
+        else:
+            impact = "impact not yet measurable — no comparable baseline for this metric"
+        lines.append(f"- **#{sf.finding_rank} [{sf.stage}]** {sf.remedy_proposal} — shipped via {commit}. {impact}")
+    measured = sum(1 for sf in fixes if sf.metric_name is not None)
+    return f"""## 7. Shipped Fixes & Measured Impact
+
+{chr(10).join(lines)}
+
+**Summary:** {len(fixes)} fix(es) shipped, {measured} with a measured impact.
+"""
+
+
+def _feature_amplifications_section(suggestions: list[Suggestion]) -> str:
+    if not suggestions:
+        return ("## 8. Feature Amplification Ideas (Built on Shipped Wins)\n\n"
+                "_none this run — no shipped fix moved a metric favourably yet_\n\n**Summary:** none.\n")
+    lines = []
+    for s in suggestions:
+        lines.append(f"- **[{s.suggestion_type}] {s.title}** (#{s.finding_rank}, `{s.repo}`) — {s.description} _{s.rationale}_")
+    return f"""## 8. Feature Amplification Ideas (Built on Shipped Wins)
+
+{chr(10).join(lines)}
+
+**Summary:** {len(suggestions)} amplification idea(s) proposed.
+"""
+
+
 def report_writer_node(state: GraphState) -> GraphState:
     run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     warehouse_findings = [f for f in run_state.findings if f.origin == "warehouse"]
@@ -317,7 +373,13 @@ def report_writer_node(state: GraphState) -> GraphState:
 
 {_suggestions_section(run_state.suggestions)}
 
-## 6. Data-quality notes
+{_growth_ideas_section(run_state.growth_ideas)}
+
+{_shipped_fixes_section(run_state.shipped_fixes)}
+
+{_feature_amplifications_section(run_state.feature_amplifications)}
+
+## 9. Data-quality notes
 
 - Segments below k={25} suppressed per privacy policy and marked above.
 - {"Insufficient data" if not run_state.findings else f"{len(run_state.findings)} finding(s) produced this run."}

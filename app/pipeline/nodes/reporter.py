@@ -20,12 +20,13 @@ human who then approves a PRD, so a mechanical sentence beats a missing one.
 import logging
 from typing import Any, Callable, Optional
 
+from app.agents.code_scout.amplify import propose_feature_amplifications
 from app.agents.evidence_gate import unsupported_numbers
 from app.config import get_settings
 from app.integrations.sphere import make_use_case_llm
 from app.journeys import load_journey
 from app.pipeline.state import GraphState
-from app.schemas.contracts import AdoptionDelta, StageDelta, TrendReport, VocThemeDelta
+from app.schemas.contracts import AdoptionDelta, ShippedFix, StageDelta, TrendReport, VocThemeDelta
 
 logger = logging.getLogger("careloop.reporter")
 LLMCall = Callable[[dict[str, Any]], dict[str, Any]]
@@ -138,6 +139,39 @@ def _voc_theme_deltas(themes: list[dict]) -> list[VocThemeDelta]:
     return deltas
 
 
+def _measure_shipped_impact(
+    fix: dict, deltas: list[StageDelta], adoption: list[AdoptionDelta], events_by_rank: dict[int, set]
+) -> dict:
+    """Attaches a metric to a ShippedFix from a trend delta already computed
+    above. Code Scout (app.agents.code_scout.impact) only ever supplies the
+    commit-attribution half; this is the one place a number gets attached,
+    and only when a real comparable delta exists — never a fabricated one.
+
+    Prefers an adoption event named on the finding's own journey_events (the
+    more literal "number of units" reading — e.g. a retention-push count)
+    over the funnel stage's conversion rate; returns {} rather than pick an
+    unrelated row when neither has a usable prior-window value.
+    """
+    events = events_by_rank.get(fix["finding_rank"], set())
+    for a in adoption:
+        if a.feature in events and a.previous_count > 0:
+            pct = round((a.current_count - a.previous_count) / a.previous_count * 100, 1)
+            return {
+                "metric_name": f"'{a.feature}' event volume", "metric_unit": "events",
+                "previous_value": float(a.previous_count), "current_value": float(a.current_count),
+                "pct_change": pct, "metric_ref": f"adoption:{a.feature}",
+            }
+    for d in deltas:
+        if d.stage == fix["stage"] and not d.maturing and d.previous_rate > 0:
+            pct = round((d.current_rate - d.previous_rate) / d.previous_rate * 100, 1)
+            return {
+                "metric_name": f"conversion rate at '{d.stage}'", "metric_unit": "%",
+                "previous_value": round(d.previous_rate * 100, 2), "current_value": round(d.current_rate * 100, 2),
+                "pct_change": pct, "metric_ref": f"stage:{d.stage}",
+            }
+    return {}
+
+
 def _render_narrative(
     deltas: list[StageDelta], adoption: list[AdoptionDelta], no_prior_data: set[str], voc: list[VocThemeDelta]
 ) -> str:
@@ -169,7 +203,7 @@ def _render_narrative(
     return " ".join(lines)
 
 
-def _delta_rows(deltas, adoption, no_prior_data, voc) -> list[dict]:
+def _delta_rows(deltas, adoption, no_prior_data, voc, shipped_fixes=()) -> list[dict]:
     """The delta table the narrative model is allowed to reference.
 
     Every row gets an id, because template 21690's schema makes each generated
@@ -201,6 +235,16 @@ def _delta_rows(deltas, adoption, no_prior_data, voc) -> list[dict]:
         rows.append({"id": f"voc:{v.theme}", "kind": "voc_volume", "theme": v.theme,
                      "current_count": v.current_count,
                      "note": "single-window volume; no prior-window comparison exists yet"})
+    for sf in shipped_fixes:
+        if sf.get("metric_name") is None:
+            continue
+        rows.append({
+            "id": f"shipped:{sf['finding_rank']}", "kind": "shipped_fix", "stage": sf["stage"],
+            "commit_sha": sf["commit"]["short_sha"], "commit_date": sf["commit"]["date"],
+            "metric_name": sf["metric_name"], "previous_value": sf["previous_value"],
+            "current_value": sf["current_value"], "pct_change": sf["pct_change"],
+            "note": "a fix shipped and this metric moved in the same window — correlation, not proven causation",
+        })
     return rows
 
 
@@ -251,11 +295,30 @@ def reporter_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> GraphS
     adoption, no_prior_data = _adoption_deltas(snapshot["ct_events"])
     voc_deltas = _voc_theme_deltas(state["voc"].get("themes", []))
 
+    events_by_rank = {f["rank"]: set(f.get("journey_events") or []) for f in state.get("findings", [])}
+    shipped_models = [
+        ShippedFix(**{**fix, **_measure_shipped_impact(fix, deltas, adoption, events_by_rank)})
+        for fix in state.get("shipped_fixes", [])
+    ]
+    shipped_fixes = [sf.model_dump() for sf in shipped_models]
+
+    # Auto-fetches every shipped fix that moved a real metric favourably
+    # (pct_change > 0 — see app.agents.code_scout.amplify's module docstring
+    # for why that's the "positive feedback" signal, not review sentiment)
+    # and explores each for ideas that build forward on the win. None is
+    # None in demo mode today (no scripted shipped-fix scenario exists yet),
+    # exactly like shipped_fixes itself.
+    amplification_llm = make_use_case_llm(
+        get_settings().llm_use_case_code_gap, bool(state.get("demo_mode", True)), journey=state.get("journey"))
+    feature_amplifications = [
+        s.model_dump() for s in propose_feature_amplifications(amplification_llm, shipped_models)
+    ]
+
     deterministic = _render_narrative(deltas, adoption, no_prior_data, voc_deltas)
     narrative, source = "", "deterministic"
     if llm is not None:
         narrative, source = _narrative_llm(
-            llm, _delta_rows(deltas, adoption, no_prior_data, voc_deltas))
+            llm, _delta_rows(deltas, adoption, no_prior_data, voc_deltas, shipped_fixes))
     if not narrative:
         narrative = deterministic
         source = source if source != "llm" else "deterministic"
@@ -271,5 +334,7 @@ def reporter_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> GraphS
         **state,
         "status": "drafting_prd",
         "trend_report": trend_report.model_dump(),
+        "shipped_fixes": shipped_fixes,
+        "feature_amplifications": feature_amplifications,
         "narrative_source": source,
     }

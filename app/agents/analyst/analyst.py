@@ -105,7 +105,7 @@ def run_analyst(state: RunState,
         if wanted:
             whitelist = wanted
     tool = AggregateTool(cohort_cuts or {}, whitelist)
-    findings, trail = run_drilldown(
+    findings, trail, growth_ideas = run_drilldown(
         llm, tool, gap or {}, summary, routing_keys,
         _default_routing_for_gap(gap or {}, cfg), voc_signals=voc_signals)
 
@@ -136,5 +136,6 @@ def run_analyst(state: RunState,
     state.findings = kept + voc_findings
     state.findings_rejected = rejected
     state.drilldown_trail = trail
+    state.growth_ideas = growth_ideas
     state.status = "scanning_code"
     return state

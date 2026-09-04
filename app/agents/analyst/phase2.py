@@ -8,13 +8,16 @@ enforces the budget. Everything the model asks and sees is persisted to
 drilldown_trail — the trail renders in the UI and is half the demo.
 """
 import json
+import logging
 import re
 from typing import Optional, Any, Callable
 
 _NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 from app.agents.analyst.aggregate_tool import AggregateTool
-from app.schemas.contracts import DrilldownStep, Finding
+from app.schemas.contracts import DrilldownStep, Finding, GrowthIdea
+
+logger = logging.getLogger(__name__)
 
 BUDGET = 10
 
@@ -37,6 +40,34 @@ def _parse_findings(raw: list[dict], journey_routing_keys: list[str],
                       for e in f.get("evidence", []) if _num(e) is not None],
         ))
     return findings
+
+
+def _parse_growth_ideas(raw: list[dict]) -> list[GrowthIdea]:
+    """Only ever populated on the concluding turn (see run_drilldown). A
+    malformed entry — missing fields, or the wrong evidence/inspiration
+    pairing GrowthIdea.model_post_init enforces — is dropped rather than
+    aborting the whole run over one idea, matching this pipeline's usual
+    per-item resilience."""
+    ideas = []
+    for g in raw or []:
+        inspiration = g.get("inspiration")
+        evidence = (
+            [{"type": "drilldown", "metric": str(e)[:120], "value": _num(e)}
+             for e in (g.get("evidence") or []) if _num(e) is not None]
+            if inspiration == "funnel_data" else []
+        )
+        try:
+            ideas.append(GrowthIdea(
+                title=g.get("title", ""),
+                description=g.get("description", ""),
+                rationale=g.get("rationale", ""),
+                inspiration=inspiration,
+                target_stage=g.get("target_stage"),
+                evidence=evidence,
+            ))
+        except ValueError as exc:
+            logger.warning("dropping malformed growth idea (%r): %s", g.get("title"), exc)
+    return ideas
 
 
 def _num(e: Any) -> Any:
@@ -78,9 +109,10 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
                   phase1_summary: dict, journey_routing_keys: list[str],
                   routing_for_gap: str, budget: int = BUDGET,
                   voc_signals: Optional[list[dict]] = None,
-                  ) -> tuple[list[Finding], list[DrilldownStep]]:
+                  ) -> tuple[list[Finding], list[DrilldownStep], list[GrowthIdea]]:
     trail: list[DrilldownStep] = []
     findings: list[Finding] = []
+    growth_ideas: list[GrowthIdea] = []
     for _ in range(budget + 1):  # +1: final synthesis turn after budget exhausts
         tried = {s.dimension for s in trail}
         untried_rate_bearing = [d for d in tool.rate_bearing_dimensions if d not in tried]
@@ -105,6 +137,12 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
         out = llm(ctx)
         if out.get("findings"):
             findings = _parse_findings(out["findings"], journey_routing_keys, routing_for_gap)
+        # Growth ideas are only meaningful once the run has actually
+        # concluded (the prompt is told never to send them otherwise), but
+        # parse defensively off `done` rather than trusting that a stray
+        # mid-run growth_ideas key never arrives.
+        if out.get("done") and out.get("growth_ideas"):
+            growth_ideas = _parse_growth_ideas(out["growth_ideas"])
 
         if len(trail) >= budget:
             break
@@ -147,4 +185,4 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
                       else "rejected: not whitelisted" if "error" in result
                       else "distribution_only" if result.get("distribution_only") else None),
             ))
-    return findings, trail
+    return findings, trail, growth_ideas

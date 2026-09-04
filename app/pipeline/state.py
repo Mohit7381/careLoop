@@ -29,10 +29,13 @@ class GraphState(TypedDict, total=False):
     snapshot: dict[str, Any]           # Agent 1 (Fetcher) — Alief
     reviews: list[dict[str, Any]]      # Agent 1 (Fetcher) — Alief; PII-scrubbed Play Store reviews
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
+    growth_ideas: list[dict[str, Any]]  # Agent 2 (Analyst) — Nakul; phase 2's concluding-turn output
     drilldown_trail: list[dict[str, Any]]
     findings_rejected: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]    # Agent 3 (Code Scout) — Harshit
     suggestions: list[dict[str, Any]]  # Agent 3 alt flow (Code Scout) — Harshit
+    shipped_fixes: list[dict[str, Any]]  # Agent 3 (Code Scout) — Harshit; closed-loop impact
+    feature_amplifications: list[dict[str, Any]]  # Reporter — Mohit; explore_shipped_feature output
     trend_report: dict[str, Any]       # Reporter — Mohit
     voc: dict[str, Any]
     prd_draft: Optional[str]           # PRD Generator — Mohit; #1 finding's PRD only, kept for back-compat
@@ -69,10 +72,13 @@ def initial_state(
         snapshot={},
         reviews=[],
         findings=[],
+        growth_ideas=[],
         drilldown_trail=[],
         findings_rejected=[],
         code_gaps=[],
         suggestions=[],
+        shipped_fixes=[],
+        feature_amplifications=[],
         trend_report={},
         voc={},
         prd_draft=None,

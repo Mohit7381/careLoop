@@ -142,6 +142,43 @@ class Finding(BaseModel):
         return len(self.evidence) > 0
 
 
+GrowthIdeaInspiration = Literal["funnel_data", "industry_pattern"]
+
+
+class GrowthIdea(BaseModel):
+    """Analyst phase 2 (2026-09-04): a proactive, forward-looking idea for
+    GROWING transactions — distinct from Finding, which diagnoses a loss.
+    Produced only on the drill-down's concluding turn, alongside findings.
+
+    inspiration="funnel_data": grounded in a specific number the model was
+    shown this run — evidence is required and held to the exact same
+    verbatim-citation discipline as Finding.evidence.
+    inspiration="industry_pattern": grounded in the model's own general
+    knowledge of digital health / e-commerce / fintech products, NOT a live
+    web search (this pipeline has no browsing tool) — evidence must stay
+    empty, and the prompt is the enforcement point for "never fabricate a
+    source"; this model only enforces the two inspirations stay mutually
+    exclusive on the evidence field, since a fabricated citation cannot be
+    told apart from a real one by shape alone.
+    """
+
+    title: str
+    description: str
+    rationale: str
+    inspiration: GrowthIdeaInspiration
+    target_stage: Optional[str] = None
+    evidence: list[EvidenceItem] = Field(default_factory=list)
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.inspiration == "funnel_data" and not self.evidence:
+            raise ValueError("a funnel_data growth idea needs at least one evidence item")
+        if self.inspiration == "industry_pattern" and self.evidence:
+            raise ValueError(
+                "an industry_pattern growth idea must carry no evidence — it is not "
+                "grounded in this run's own data and must never look like it is"
+            )
+
+
 class DrilldownStep(BaseModel):
     question: str
     dimension: str
@@ -244,6 +281,59 @@ class Suggestion(BaseModel):
             raise ValueError("verification_status only applies to suggestion_type='tech'")
         if self.verification_status in ("exists", "partial") and self.evidence_file is None:
             raise ValueError("evidence_file is required when verification_status is exists/partial")
+
+
+class ShippedCommit(BaseModel):
+    """One commit, as attributed by GitLab blame on a remedy's evidence line."""
+
+    sha: str
+    short_sha: str
+    author: str
+    date: str            # commit's committed_date, ISO 8601
+    message: str
+    web_url: Optional[str] = None
+
+
+class ShippedFix(BaseModel):
+    """Closed-loop impact (2026-09-04): a Remedy the Remedy Loop verified
+    `exists` whose evidence line's last commit (GitLab blame) landed after
+    this run's own baseline (`prev_window_end`, or `window_start` when no
+    explicit baseline was given) — i.e. code that was proposed/would have
+    been proposed as a fix has since actually shipped. Code Scout only ever
+    sets the commit-attribution fields (finding_rank..commit); it never
+    invents a metric. Reporter fills metric_name/metric_unit/previous_value/
+    current_value/pct_change/metric_ref *after* the fact, from a TrendReport
+    delta row it already computed independently — matching the existing
+    "correlation, never causation" discipline: this records that a fix
+    shipped and a metric moved in the same window, not that one caused the
+    other.
+    """
+
+    finding_rank: int
+    origin: FindingOrigin
+    stage: str
+    repo: str
+    remedy_proposal: str
+    evidence_file: str
+    evidence_line: int
+    evidence_snippet: Optional[str] = None  # from the Remedy that shipped, for explore_shipped_feature
+    commit: ShippedCommit
+
+    metric_name: Optional[str] = None
+    metric_unit: Optional[str] = None       # "%" | "events"
+    previous_value: Optional[float] = None
+    current_value: Optional[float] = None
+    pct_change: Optional[float] = None      # relative change: (current-previous)/previous*100
+    metric_ref: Optional[str] = None        # the TrendReport delta row id this came from
+
+    def model_post_init(self, __context: Any) -> None:
+        metric_fields = (self.metric_name, self.metric_unit, self.previous_value,
+                         self.current_value, self.pct_change, self.metric_ref)
+        if any(f is not None for f in metric_fields) and not all(f is not None for f in metric_fields):
+            raise ValueError(
+                "ShippedFix metric fields must all be set together or not at all — "
+                "Reporter fills all six once a matching trend delta exists, never a partial subset"
+            )
 
 
 class StageDelta(BaseModel):
@@ -402,8 +492,16 @@ class RunState(BaseModel):
     # its only finding ("insufficient data", prose evidence) in total silence.
     findings_rejected: list[dict[str, Any]] = Field(default_factory=list)
     drilldown_trail: list[DrilldownStep] = Field(default_factory=list)
+    growth_ideas: list[GrowthIdea] = Field(default_factory=list)  # phase 2's concluding-turn output
     code_gaps: list[CodeGap] = Field(default_factory=list)
     suggestions: list[Suggestion] = Field(default_factory=list)  # decision #11
+    shipped_fixes: list[ShippedFix] = Field(default_factory=list)  # closed-loop impact (2026-09-04)
+    # explore_shipped_feature output (2026-09-04): follow-on ideas built forward
+    # from a shipped fix with a positive measured outcome. Reuses the Suggestion
+    # shape from decision #11 — same evidence discipline, different trigger
+    # (a win, not a drop-off) — kept in its own list so it never collides with
+    # code_scout's own (not-yet-decided) `suggestions` output.
+    feature_amplifications: list[Suggestion] = Field(default_factory=list)
     trend_report: TrendReport = Field(default_factory=TrendReport)
     voc: Voc = Field(default_factory=Voc)
     prd_draft: Optional[str] = None                              # #1 finding's PRD only — kept for back-compat
