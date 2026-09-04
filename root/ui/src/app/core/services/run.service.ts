@@ -38,6 +38,22 @@ export interface ResolvedScope {
   journey?: string;
 }
 
+/** GET /v1/analysis/runs — one row of run history. Deliberately not the
+ *  full RunDetailResponse: a list is scanned, not read. */
+export interface RunSummary {
+  run_id: number;
+  journey: string;
+  window_start: string;
+  window_end: string;
+  status: RunStatus;
+  failed_stage?: string | null;
+  prompt?: string | null;
+  scope_summary?: string | null;
+  findings_count: number;
+  top_finding?: string | null;
+  created_at: string;
+}
+
 const STAGE_LABELS: Record<StageKey, string> = {
   fetch: 'FETCH DATA',
   analyze: 'ANALYZE DROP-OFFS',
@@ -346,6 +362,25 @@ export class RunService {
       return result.ok ? result.run : null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * GET /v1/analysis/runs — run history, newest first. No app token needed
+   * (read-only, same as fetchRun). Empty array on any failure: a dashboard
+   * that can't load history should read as "nothing yet", not throw up an
+   * error banner over the still-usable "ask a question" box above it.
+   */
+  async listRuns(limit = 50): Promise<RunSummary[]> {
+    try {
+      const body = await firstValueFrom(
+        this.http
+          .get<{ runs: RunSummary[] }>(API_BASE, { params: { limit } })
+          .pipe(timeout(REQUEST_TIMEOUT_MS))
+      );
+      return body?.runs ?? [];
+    } catch {
+      return [];
     }
   }
 

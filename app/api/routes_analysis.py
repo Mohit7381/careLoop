@@ -24,6 +24,8 @@ from app.schemas.api import (
     ResolveScopeRequest,
     ResolveScopeResponse,
     RunDetailResponse,
+    RunListResponse,
+    RunSummary,
     ScopeChatRequest,
     ScopeChatResponse,
 )
@@ -228,6 +230,45 @@ def _prd_artifact(run: AnalysisRun, finding_rank: int) -> RunArtifact | None:
 def _rank1_prd_markdown(run: AnalysisRun) -> str | None:
     a = _prd_artifact(run, 1)
     return Path(a.uri).read_text() if a else None
+
+
+def _run_summary(run: AnalysisRun) -> RunSummary:
+    scope = (run.config or {}).get("scope") or {}
+    top = sorted(run.findings, key=lambda f: f.rank)[0] if run.findings else None
+    return RunSummary(
+        run_id=run.id,
+        journey=run.journey,
+        window_start=run.window_start,
+        window_end=run.window_end,
+        status=run.status,
+        failed_stage=run.failed_stage,
+        prompt=scope.get("prompt"),
+        scope_summary=describe(RunScope(**scope), run.journey) if scope else None,
+        findings_count=len(run.findings),
+        top_finding=(
+            f"Failed at {run.failed_stage or 'an unknown stage'}" if run.status == "failed"
+            else (top.hypothesis if top else None)
+        ),
+        created_at=run.created_at.isoformat(),
+    )
+
+
+@router.get("/runs", response_model=RunListResponse)
+async def list_runs(
+    limit: int = Query(default=50, ge=1, le=200), session: Session = Depends(get_session)
+) -> RunListResponse:
+    """
+    Run history, newest first — the dashboard's table used to start empty on
+    every page load/new tab even though every run was already sitting in
+    analysis_runs; there was simply nothing serving them back. Read-only, no
+    app token needed (same as GET /runs/{id}). A summary shape, not the full
+    RunDetailResponse — a list is scanned, not read; the detail page is one
+    click away for anything more than status/journey/top-finding.
+    """
+    runs = session.execute(
+        select(AnalysisRun).order_by(AnalysisRun.created_at.desc()).limit(limit)
+    ).scalars().all()
+    return RunListResponse(runs=[_run_summary(r) for r in runs])
 
 
 @router.get("/runs/{run_id}", response_model=RunDetailResponse)
