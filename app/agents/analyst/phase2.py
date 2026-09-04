@@ -15,6 +15,7 @@ from typing import Optional, Any, Callable
 _NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 from app.agents.analyst.aggregate_tool import AggregateTool
+from app.agents.analyst.plain_language import humanise_evidence
 from app.agents.analyst.validator import collect_numbers
 from app.schemas.contracts import DrilldownStep, Finding, GrowthIdea
 
@@ -26,7 +27,8 @@ LLMCall = Callable[[dict[str, Any]], dict[str, Any]]  # context -> parsed model 
 
 
 def _parse_findings(raw: list[dict], journey_routing_keys: list[str],
-                    top_gap_stage: str) -> list[Finding]:
+                    top_gap_stage: str, labels: Optional[dict] = None) -> list[Finding]:
+    labels = labels or {}
     findings = []
     for i, f in enumerate(raw or []):
         stage = f.get("stage") or top_gap_stage
@@ -37,7 +39,8 @@ def _parse_findings(raw: list[dict], journey_routing_keys: list[str],
             hypothesis=f.get("hypothesis", ""),
             confidence=f.get("confidence", "low"),
             confirm_via=f.get("confirm_via", ""),
-            evidence=[{"type": "drilldown", "metric": str(e)[:120], "value": _num(e)}
+            evidence=[{"type": "drilldown", "metric": str(e)[:120], "value": _num(e),
+                       "label": humanise_evidence(str(e), labels.get("stage_labels"), labels.get("dimension_labels"))}
                       for e in f.get("evidence", []) if _num(e) is not None],
         ))
     return findings
@@ -133,6 +136,7 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
                   positive_voc_signals: Optional[list[dict]] = None,
                   user_question: Optional[str] = None,
                   user_intent: str = "diagnosis",
+                  labels: Optional[dict] = None,
                   ) -> tuple[list[Finding], list[DrilldownStep], list[GrowthIdea]]:
     trail: list[DrilldownStep] = []
     findings: list[Finding] = []
@@ -175,10 +179,14 @@ def run_drilldown(llm: LLMCall, tool: AggregateTool, top_gap: dict,
             # and "why do users abandon" produced the same analysis.
             "user_question": user_question or "",
             "user_intent": user_intent,
+            # Plain words for stages and cuts (journey config). The model writes
+            # hypotheses and confirm_via with these, never with identifiers.
+            "stage_labels": (labels or {}).get("stage_labels", {}),
+            "dimension_labels": (labels or {}).get("dimension_labels", {}),
         }
         out = llm(ctx)
         if out.get("findings"):
-            findings = _parse_findings(out["findings"], journey_routing_keys, routing_for_gap)
+            findings = _parse_findings(out["findings"], journey_routing_keys, routing_for_gap, labels)
         # Growth ideas are only meaningful once the run has actually
         # concluded (the prompt is told never to send them otherwise), but
         # parse defensively off `done` rather than trusting that a stray

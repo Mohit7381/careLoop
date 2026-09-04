@@ -1,8 +1,125 @@
 {
- "done": false,
- "findings": null,
- "next_question": {
-  "dimension": "delivery_channel",
-  "rationale": "The biggest gap is created->confirmed (lost 87,511, share_of_prev 0.3862; overall created->confirmed conversion 0.6138). Cuts already show a large, high-volume weakness in the 'instant' trigger (entered 181,651 -> converted 94,141, rate 0.5183) versus near-perfect conversion for 'pd_erx_consultation' (entered 44,964 -> converted 44,963, rate 1.0), and scheduling shows scheduled bookings convert worse (scheduled entered 15,592 -> converted 6,593, rate 0.4228) than walk_ins (entered 211,023 -> converted 132,511, rate 0.6279). Hour-of-day also shows evening/hour pockets with low confirm rates (e.g., hour 21: entered 13,847 -> converted 7,244, rate 0.5231; hour 22: entered 11,367 -> converted 5,121, rate 0.4505), consistent with timing/queueing problems. Cut by delivery_channel next to test whether specific channels (e.g., mobile app vs web vs other channels) concentrate the low-converting instant/scheduled volume and thus explain much of the 87,511 loss; if a particular delivery_channel shows materially lower created->confirmed conversion, confirm with a targeted experiment (e.g., channel-specific queue/availability messaging or capacity changes) measuring created->confirmed uplift."
- }
+ "done": true,
+ "findings": [
+  {
+   "stage": "paid and confirmed",
+   "evidence": [
+    "{\"from_stage\": \"created\", \"to_stage\": \"confirmed\", \"lost\": 87511, \"share_of_prev\": 0.3862}",
+    "{\"segment\": \"online\", \"entered\": 173053, \"converted\": 86850, \"rate\": 0.5019}"
+   ],
+   "segments": [
+    "online requests (delivery_channel = online)"
+   ],
+   "confidence": "high",
+   "hypothesis": "Requests placed through the online delivery channel account for almost the entire drop from \"requested a consultation\" to \"paid and confirmed\": 173,053 online requests converted at 50.19% (86,850), leaving ~86,203 unconfirmed \u2014 nearly the full top gap of 87,511. This plausibly happens because online routing, matching timeouts or client-side failures produce many \"abandoned by system\" events before payment/confirmation.",
+   "confirm_via": "Cross-tab the \"abandoned by system\" events and payment-failure/error logs by delivery_channel; run a short A/B where a repair/fallback routing is applied to a random subset of online traffic and measure lift in conversion to \"paid and confirmed\"."
+  },
+  {
+   "stage": "paid and confirmed",
+   "evidence": [
+    "{\"segment\": \"cash\", \"entered\": 154950, \"converted\": 72093, \"rate\": 0.4653}",
+    "{\"from_stage\": \"created\", \"to_stage\": \"confirmed\", \"lost\": 87511, \"share_of_prev\": 0.3862}"
+   ],
+   "segments": [
+    "customers paying in cash (how they pay = cash)"
+   ],
+   "confidence": "high",
+   "hypothesis": "Customers choosing cash represent a very large and low-converting group: 154,950 cash entries but only 72,093 reached \"paid and confirmed\" (46.53%), a loss of 82,857 \u2014 which itself explains the majority of the overall gap. Likely causes are payment-path friction, a failing cash checkout flow, or a UX that pushes cash users to abandon before confirmation.",
+   "confirm_via": "Cross-tab payer x delivery_channel to see overlap with online; instrument detailed payment-step logging for cash users to capture failure/error codes; run an A/B where cash users see a simplified 'one-tap confirm' flow and measure conversion to \"paid and confirmed\"."
+  },
+  {
+   "stage": "paid and confirmed",
+   "evidence": [
+    "{\"segment\": \"web\", \"entered\": 18101, \"converted\": 6443, \"rate\": 0.3559}"
+   ],
+   "segments": [
+    "web users (device or platform = web)"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Web sessions convert far worse than native apps: 18,101 web requests but only 6,443 reached \"paid and confirmed\" (35.59%). This suggests a web-specific technical or UX failure in the payment/confirmation flow (for example broken deep links, payment iframe problems, or client-side JS errors) that causes system abandons.",
+   "confirm_via": "Segment web sessions by error logs and payment-step completion, and run an A/B test: improved web checkout (or a prompt to open the native app) vs current flow; measure conversion to \"paid and confirmed.\""
+  },
+  {
+   "stage": "paid and confirmed",
+   "evidence": [
+    "{\"segment\": \"scheduled\", \"entered\": 15592, \"converted\": 6593, \"rate\": 0.4228}",
+    "{\"segment\": \"walk_in\", \"entered\": 211023, \"converted\": 132511, \"rate\": 0.6279}"
+   ],
+   "segments": [
+    "booked-ahead requests (scheduling = scheduled)"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Booked-ahead (scheduled) requests convert worse (42.28%) than walk-in requests (62.79%) even though scheduled has far fewer entries. This could reflect doctor-side rejections, scheduling timeouts, or user cancellations during the waiting period for a scheduled slot.",
+   "confirm_via": "Cross-tab scheduled requests with cancellation/rejection reasons (e.g., rejected_by_doctor, ingin berkonsultasi dengan dokter lain) and run a small experiment adding confirmations or a pre-hold for scheduled slots to see if scheduled->paid-and-confirmed conversion improves."
+  },
+  {
+   "stage": "paid and confirmed",
+   "evidence": [
+    "{\"segment\": \"22\", \"entered\": 11367, \"converted\": 5121, \"rate\": 0.4505}",
+    "{\"segment\": \"21\", \"entered\": 13847, \"converted\": 7244, \"rate\": 0.5231}"
+   ],
+   "segments": [
+    "late-evening hours (hour_of_day = 21 and 22)"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Two late-evening hours show materially lower conversion (22: 45.05% of 11,367; 21: 52.31% of 13,847). This is consistent with doctor availability/timeout effects or capacity bottlenecks at those hours producing more \"abandoned by system\" or long wait complaints.",
+   "confirm_via": "Compare doctor online capacity and match latency by hour_of_day; run targeted capacity/priority-matching experiments during hours 21\u201322 and measure conversion uplift to \"paid and confirmed.\""
+  },
+  {
+   "stage": "doctor joined the chat -> consultation completed",
+   "evidence": [
+    "{\"from_stage\": \"started\", \"to_stage\": \"completed\", \"converted\": 133592, \"conversion_rate\": 0.9997}"
+   ],
+   "segments": [
+    "sessions after doctor joined"
+   ],
+   "confidence": "high",
+   "hypothesis": "Once a consultation reaches the \"doctor joined the chat\" stage, it almost always completes (99.97% of 133,592), so the main failure window is before the doctor joins / before payment and confirmation.",
+   "confirm_via": "No further confirm needed to act: prioritize diagnostics and fixes on the path from \"requested a consultation\" to \"paid and confirmed\" (routing, payment, and platform stability)."
+  }
+ ],
+ "growth_ideas": [
+  {
+   "title": "One-tap cash checkout",
+   "evidence": [
+    "{\"segment\": \"cash\", \"entered\": 154950, \"converted\": 72093, \"rate\": 0.4653}"
+   ],
+   "rationale": "A simplified, single-action cash confirmation will reduce dropout at the payment/confirmation step where cash users currently convert at 46.53%.",
+   "description": "When a user selects cash, surface a single confirmation button that creates a backend 'pending cash' booking and immediately marks the consultation as confirmed in-app; reconcile payments asynchronously and surface clear status. A/B test against the current multi-step cash flow.",
+   "inspiration": "funnel_data",
+   "target_stage": "paid and confirmed"
+  },
+  {
+   "title": "Web-to-app deep-link prompt",
+   "evidence": [
+    "{\"segment\": \"web\", \"entered\": 18101, \"converted\": 6443, \"rate\": 0.3559}"
+   ],
+   "rationale": "Web traffic converts far worse (35.59%); nudging web users to the native app or offering an improved web checkout should recover a measurable portion of that loss.",
+   "description": "Detect web sessions entering the checkout and show a prominent banner offering to 'Open in Halodoc app' (deep link) plus an A/B test of an improved single-page web checkout flow; measure conversion to \"paid and confirmed.\"",
+   "inspiration": "funnel_data",
+   "target_stage": "paid and confirmed"
+  },
+  {
+   "title": "Peak-hour priority matching",
+   "evidence": [
+    "{\"segment\": \"22\", \"entered\": 11367, \"converted\": 5121, \"rate\": 0.4505}",
+    "{\"segment\": \"21\", \"entered\": 13847, \"converted\": 7244, \"rate\": 0.5231}"
+   ],
+   "rationale": "Conversion drops in late-evening hours; increasing matching priority or temporary capacity in those hours should reduce timeouts and system abandons.",
+   "description": "Implement a peak-hour routing rule that prioritizes available doctors for requests between 20:00\u201323:00 (or auto-enables overflow doctors), plus a small trial that boxes a % of traffic into the new routing and measures lift to \"paid and confirmed.\"",
+   "inspiration": "funnel_data",
+   "target_stage": "paid and confirmed"
+  },
+  {
+   "title": "Scheduled pre\u2011hold and confirmation",
+   "evidence": [
+    "{\"segment\": \"scheduled\", \"entered\": 15592, \"converted\": 6593, \"rate\": 0.4228}"
+   ],
+   "rationale": "Scheduled bookings convert worse than walk-ins; a lightweight pre-hold or pre-confirmation step should reduce cancellations and doctor rejections for scheduled slots.",
+   "description": "For scheduled requests, place a short 'slot hold' and send automated confirmation prompts with an easy reschedule/backup-doctor option; measure whether scheduled->paid-and-confirmed conversion rises versus control.",
+   "inspiration": "funnel_data",
+   "target_stage": "paid and confirmed"
+  }
+ ],
+ "next_question": null
 }

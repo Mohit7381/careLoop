@@ -180,7 +180,8 @@ def run_analyst(state: RunState,
         llm, tool, gap or {}, summary, routing_keys,
         _default_routing_for_gap(gap or {}, cfg), voc_signals=voc_signals,
         top_strength=top_strength, positive_voc_signals=positive_voc_signals,
-        user_question=state.scope.prompt, user_intent=state.scope.intent)
+        user_question=state.scope.prompt, user_intent=state.scope.intent,
+        labels={"stage_labels": cfg.get("stage_labels") or {}, "dimension_labels": cfg.get("dimension_labels") or {}})
 
     # ---- evidence gate (accepts every number the model was shown) ----
     shown = collect_numbers(summary) | collect_numbers(gap or {})
