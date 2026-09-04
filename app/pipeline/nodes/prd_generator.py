@@ -36,6 +36,10 @@ GAP_CLASS_SOLUTION_HINTS = {
         "(push/WA/email) before the flow terminates, instead of silently killing it."
     ),
     "ux_gap": "Close the experience gap at the cited surface — the mechanism works, but the user isn't guided through it.",
+    "unclassified": (
+        "The mechanism was located at the cited line but could not be auto-classified — review it "
+        "and classify (logic flaw / missing retention hook / UX gap) before proposing a fix."
+    ),
 }
 
 

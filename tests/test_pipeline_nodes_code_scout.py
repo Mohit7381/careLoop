@@ -150,9 +150,9 @@ class _FailingAssessor:
 
 
 def test_a_failing_assess_call_does_not_crash_and_reports_honestly():
-    """gap #1 follow-up: a real sphere-backed assess() can now fail at
-    runtime - this must not crash code_scout_node, and must not fabricate a
-    gap_class either."""
+    """A real sphere-backed assess() can fail at runtime. That must not crash
+    the node, must not fabricate a class — and must not discard the file the
+    search just found. Live run 4 lost nine located mechanisms this way."""
     from app.agents.code_scout.node import code_scout_node
 
     state = RunState(
@@ -162,6 +162,10 @@ def test_a_failing_assess_call_does_not_crash_and_reports_honestly():
     result = code_scout_node(state, search_client=_AssessFailsAfterLocating(), assessor=_FailingAssessor())
     gaps = result["code_gaps"]
 
+    # The mechanism WAS located — that survives. Only the classification is
+    # unavailable, and the gap says so instead of pretending nothing was found.
     assert len(gaps) == 1
-    assert gaps[0].mechanism_found is False
-    assert gaps[0].gap_class is None
+    assert gaps[0].mechanism_found is True
+    assert gaps[0].gap_class == "unclassified"
+    assert gaps[0].file == "OrderDao.java"
+    assert "assessment unavailable" in gaps[0].gap_statement

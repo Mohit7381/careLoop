@@ -27,6 +27,41 @@ SPHERE_IDS_PATH = Path("fixtures/pd_checkout/sphere_ids.json")
 SPHERE_USE_CASE = "code-gap-assessment"
 
 
+_CLASS_HINTS = {
+    "missing_retention_hook": ("retention", "hook", "notif", "communicat", "reengag", "re_engag",
+                               "nudge", "remind", "outreach", "message"),
+    "ux_gap":                 ("ux", "ui", "client", "screen", "user_facing", "experience", "frontend"),
+    "logic_flaw":             ("logic", "bug", "flaw", "incorrect", "wrong", "race", "timeout_too"),
+}
+
+
+def normalise_gap_class(raw) -> tuple[str, bool]:
+    """Map whatever the model called the gap onto the closed set.
+
+    Returns (gap_class, exact). The model was seen inventing classes like
+    'configuration-only-no-usage-evidence' and 'missing_consultation_event_types'
+    on every single live call; rejecting those threw away a mechanism that had
+    just been located at a real file:line. An obvious synonym is mapped; anything
+    else becomes "unclassified" and the raw text is kept on the gap statement so
+    a reviewer sees what the model actually said.
+    """
+    key = str(raw or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if key in _GAP_CLASSES:
+        return key, True
+    for cls, needles in _CLASS_HINTS.items():
+        if any(n in key for n in needles):
+            return cls, False
+    return "unclassified", False
+
+
+def bracket_safe(text: str) -> str:
+    """Sphere rejects any model output containing HTML-looking tags, and a Java
+    snippet is full of List<Order> generics the model will echo verbatim. Two
+    live assess() calls died exactly that way. Swap the brackets on the way in
+    so there is nothing to echo."""
+    return (text or "").replace("<", "‹").replace(">", "›")
+
+
 @dataclass
 class GapAssessment:
     gap_class: GapClass
@@ -158,13 +193,18 @@ class SpherePlatformCodeGapAssessor:
             "mode": "assess_gap",
             "hypothesis": finding.hypothesis,
             "file": file,
-            "snippet": snippet,
+            "snippet": bracket_safe(snippet),
+            "allowed_gap_classes": sorted(c for c in _GAP_CLASSES if c != "unclassified"),
+            "rules": ["gap_class MUST be one of allowed_gap_classes, verbatim.",
+                      "Never emit the characters < or > anywhere in the output."],
         })
-        gap_class = data.get("gap_class")
-        if gap_class not in _GAP_CLASSES:
-            raise CodeScoutExternalError(f"Sphere returned an unrecognised gap_class: {gap_class!r}")
+        raw = data.get("gap_class")
+        gap_class, exact = normalise_gap_class(raw)
+        statement = data.get("gap_statement") or f"Mechanism located in {file}."
+        if not exact:
+            statement += f" [model class: {raw!r}, recorded as {gap_class}]"
         return GapAssessment(
             gap_class=gap_class,
-            gap_statement=data.get("gap_statement") or f"Mechanism located in {file}.",
+            gap_statement=statement,
             proposed_change_location=data.get("proposed_change_location"),
         )

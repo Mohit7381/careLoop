@@ -143,11 +143,21 @@ def _process_finding(
             try:
                 assessment = assessor.assess(finding, location.file, location.snippet)
             except CodeScoutExternalError as exc:
+                # The mechanism IS located — that is the hard part and the
+                # part a reviewer wants. Losing it because the classification
+                # call failed reported nine real hits as "no_results" on a
+                # live run. Record the location honestly as unclassified.
                 logger.warning(
-                    "assess() failed for finding #%s in %r (%s): %s",
+                    "assess() failed for finding #%s in %r (%s): %s — recording as unclassified",
                     finding.rank, repo_info["repo"], location.file, exc,
                 )
-                continue
+                from app.agents.code_scout.assessor import GapAssessment
+                assessment = GapAssessment(
+                    gap_class="unclassified",
+                    gap_statement=(f"Mechanism located at {location.file}:{location.line}; "
+                                   f"automated assessment unavailable ({exc})"),
+                    proposed_change_location=None,
+                )
             return [
                 CodeGap(
                     finding_rank=finding.rank,

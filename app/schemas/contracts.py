@@ -57,7 +57,11 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 FindingOrigin = Literal["warehouse", "voc"]
-GapClass = Literal["logic_flaw", "missing_retention_hook", "ux_gap"]
+# "unclassified": the mechanism WAS located (file:line) but the model's class
+# was not one of the three and could not be mapped, or the assessment call
+# failed outright. It exists so a found mechanism is never reported as
+# mechanism_found=False — a live run did exactly that nine times out of nine.
+GapClass = Literal["logic_flaw", "missing_retention_hook", "ux_gap", "unclassified"]
 Confidence = Literal["high", "medium", "low"]
 RunStatus = Literal[
     "queued", "fetching", "analyzing", "scanning_code",
@@ -73,7 +77,7 @@ SuggestionType = Literal["tech", "business", "process"]
 # two misreports "we didn't check" as "there was nothing to check" (review S3).
 VerificationStatus = Literal["exists", "absent", "partial", "not_applicable", "unverified"]
 
-_GAP_CLASSES = {"logic_flaw", "missing_retention_hook", "ux_gap"}
+_GAP_CLASSES = {"logic_flaw", "missing_retention_hook", "ux_gap", "unclassified"}
 
 
 def validate_routing_stage(stage: str, journey_routing_keys: list[str]) -> str:
