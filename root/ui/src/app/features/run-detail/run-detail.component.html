@@ -1,26 +1,10 @@
-<div class="topbar-sub">
-  <div class="topbar-sub-in">
-    <div class="chip-env">data: prod snapshot · 26 Aug – 2 Sep 2026</div>
-    <div class="src-chip" [class.live]="source() === 'live'" [class.err]="source() === 'live-failed'">
-      source:
-      @if (source() === 'live') {
-        live
-      } @else if (source() === 'live-failed') {
-        fixture — live failed: {{ liveError() }}
-      } @else {
-        fixture
-      }
-    </div>
-  </div>
-</div>
-
 <div class="wrap">
   <div class="runhead">
     <div>
       <div class="eyebrow"><a routerLink="/runs">Runs</a> / run detail</div>
-      <h1>Run #{{ run().run_id }} · {{ journeyLabel() }}</h1>
+      <h1>{{ journeyLabel() }}</h1>
     </div>
-    <div class="meta mono">run #{{ run().run_id }} · {{ run().window_start }} → {{ run().window_end }}</div>
+    <div class="meta mono">{{ run().window_start }} → {{ run().window_end }}</div>
     <div class="status-pill" [class]="statusPill()">{{ statusLabel() }}</div>
   </div>
 
@@ -97,10 +81,9 @@
 </div>
 
 <div class="demobar">
-  <span class="lbl">Demo</span>
-  <button class="btn" type="button" (click)="replay()">Replay run <span class="kbd">R</span></button>
+  <button class="btn" type="button" (click)="replay()">Replay run</button>
   <button class="btn btn-primary" type="button" [disabled]="!prdReady()" (click)="openPrd()">
-    View PRD draft <span class="kbd">P</span>
+    View agent suggestions
   </button>
 </div>
 

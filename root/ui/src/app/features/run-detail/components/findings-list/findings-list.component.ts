@@ -39,6 +39,20 @@ export class FindingsListComponent {
     return [...this.findings()].sort((a, b) => a.rank - b.rank);
   }
 
+  /** USER-REPORTED findings are not shown as cards. */
+  cards(): Finding[] {
+    return this.sorted().filter((f) => f.origin !== 'voc');
+  }
+
+  /**
+   * Their review quotes still are. per_finding_quotes is keyed to exactly
+   * the VoC-origin ranks (4 and 5 on a typical run), so hiding those cards
+   * without this would take the whole "Users say" panel with them.
+   */
+  quoteOnly(): Finding[] {
+    return this.sorted().filter((f) => f.origin === 'voc' && this.hasQuotes(f.rank));
+  }
+
   sevLabel(f: Finding): string {
     return f.origin === 'voc' ? 'USER-REPORTED' : (SEV_BY_RANK[f.rank]?.label ?? 'MEDIUM');
   }

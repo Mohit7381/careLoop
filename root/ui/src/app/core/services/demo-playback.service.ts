@@ -6,7 +6,7 @@ const LABELS: Record<'fetch' | 'analyze' | 'code' | 'prd', string> = {
   fetch: 'FETCH DATA',
   analyze: 'ANALYZE DROP-OFFS',
   code: 'SCAN SERVICE CODE',
-  prd: 'DRAFT PRD',
+  prd: 'DRAFT SUGGESTIONS',
 };
 
 /**
@@ -96,7 +96,7 @@ export class DemoPlaybackService {
       case 'code':
         return `${run.code_gaps.filter((g) => g.mechanism_found).length} mechanism(s) pinned`;
       case 'prd':
-        return 'PRD draft ready';
+        return 'suggestions ready';
     }
   }
 

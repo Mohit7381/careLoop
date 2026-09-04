@@ -58,7 +58,7 @@ const STAGE_LABELS: Record<StageKey, string> = {
   fetch: 'FETCH DATA',
   analyze: 'ANALYZE DROP-OFFS',
   code: 'SCAN SERVICE CODE',
-  prd: 'DRAFT PRD',
+  prd: 'DRAFT SUGGESTIONS',
 };
 
 /**
@@ -516,7 +516,7 @@ export class RunService {
     } catch (err) {
       if (err instanceof HttpErrorResponse) {
         if (err.status === 401) return { error: 'not authorised — check APP_TOKEN' };
-        if (err.status === 404) return { error: 'no PRD found for this run/finding' };
+        if (err.status === 404) return { error: 'no suggestions found for this run/finding' };
         return { error: describeError(err) };
       }
       return { error: 'request timed out' };
@@ -560,7 +560,7 @@ export class RunService {
         return parts.join(' · ');
       }
       case 'prd':
-        return run.prd_draft ? 'PRD draft ready' : 'PRD draft ready (built from findings)';
+        return run.prd_draft ? 'suggestions ready' : 'suggestions ready (built from findings)';
     }
   }
 }
