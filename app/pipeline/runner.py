@@ -66,13 +66,13 @@ def _persist_artifacts(session: Session, run_id: int, state: dict) -> None:
         if artifact["kind"] != "report_md":
             continue
         path = run_dir / "report.md"
-        path.write_text(artifact["content"])
+        path.write_text(artifact["content"], encoding="utf-8")
         session.add(RunArtifact(run_id=run_id, kind="report_md", uri=str(path)))
 
     for draft in state.get("prd_drafts", []):
         rank = draft["finding_rank"]
         path = run_dir / f"prd_rank{rank}.md"
-        path.write_text(draft["markdown"])
+        path.write_text(draft["markdown"], encoding="utf-8")
         session.add(
             RunArtifact(run_id=run_id, kind="prd_md", uri=str(path), finding_rank=rank, title=draft.get("title"))
         )

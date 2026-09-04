@@ -24,6 +24,7 @@ TEMPLATE_PARAM: dict[str, str] = {
     "code-gap-assessment":          "code_context",
     "trend-narrative":              "delta_table",
     "prd-generation":               "prd_inputs",
+    "prd-chat-edit":                "edit_inputs",  # provisioned 2026-09-04, use_case_id 12870
 }
 
 
@@ -47,7 +48,16 @@ class SphereRequestTimedOut(RuntimeError):
 # instead of failing fast. Worth confirming against a real run.
 _TERMINAL_FAILURE_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
 
-CREATE_TIMEOUT_S = 15    # just enqueuing the job — should return almost immediately
+# 15s ("just enqueuing the job — should return almost immediately") was only safe for an ASYNC
+# use case (is_async: true), which hands back a request_id right away. Live-confirmed 2026-09-04
+# that a SYNC use case (is_async: false, e.g. prd-chat-edit as provisioned) makes the create call
+# itself BE the LLM call — it blocks until the model finishes — so a real PRD-sized edit request
+# timed out at 15s with no request_id ever issued to poll against (_data_or_poll() only starts
+# polling once one exists). Raised to 60s, matching the ~60s ingress gateway cutoff documented
+# below: going past that wouldn't help anyway, the connection gets killed there regardless of
+# client timeout. The real fix is flipping the use case to is_async: true in AI Studio so this
+# client gets a request_id back immediately instead of blocking on the create call at all.
+CREATE_TIMEOUT_S = 60
 POLL_TIMEOUT_S = 15      # one status check — comfortably inside any ~60s ingress cutoff
 POLL_INTERVAL_S = 2.0
 MAX_POLL_SECONDS = 180.0  # generous: real calls have been observed taking 45-75s+

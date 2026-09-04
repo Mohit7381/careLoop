@@ -64,10 +64,11 @@ def test_polls_until_success(mock_urlopen, mock_sleep):
 
 @patch("app.integrations.sphere.time.sleep")
 @patch("app.integrations.sphere.urllib.request.urlopen")
-def test_each_individual_call_uses_a_short_timeout_not_one_long_one(mock_urlopen, mock_sleep):
-    """The whole point: no single HTTP call should be held open long enough
-    to hit the ~60s ingress cutoff, even though polling overall can run
-    well past 60s."""
+def test_poll_calls_use_a_short_timeout_not_one_long_one(mock_urlopen, mock_sleep):
+    """The whole point of polling: no single POLL call should be held open
+    long enough to hit the ~60s ingress cutoff, even though polling overall
+    can run well past 60s. The CREATE call is exempt — for a synchronous use
+    case it IS the LLM call and has to wait for it (see CREATE_TIMEOUT_S)."""
     mock_urlopen.side_effect = [
         _response({"status": "PENDING", "request_id": "r1"}),
         _response({"status": "SUCCESS", "data": {}}),
@@ -75,7 +76,9 @@ def test_each_individual_call_uses_a_short_timeout_not_one_long_one(mock_urlopen
 
     _client().call("prd-generation", 21691, {"prd_inputs": "{}"})
 
-    for call in mock_urlopen.call_args_list:
+    poll_calls = mock_urlopen.call_args_list[1:]
+    assert poll_calls, "expected at least one poll call"
+    for call in poll_calls:
         assert call.kwargs["timeout"] <= 15
 
 

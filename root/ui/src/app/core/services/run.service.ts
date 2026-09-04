@@ -90,6 +90,10 @@ const STAGE_KEYS: StageKey[] = ['fetch', 'analyze', 'code', 'prd'];
 const POLL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 10_000;
 const DELIVER_TIMEOUT_MS = 8_000;
+// prd/chat can hit a real sphere-platform LLM call now (app.integrations.sphere.py,
+// CREATE_TIMEOUT_S=60) — the generic 10s REQUEST_TIMEOUT_MS cut every real edit off
+// before the model could ever respond, always landing on the honest-fallback reply.
+const CHAT_TIMEOUT_MS = 65_000;
 const MAX_RETRIES = 2;
 const API_BASE = '/v1/analysis/runs';
 // POST routes require Bearer auth (backend .env -> APP_TOKEN). Read from the
@@ -503,7 +507,7 @@ export class RunService {
             { message },
             { headers: { Authorization: `Bearer ${APP_TOKEN}` } }
           )
-          .pipe(timeout(REQUEST_TIMEOUT_MS))
+          .pipe(timeout(CHAT_TIMEOUT_MS))
       );
       this._run.update((run) => ({
         ...run,

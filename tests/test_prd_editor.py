@@ -62,6 +62,17 @@ def test_llm_rewrite_with_invented_numbers_falls_back_honestly():
     assert "numbers not present" in result.reply
 
 
+def test_llm_rewrite_with_corrupted_control_bytes_falls_back_honestly():
+    """A live call was observed returning prose where em dashes / middle dots
+    / stars had been replaced by stray control bytes — must not ship that
+    just because it's long enough and cites no invented numbers."""
+    corrupted = REWRITE[:-1] + " and a corrupted byte: \x14 right there.\n"
+    result = apply_edit_instruction(SAMPLE, "make this more exciting",
+                                     llm=lambda inputs: {"prd_markdown": corrupted})
+    assert not result.applied
+    assert "corrupted characters" in result.reply
+
+
 def test_llm_call_failure_falls_back_honestly_instead_of_raising():
     def broken_llm(inputs):
         raise RuntimeError("sphere is down")

@@ -41,6 +41,13 @@ class EditResult:
 
 _TITLE_RE = re.compile(r"^(?:title:\s*|rename title to\s+)(.+)$", re.IGNORECASE)
 _REMOVE_FR_RE = re.compile(r"\b(?:remove|delete)\s+fr[-\s]?(\d+)\b", re.IGNORECASE)
+# A live call returned prose where every em dash / middle dot / star / plus-minus sign had
+# been replaced by a single control byte (e.g. em-dash "—" -> "\x14") — reproduced against the
+# real prd-chat-edit endpoint 2026-09-04, not a local encoding bug (this repo's own read/write
+# round-trips UTF-8 correctly; confirmed by direct test). Cause not confirmed (sphere-side
+# guardrail or transport), but the fix has to live here regardless: never ship visibly-corrupted
+# prose just because the length/number checks below don't catch it.
+_BAD_CONTROL_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 _FALLBACK_REPLY = (
     "I can't apply that change autonomously — {reason}. Added your request to "
@@ -94,6 +101,12 @@ def _apply_via_llm(markdown: str, message: str, llm: LLMCall) -> tuple[Optional[
     if len(new_markdown) < 200:
         logger.warning("prd-chat-edit returned %d chars — honest fallback", len(new_markdown))
         return None, "the rewrite came back too short to trust"
+
+    bad_chars = set(_BAD_CONTROL_CHARS.findall(new_markdown)) - set(_BAD_CONTROL_CHARS.findall(markdown))
+    if bad_chars:
+        logger.warning("prd-chat-edit returned corrupted control bytes %s — honest fallback",
+                        [hex(ord(c)) for c in bad_chars])
+        return None, "the rewrite came back with corrupted characters"
 
     invented = unsupported_numbers(new_markdown, inputs)
     if invented:
