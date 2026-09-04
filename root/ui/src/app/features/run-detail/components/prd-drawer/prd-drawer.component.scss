@@ -399,3 +399,129 @@ tr:last-child td {
   margin: 0; font: inherit; font-size: 13px; line-height: 1.6;
   color: var(--ink-2); white-space: pre-wrap; word-wrap: break-word;
 }
+
+/* PRD list — cards instead of a `#1 #2 #3` tab strip. A rank is not a name;
+   a run drafts up to five of these and the reader needs to know which is
+   which before opening one. */
+.prdlist {
+  gap: 10px;
+}
+
+.prdcard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.prdcard:hover {
+  background: var(--surface-2);
+}
+
+.prdcard:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.prdcard-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prdcard-rank {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.prdcard-edited {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--good-soft);
+  color: var(--good);
+  border: 1px solid color-mix(in srgb, var(--good) 30%, transparent);
+}
+
+.prdcard-title {
+  /* align-items: flex-start on the card shrinks children to content, so a
+     long hypothesis clipped instead of wrapping. */
+  align-self: stretch;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.dhead-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.btn-back {
+  padding: 3px 9px;
+  font-size: 11.5px;
+  margin-bottom: 2px;
+}
+
+/* Section bodies are rendered markdown now, not raw source in a <pre>. */
+.secbody-read {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.secbody-read p {
+  margin: 0 0 8px;
+}
+
+.secbody-read p:last-child {
+  margin-bottom: 0;
+}
+
+.secbody-read strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.secbody-read code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.secbody-read ul {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.secbody-read li {
+  margin-bottom: 4px;
+}
+
+.secbody-read blockquote {
+  margin: 0 0 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-3);
+}

@@ -37,6 +37,44 @@ export class PrdDrawerComponent {
    *  `prds[]` yet, so ranks there fall back to one card per finding. */
   readonly selectedRank = signal(1);
 
+  /**
+   * With more than one PRD the drawer opens on a list of cards rather than a
+   * strip of tabs: `#1 #2 #3` says nothing about what each document is, and
+   * a run can draft up to five. Picking one switches to 'doc'; Back returns.
+   * A single-PRD run never sees the list.
+   */
+  readonly view = signal<'list' | 'doc'>('list');
+
+  readonly multiplePrds = computed(() => this.prdRanks().length > 1);
+
+  /** The card's name. Prefer the artifact's own title, then the finding it
+   *  was drafted for — never a bare rank, which is what the tabs showed. */
+  titleFor(rank: number): string {
+    const summary = this.run().prds.find((p) => p.finding_rank === rank);
+    if (summary?.title) return summary.title;
+    const finding = this.run().findings.find((f) => f.rank === rank);
+    if (finding) return finding.hypothesis.split('.')[0].slice(0, 90);
+    return `Finding #${rank}`;
+  }
+
+  openRank(rank: number): void {
+    this.selectRank(rank);
+    this.view.set('doc');
+  }
+
+  backToList(): void {
+    this.view.set('list');
+  }
+
+  /** Section bodies are markdown. Read mode renders it; edit mode shows the
+   *  source in a textarea. Rendering was lost when section editing landed —
+   *  the read branch printed the raw source, so `**bold**` and backticks
+   *  showed literally. renderPrdMarkdown escapes before it converts, so this
+   *  is safe to bind with [innerHTML]. */
+  sectionHtml(body: string): string {
+    return renderPrdMarkdown(body);
+  }
+
   readonly prdRanks = computed<number[]>(() => {
     const run = this.run();
     if (run.prds.length) return [...run.prds].map((p) => p.finding_rank).sort((a, b) => a - b);
