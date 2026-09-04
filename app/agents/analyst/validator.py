@@ -31,6 +31,45 @@ def collect_numbers(obj: Any) -> set[float]:
     return out
 
 
+def _row_rates(entered, converted) -> set[float]:
+    """The rates one row legitimately implies: its own conversion, and the
+    complementary loss share. Nothing across rows."""
+    out: set[float] = set()
+    try:
+        e, c = float(entered), float(converted)
+    except (TypeError, ValueError):
+        return out
+    if e > 0:
+        out.add(round(c / e, 4))
+        out.add(round(1 - c / e, 4))
+    return out
+
+
+def _known_rates(snapshot: Snapshot, trail: list[DrilldownStep]) -> set[float]:
+    """Rates the model could have derived honestly.
+
+    Replaces an any-pair ratio test that accepted a rate if ANY two known
+    numbers divided to it. With ~40 known numbers that is ~1,400 pairs, and a
+    finding citing 0.0073 for a cut the run never answered passed because
+    1433 (an "ITEMS UNAVAILABLE" reason count) / 201617 (last week's confirmed
+    count) happens to equal it. A ratio of two unrelated numbers is not
+    evidence, so a rate now has to be the conversion (or loss share) of ONE
+    row the model was actually shown, or an explicit rate/share field on it.
+    """
+    rates: set[float] = set()
+    for row in list(snapshot.stages) + list(snapshot.previous_stages):
+        rates |= _row_rates(row.entered, row.converted)
+    for step in trail:
+        for row in step.result_rows:
+            if "entered" in row and "converted" in row:
+                rates |= _row_rates(row.get("entered"), row.get("converted"))
+            for key in ("rate", "share", "share_of_prev", "conversion_from_previous"):
+                v = row.get(key)
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    rates.add(round(float(v), 4))
+    return rates
+
+
 def _known_numbers(snapshot: Snapshot, trail: list[DrilldownStep]) -> set[float]:
     known: set[float] = set()
     for row in list(snapshot.stages) + list(snapshot.previous_stages):
@@ -63,15 +102,14 @@ def validate_finding(finding: Finding, snapshot: Snapshot,
     if not finding.evidence:
         return False, "warehouse finding with no evidence items"
     known = _known_numbers(snapshot, trail) | (shown or set())
+    rates = _known_rates(snapshot, trail) | {round(x, 4) for x in (shown or set()) if 0 < x < 1}
     for item in finding.evidence:
         if any(abs(item.value - k) <= _TOL * max(1.0, abs(k)) for k in known):
             return True, "ok"
-        # rates: accept a value derivable as a ratio of two known numbers
-        if 0 < item.value < 1:
-            for a in known:
-                for b in known:
-                    if b and abs(a / b - item.value) < 0.0005:
-                        return True, "ok"
+        # a rate must be the conversion of a row the model was shown — never a
+        # coincidental ratio of two unrelated numbers (see _known_rates)
+        if 0 < item.value < 1 and any(abs(item.value - r) < 0.0005 for r in rates):
+            return True, "ok"
     return False, "no evidence value matches any number in snapshot or drill-down trail"
 
 
