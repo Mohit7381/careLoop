@@ -10,29 +10,23 @@ CareLoop automates a workflow the team already did by hand. Every output is a **
 
 ## High-level architectural workflow
 
-CareLoop is a **sequential LangGraph pipeline** — eight nodes, one shared state object (`RunState` / `GraphState`) threaded through all of them, each node validating its slice against `app/schemas/contracts.py` at its boundary so a bad shape fails loudly instead of corrupting state silently downstream.
+Sequential LangGraph pipeline, one shared state object (`RunState`) validated against `app/schemas/contracts.py` at every node.
 
 ```
 Fetcher ─▶ Analyst ─▶ Code Scout ─▶ Suggestion ─▶ Reporter ─▶ PRD Generator ─▶ Report Writer ─▶ Delivery
  (Alief)    (Nakul)     (Harshit)     (Harshit)     (Mohit)       (Mohit)         (Mohit)        (Mohit)
 ```
 
-| # | Node | What it does |
-|---|---|---|
-| 1 | **Fetcher** | Pulls the funnel snapshot (stage conversions, cancellation reasons, CT events) and PII-scrubbed Play Store reviews for the run's journey/window. Demo mode reads frozen fixtures; live mode raises `NotImplementedError` today — the real Metabase query pack and Play Store scraper aren't wired yet. |
-| 2 | **Analyst** | Three-and-a-half phases, in order: (1) **deterministic** funnel-gap detection with k-anonymity suppression; (2) **agentic drill-down** — an LLM drives a whitelisted `aggregate()` tool (budgeted) to find a correlated pattern, always labeled *correlation, never cause*; (2.5) **semantic VoC classification** — every negative review gets one theme, via an LLM call (`voc-theme-classification`) rather than pure keyword matching, and large unescalated themes are shown to the drill-down model as `voc_signals` context; (3) **corroboration + escalation** — a theme clearing the escalation threshold becomes its own VoC-originated finding; a theme sharing a warehouse finding's exact routing stage corroborates it; (3.5) **LLM-driven correlation** — a further pass that reasons over finding hypothesis vs. theme content to catch correlations the stage-equality lookup structurally misses (e.g. a review theme filed under a different stage that plausibly describes the same failure). An evidence validator rejects any finding without a citable number. |
-| 3 | **Code Scout** | Routes each finding to its owning GitLab repo via a static routing table, searches for the responsible mechanism, and runs the **Remedy Loop**: proposes ≤3 code-verifiable fixes and verifies each against the source (`exists` / `absent` / `partial`). Read-only — never writes a diff, never opens an MR. Output: `CodeGap`. |
-| 4 | **Suggestion** | Code Scout's generative alternate flow: explores the repo and proposes zero-to-several **tech / business / process** improvements per finding (not just code fixes), each independently verified where a code claim applies. Runs alongside Code Scout, not instead of it — a finding can produce a `CodeGap`, `Suggestion`s, both, or neither. |
-| 5 | **Reporter** | Computes period-over-period deltas (funnel, feature adoption, VoC theme trends) and turns them into a short business narrative. |
-| 6 | **PRD Generator** | Drafts one PRD per finding (capped) from findings + code gaps + suggestions + trend + VoC quotes (≤2 quotes, labeled anecdotal). Functional requirements are numbered across *both* code fixes and suggestions in one list — a business idea is just as valid an FR as a code fix. Stamped `DRAFT — needs human review`. |
-| 7 | **Report Writer** | Renders the run's Markdown report artifact. |
-| 8 | **Delivery** | Sends the report to Garuda (GChat/WhatsApp/etc.) — a human clicking **Approve** in the UI is what actually triggers this; the pipeline never auto-delivers. |
+- **Fetcher** — funnel snapshot + scrubbed reviews (demo fixtures; live path not wired yet).
+- **Analyst** — funnel-gap detection → agentic drill-down → VoC classification/escalation/corroboration → LLM correlation pass. Correlation, never causation.
+- **Code Scout** — routes a finding to its repo, locates the mechanism, runs the Remedy Loop (verifies ≤3 proposed fixes against source). Read-only.
+- **Suggestion** — Code Scout's generative sibling: proposes tech/business/process improvements per finding.
+- **Reporter** — period-over-period deltas + narrative.
+- **PRD Generator** — one draft PRD per finding from findings + gaps + suggestions + trend + quotes. Always stamped `DRAFT`.
+- **Report Writer** — renders the Markdown report.
+- **Delivery** — sends to Garuda, only after a human clicks Approve.
 
-**Cross-cutting bits:**
-- **Journeys are config, not code** — `config/journeys/{pd_checkout,consultation}.yaml` each define their own funnel stages, routing categories, VoC theme lexicon, and drill-down dimensions. Adding a journey is a config drop.
-- **Scoped runs** — `POST /v1/analysis/runs` accepts a free-text `prompt` ("just look at the payments funnel") resolved into a `RunScope` that narrows drill-down dimensions and the funnel transition analyzed, without touching the underlying journey config.
-- **Demo vs. live** are two independent switches: `DEMO_MODE` controls the *data source* (frozen fixtures vs. real warehouse/reviews — Fetcher's live path isn't built yet, so this is effectively always fixture data today), and `LLM_MODE` / `LIVE_LLM` control whether LLM calls hit the real sphere-platform or replay a recorded session. Every sphere use case has a `make_use_case_llm()` factory that resolves to `None` gracefully (never a crash) when a use case isn't provisioned yet, rather than raising mid-run.
-- **The UI** ([`root/ui`](root/ui), Angular) renders `RunState` end-to-end: pipeline tracker, funnel, findings, drill-down trail, the VoC "Users say" panel, the Code Scout/Suggestion panels with per-item verification chips, and a PRD drawer with in-place editing, chat-based edits, and a client-side `.docx` export.
+Journeys are config (`config/journeys/*.yaml`), not code. `DEMO_MODE` picks fixture vs. real data; `LLM_MODE`/`LIVE_LLM` pick replay vs. real sphere calls. The UI ([`root/ui`](root/ui)) renders `RunState` end-to-end.
 
 ## Exact steps to host the changes locally
 
