@@ -25,3 +25,13 @@ def test_client_replays_from_the_given_root():
     c = SphereClient(mode="replay", replay_root=REPLAY_DIR / "pd_checkout")
     out = c.call("funnel-hypothesis-generation", 0, {"analysis_context": "{}"})
     assert "done" in out
+
+
+def test_every_journey_has_its_own_complete_recording():
+    """homecare and digital_clinic replays were recorded on 2026-09-05; each ends with done=true."""
+    import json
+    for journey in ("pd_checkout", "consultation", "homecare", "digital_clinic"):
+        d = REPLAY_DIR / journey / "funnel-hypothesis-generation"
+        turns = sorted(d.glob("*.json"), key=lambda p: int(p.stem))
+        assert turns, journey
+        assert json.loads(turns[-1].read_text()).get("done") is True, journey

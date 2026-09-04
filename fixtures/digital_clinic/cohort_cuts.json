@@ -1,0 +1,244 @@
+{
+ "service_type": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "haloskin",
+    "entered": 4076,
+    "converted": 759
+   },
+   {
+    "segment": "halofit",
+    "entered": 3171,
+    "converted": 169
+   }
+  ],
+  "source": "monetization.modeled_fact_clinic_transaction at TREATMENT grain (one row per treatment_id; timestamps = max per treatment), window 2026-08-27..09-02 (prev 08-20..26), k>=25; payer via consultation_transaction_code -> modeled_fact_consultation_transaction; pulled 2026-09-04"
+ },
+ "payer": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "free",
+    "entered": 3868,
+    "converted": 684
+   },
+   {
+    "segment": "cash",
+    "entered": 3370,
+    "converted": 235
+   }
+  ],
+  "source": "monetization.modeled_fact_clinic_transaction at TREATMENT grain (one row per treatment_id; timestamps = max per treatment), window 2026-08-27..09-02 (prev 08-20..26), k>=25; payer via consultation_transaction_code -> modeled_fact_consultation_transaction; pulled 2026-09-04; free = consultation is_free, cash = paid consultation; insurance/unknown below k"
+ },
+ "initial_consultation": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "no_consultation",
+    "entered": 4828,
+    "converted": 684
+   },
+   {
+    "segment": "with_consultation",
+    "entered": 2419,
+    "converted": 244
+   }
+  ],
+  "source": "monetization.modeled_fact_clinic_transaction at TREATMENT grain (one row per treatment_id; timestamps = max per treatment), window 2026-08-27..09-02 (prev 08-20..26), k>=25; payer via consultation_transaction_code -> modeled_fact_consultation_transaction; pulled 2026-09-04; has_initial_consultation"
+ },
+ "consultation_fee": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "free_consultation",
+    "entered": 4839,
+    "converted": 692
+   },
+   {
+    "segment": "paid_consultation",
+    "entered": 2408,
+    "converted": 236
+   }
+  ],
+  "source": "monetization.modeled_fact_clinic_transaction at TREATMENT grain (one row per treatment_id; timestamps = max per treatment), window 2026-08-27..09-02 (prev 08-20..26), k>=25; payer via consultation_transaction_code -> modeled_fact_consultation_transaction; pulled 2026-09-04; is_consultation_free"
+ },
+ "hour_of_day": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "21",
+    "entered": 490,
+    "converted": 48
+   },
+   {
+    "segment": "15",
+    "entered": 468,
+    "converted": 62
+   },
+   {
+    "segment": "19",
+    "entered": 458,
+    "converted": 64
+   },
+   {
+    "segment": "20",
+    "entered": 452,
+    "converted": 53
+   },
+   {
+    "segment": "18",
+    "entered": 436,
+    "converted": 59
+   },
+   {
+    "segment": "11",
+    "entered": 433,
+    "converted": 75
+   },
+   {
+    "segment": "14",
+    "entered": 428,
+    "converted": 54
+   },
+   {
+    "segment": "10",
+    "entered": 424,
+    "converted": 68
+   },
+   {
+    "segment": "16",
+    "entered": 420,
+    "converted": 52
+   },
+   {
+    "segment": "13",
+    "entered": 416,
+    "converted": 62
+   },
+   {
+    "segment": "12",
+    "entered": 386,
+    "converted": 54
+   },
+   {
+    "segment": "22",
+    "entered": 375,
+    "converted": 27
+   },
+   {
+    "segment": "17",
+    "entered": 363,
+    "converted": 47
+   },
+   {
+    "segment": "09",
+    "entered": 305,
+    "converted": 51
+   },
+   {
+    "segment": "23",
+    "entered": 259,
+    "converted": 26
+   },
+   {
+    "segment": "08",
+    "entered": 247,
+    "converted": 35
+   },
+   {
+    "segment": "07",
+    "entered": 199,
+    "converted": 30
+   },
+   {
+    "segment": "00",
+    "entered": 190,
+    "converted": 16
+   },
+   {
+    "segment": "06",
+    "entered": 144,
+    "converted": 19
+   },
+   {
+    "segment": "01",
+    "entered": 120,
+    "converted": 5
+   },
+   {
+    "segment": "05",
+    "entered": 82,
+    "converted": 8
+   },
+   {
+    "segment": "02",
+    "entered": 70,
+    "converted": 7
+   },
+   {
+    "segment": "03",
+    "entered": 43,
+    "converted": 3
+   },
+   {
+    "segment": "04",
+    "entered": 39,
+    "converted": 3
+   }
+  ],
+  "source": "monetization.modeled_fact_clinic_transaction at TREATMENT grain (one row per treatment_id; timestamps = max per treatment), window 2026-08-27..09-02 (prev 08-20..26), k>=25; payer via consultation_transaction_code -> modeled_fact_consultation_transaction; pulled 2026-09-04; hour of treatment_created_time, Jakarta"
+ },
+ "plan_type": {
+  "distribution_only": true,
+  "rows": [
+   {
+    "segment": "erx_only",
+    "entered": 4746
+   },
+   {
+    "segment": "consultation_only",
+    "entered": 1573
+   },
+   {
+    "segment": "erx_and_pharmacy",
+    "entered": 806
+   },
+   {
+    "segment": "pharmacy_only",
+    "entered": 122
+   }
+  ],
+  "source": "monetization.modeled_fact_clinic_transaction at TREATMENT grain (one row per treatment_id; timestamps = max per treatment), window 2026-08-27..09-02 (prev 08-20..26), k>=25; payer via consultation_transaction_code -> modeled_fact_consultation_transaction; pulled 2026-09-04; distribution only: a plan with a pharmacy component IS a confirmed treatment, so a rate here would be tautological"
+ },
+ "expiry_reason": {
+  "distribution_only": true,
+  "rows": [
+   {
+    "segment": "handle missing expired status record",
+    "entered": 2216
+   },
+   {
+    "segment": "abandoned",
+    "entered": 1312
+   },
+   {
+    "segment": "due to treatment expiry",
+    "entered": 827
+   },
+   {
+    "segment": "Erx expired",
+    "entered": 361
+   },
+   {
+    "segment": "No erx given",
+    "entered": 59
+   },
+   {
+    "segment": "Package group got cancelled and erx expired",
+    "entered": 44
+   }
+  ],
+  "source": "monetization.modeled_fact_clinic_transaction at TREATMENT grain (one row per treatment_id; timestamps = max per treatment), window 2026-08-27..09-02 (prev 08-20..26), k>=25; payer via consultation_transaction_code -> modeled_fact_consultation_transaction; pulled 2026-09-04; distribution of expiration_reason among expired/abandoned treatments"
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "done": false,
+ "findings": null,
+ "growth_ideas": null,
+ "next_question": {
+  "dimension": "hour_of_day",
+  "rationale": "Reason clusters show many plans lapsed for time-related expiry (\"due to treatment expiry\": 827, \"erx expired\": 361, and 2,216 artifact expiries). The cuts we already ran show big conversion gaps by service_type (Haloskin 759 of 4,076, 18.62% vs Halofit 169 of 3,171, 5.33%) and by payer (free 684 of 3,868, 17.68% vs cash 235 of 3,370, 6.97%), which could be explained if creations concentrated in hours when doctor/prescription handoffs stall or expiry windows elapse. I expect to see substantially lower \"paid for the plan\" conversion in specific hours (late night or outside typical clinic hours); if so, that would point to time-bound operational fixes (staffing, expiry windows, or UI timing prompts) that could recover a large share of the 6,319 lost creations.",
+  "also_dimension": null
+ }
+}

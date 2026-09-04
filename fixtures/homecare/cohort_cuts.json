@@ -1,0 +1,317 @@
+{
+ "lead_time": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "no_slot_chosen",
+    "entered": 4267,
+    "converted": 0
+   },
+   {
+    "segment": "same_day",
+    "entered": 578,
+    "converted": 372
+   },
+   {
+    "segment": "under_6_hours",
+    "entered": 462,
+    "converted": 368
+   },
+   {
+    "segment": "1_to_3_days",
+    "entered": 438,
+    "converted": 275
+   },
+   {
+    "segment": "over_3_days",
+    "entered": 154,
+    "converted": 80
+   }
+  ],
+  "source": "monetization.modeled_fact_homecare_transaction (is_addon=false), Redshift db 39 via de-central read-only, window 2026-08-27..09-02 Jakarta local (prev 08-20..26), k>=25; pulled 2026-09-04. lead_time = appointment_time - created_time; 'no_slot_chosen' = the booking never reached the schedule step"
+ },
+ "interface_type": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "ios",
+    "entered": 3293,
+    "converted": 515
+   },
+   {
+    "segment": "android",
+    "entered": 2164,
+    "converted": 223
+   },
+   {
+    "segment": "whatsapp",
+    "entered": 157,
+    "converted": 110
+   },
+   {
+    "segment": "unknown",
+    "entered": 285,
+    "converted": 247
+   }
+  ],
+  "source": "monetization.modeled_fact_homecare_transaction (is_addon=false), Redshift db 39 via de-central read-only, window 2026-08-27..09-02 Jakarta local (prev 08-20..26), k>=25; pulled 2026-09-04"
+ },
+ "transaction_source": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "halodoc_customer",
+    "entered": 5193,
+    "converted": 652
+   },
+   {
+    "segment": "b2b_project",
+    "entered": 160,
+    "converted": 139
+   },
+   {
+    "segment": "digital_clinic",
+    "entered": 159,
+    "converted": 73
+   },
+   {
+    "segment": "whatsapp_order",
+    "entered": 157,
+    "converted": 110
+   },
+   {
+    "segment": "offline_activation",
+    "entered": 113,
+    "converted": 96
+   },
+   {
+    "segment": "concierge",
+    "entered": 105,
+    "converted": 13
+   }
+  ],
+  "source": "monetization.modeled_fact_homecare_transaction (is_addon=false), Redshift db 39 via de-central read-only, window 2026-08-27..09-02 Jakarta local (prev 08-20..26), k>=25; pulled 2026-09-04; walk_in (12) below k"
+ },
+ "region": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "Jakarta",
+    "entered": 311,
+    "converted": 233
+   },
+   {
+    "segment": "West Java",
+    "entered": 345,
+    "converted": 73
+   },
+   {
+    "segment": "East Indo",
+    "entered": 261,
+    "converted": 22
+   },
+   {
+    "segment": "East Java",
+    "entered": 187,
+    "converted": 10
+   },
+   {
+    "segment": "Central Java",
+    "entered": 137,
+    "converted": 7
+   },
+   {
+    "segment": "Sumatera",
+    "entered": 105,
+    "converted": 5
+   },
+   {
+    "segment": "Bodetabek",
+    "entered": 39,
+    "converted": 18
+   },
+   {
+    "segment": "unknown",
+    "entered": 4514,
+    "converted": 727
+   }
+  ],
+  "source": "monetization.modeled_fact_homecare_transaction (is_addon=false), Redshift db 39 via de-central read-only, window 2026-08-27..09-02 Jakarta local (prev 08-20..26), k>=25; pulled 2026-09-04; user_address_region"
+ },
+ "target_market": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "b2c",
+    "entered": 5777,
+    "converted": 993
+   },
+   {
+    "segment": "b2b",
+    "entered": 122,
+    "converted": 102
+   }
+  ],
+  "source": "monetization.modeled_fact_homecare_transaction (is_addon=false), Redshift db 39 via de-central read-only, window 2026-08-27..09-02 Jakarta local (prev 08-20..26), k>=25; pulled 2026-09-04"
+ },
+ "referral": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "direct",
+    "entered": 5719,
+    "converted": 1003
+   },
+   {
+    "segment": "from_digital_clinic",
+    "entered": 180,
+    "converted": 92
+   }
+  ],
+  "source": "monetization.modeled_fact_homecare_transaction (is_addon=false), Redshift db 39 via de-central read-only, window 2026-08-27..09-02 Jakarta local (prev 08-20..26), k>=25; pulled 2026-09-04; is_digital_clinic flag"
+ },
+ "hour_of_day": {
+  "distribution_only": false,
+  "rows": [
+   {
+    "segment": "14",
+    "entered": 405,
+    "converted": 129
+   },
+   {
+    "segment": "10",
+    "entered": 403,
+    "converted": 103
+   },
+   {
+    "segment": "09",
+    "entered": 384,
+    "converted": 76
+   },
+   {
+    "segment": "18",
+    "entered": 378,
+    "converted": 89
+   },
+   {
+    "segment": "12",
+    "entered": 365,
+    "converted": 86
+   },
+   {
+    "segment": "11",
+    "entered": 357,
+    "converted": 77
+   },
+   {
+    "segment": "15",
+    "entered": 356,
+    "converted": 74
+   },
+   {
+    "segment": "19",
+    "entered": 342,
+    "converted": 54
+   },
+   {
+    "segment": "17",
+    "entered": 336,
+    "converted": 51
+   },
+   {
+    "segment": "08",
+    "entered": 317,
+    "converted": 53
+   },
+   {
+    "segment": "13",
+    "entered": 305,
+    "converted": 63
+   },
+   {
+    "segment": "20",
+    "entered": 302,
+    "converted": 34
+   },
+   {
+    "segment": "16",
+    "entered": 269,
+    "converted": 37
+   },
+   {
+    "segment": "21",
+    "entered": 252,
+    "converted": 28
+   },
+   {
+    "segment": "07",
+    "entered": 235,
+    "converted": 47
+   },
+   {
+    "segment": "22",
+    "entered": 208,
+    "converted": 23
+   },
+   {
+    "segment": "06",
+    "entered": 151,
+    "converted": 22
+   },
+   {
+    "segment": "23",
+    "entered": 130,
+    "converted": 15
+   },
+   {
+    "segment": "00",
+    "entered": 100,
+    "converted": 10
+   },
+   {
+    "segment": "05",
+    "entered": 96,
+    "converted": 5
+   },
+   {
+    "segment": "01",
+    "entered": 73,
+    "converted": 6
+   },
+   {
+    "segment": "02",
+    "entered": 52,
+    "converted": 5
+   },
+   {
+    "segment": "03",
+    "entered": 42,
+    "converted": 4
+   },
+   {
+    "segment": "04",
+    "entered": 41,
+    "converted": 4
+   }
+  ],
+  "source": "monetization.modeled_fact_homecare_transaction (is_addon=false), Redshift db 39 via de-central read-only, window 2026-08-27..09-02 Jakarta local (prev 08-20..26), k>=25; pulled 2026-09-04; hour of transaction_created_time, Jakarta"
+ },
+ "abandon_reason": {
+  "distribution_only": true,
+  "rows": [
+   {
+    "segment": "customer went back from payments page",
+    "entered": 3520
+   },
+   {
+    "segment": "order abandoned because no action",
+    "entered": 908
+   },
+   {
+    "segment": "abandoned due to new booking request",
+    "entered": 373
+   }
+  ],
+  "source": "monetization.modeled_fact_homecare_transaction (is_addon=false), Redshift db 39 via de-central read-only, window 2026-08-27..09-02 Jakarta local (prev 08-20..26), k>=25; pulled 2026-09-04; distribution of abandonment_reason among abandoned bookings"
+ }
+}

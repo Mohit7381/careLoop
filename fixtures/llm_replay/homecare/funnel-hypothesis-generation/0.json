@@ -1,0 +1,10 @@
+{
+ "done": false,
+ "findings": null,
+ "growth_ideas": null,
+ "next_question": {
+  "dimension": "interface_type",
+  "rationale": "Reason clusters show most drop-offs at the payments page (customer went back from payments page: 3,520) and Play Store reviews flag payment/refund issues; I expect conversion from \"started a booking\" to \"chose a slot and confirmed\" to be materially worse on specific device or channel types (for example web vs mobile app). If true, that will localise the payment UX or platform bug causing a large share of the 4,804 lost bookings and point to a targeted fix.",
+  "also_dimension": "transaction_source"
+ }
+}

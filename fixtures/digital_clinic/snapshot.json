@@ -1,0 +1,209 @@
+{
+ "stages": [
+  {
+   "stage": "created",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 7247,
+   "converted": 928
+  },
+  {
+   "stage": "confirmed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 928,
+   "converted": 860
+  },
+  {
+   "stage": "activated",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 860,
+   "converted": 860
+  }
+ ],
+ "previous_stages": [
+  {
+   "stage": "created",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 7421,
+   "converted": 835
+  },
+  {
+   "stage": "confirmed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 835,
+   "converted": 798
+  },
+  {
+   "stage": "activated",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 798,
+   "converted": 798
+  }
+ ],
+ "segments": [
+  "all"
+ ],
+ "reasons": [
+  {
+   "cancellation_reason": "handle missing expired status record",
+   "cancellation_reason_group": "data_artifact",
+   "count": 2216
+  },
+  {
+   "cancellation_reason": "abandoned",
+   "cancellation_reason_group": "customer_abandoned",
+   "count": 1312
+  },
+  {
+   "cancellation_reason": "due to treatment expiry",
+   "cancellation_reason_group": "expired",
+   "count": 827
+  },
+  {
+   "cancellation_reason": "Erx expired",
+   "cancellation_reason_group": "expired",
+   "count": 361
+  },
+  {
+   "cancellation_reason": "No erx given",
+   "cancellation_reason_group": "no_prescription",
+   "count": 59
+  },
+  {
+   "cancellation_reason": "Package group got cancelled and erx expired",
+   "cancellation_reason_group": "expired",
+   "count": 44
+  }
+ ],
+ "ct_events": [
+  {
+   "event_name": "haloskin.view.service_homepage",
+   "count": 29036
+  },
+  {
+   "event_name": "haloskin.view.category_page",
+   "count": 20019
+  },
+  {
+   "event_name": "halofit.view.service_homepage",
+   "count": 19989
+  },
+  {
+   "event_name": "haloskin.click.service_icon",
+   "count": 15873
+  },
+  {
+   "event_name": "halofit.click.service_icon",
+   "count": 11692
+  },
+  {
+   "event_name": "haloskin.view.patient_selection_page",
+   "count": 11277
+  },
+  {
+   "event_name": "haloskin.click.start_pre_consultation_button",
+   "count": 10426
+  },
+  {
+   "event_name": "halofit.click.start_pre_consultation_button",
+   "count": 6171
+  },
+  {
+   "event_name": "halofit.view.patient_selection_page",
+   "count": 5394
+  },
+  {
+   "event_name": "halofit.click.next_form_button",
+   "count": 3972
+  },
+  {
+   "event_name": "haloskin.click.confirm_patient_button",
+   "count": 2966
+  },
+  {
+   "event_name": "halofit.view.pre_consultation_form_goal",
+   "count": 2480
+  },
+  {
+   "event_name": "halofit.view.pre_consultation_form_current_condition",
+   "count": 2192
+  },
+  {
+   "event_name": "halofit.view.pre_consultation_form_medical_hist",
+   "count": 2023
+  },
+  {
+   "event_name": "haloskin.view.treatment_recommendation_page",
+   "count": 1987
+  },
+  {
+   "event_name": "halofit.view.pre_consultation_form_personalization",
+   "count": 1975
+  },
+  {
+   "event_name": "halofit.click.submit_form_button",
+   "count": 1905
+  },
+  {
+   "event_name": "halofit.click.confirm_patient_button",
+   "count": 1737
+  },
+  {
+   "event_name": "halofit.view.payment_page",
+   "count": 1259
+  },
+  {
+   "event_name": "halofit.view.consent_popup",
+   "count": 983
+  },
+  {
+   "event_name": "halofit.click.agree_consent_button",
+   "count": 913
+  },
+  {
+   "event_name": "haloskin.click.view_cart_button",
+   "count": 661
+  },
+  {
+   "event_name": "haloskin.click.view_faq_button",
+   "count": 652
+  },
+  {
+   "event_name": "halofit.backend.transaction_confirmed",
+   "count": 556
+  },
+  {
+   "event_name": "haloskin.click.redirect_button",
+   "count": 382
+  },
+  {
+   "event_name": "halofit.click.redirect_button",
+   "count": 312
+  },
+  {
+   "event_name": "haloskin.click.view_product_button",
+   "count": 252
+  },
+  {
+   "event_name": "haloskin.click.next_form_button",
+   "count": 186
+  },
+  {
+   "event_name": "haloskin.click.view_delivery_option_button",
+   "count": 157
+  },
+  {
+   "event_name": "haloskin.click.submit_form_button",
+   "count": 118
+  },
+  {
+   "event_name": "halofit.click.view_delivery_option_button",
+   "count": 72
+  }
+ ]
+}

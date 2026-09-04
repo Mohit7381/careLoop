@@ -62,6 +62,8 @@ export class RunsDashboardComponent implements OnInit {
     'check how many and why the users are dropping off during the payments',
     'why do orders with unfulfilled items fail, last 10-15 days of reviews',
     'why do consultations get abandoned before the doctor joins',
+    'how many homecare bookings do not get confirmed, and why',
+    'how many haloskin treatment plans go unpaid, and why',
   ];
 
   async ngOnInit(): Promise<void> {

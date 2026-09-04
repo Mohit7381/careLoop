@@ -1,0 +1,116 @@
+{
+ "done": true,
+ "findings": [
+  {
+   "stage": "paid for the plan",
+   "evidence": [
+    "{\"segment\": \"haloskin\", \"entered\": 4076, \"converted\": 759, \"rate\": 0.1862}",
+    "{\"segment\": \"halofit\", \"entered\": 3171, \"converted\": 169, \"rate\": 0.0533}",
+    "{\"from_stage\": \"created\", \"to_stage\": \"confirmed\", \"lost\": 6319, \"share_of_prev\": 0.8719}"
+   ],
+   "segments": [
+    "Halofit plans (entered 3,171)"
+   ],
+   "confidence": "high",
+   "hypothesis": "Halofit is the single largest behavioural leak by conversion quality: only 169 of 3,171 Halofit creations were paid for (5.33%), so Halofit workflows produce roughly 3,002 of the 6,319 lost creations and therefore explain a very large share of the gap. This plausibly happens because Halofit plans require additional prescription/operational handoffs or have shorter allowed time-to-pay windows, letting prescriptions or artifact states expire before payment.",
+   "confirm_via": "Cross-tab service_type x expiry_reason and service_type x initial_consultation to measure what share of Halofit creations carry expiry/ERX artifact flags; measure median time from 'had a treatment plan created' to payment attempt for Halofit vs Haloskin; run an A/B test extending the expiry window or adding an immediate one-tap payment reminder for Halofit to see if confirmation rate rises."
+  },
+  {
+   "stage": "paid for the plan",
+   "evidence": [
+    "{\"segment\": \"free\", \"entered\": 3868, \"converted\": 684, \"rate\": 0.1768}",
+    "{\"segment\": \"cash\", \"entered\": 3370, \"converted\": 235, \"rate\": 0.0697}",
+    "{\"from_stage\": \"created\", \"to_stage\": \"confirmed\", \"lost\": 6319, \"share_of_prev\": 0.8719}"
+   ],
+   "segments": [
+    "customers paying in cash (entered 3,370)"
+   ],
+   "confidence": "high",
+   "hypothesis": "Customers selecting cash convert much less often than customers on free payer flows: 235 of 3,370 cash creations were paid (6.97%), so cash-payment orders alone account for ~3,135 of the lost creations. This suggests payment friction or lower payment intent for cash flows, or a strong overlap between cash and services with expiry-sensitive prescriptions.",
+   "confirm_via": "Cross-tab payer x service_type and payer x expiry_reason to test overlap (are cash orders concentrated in Halofit or in consultation-driven plans?), examine payment-failure and abandoned-checkout logs for cash-flow attempts, and A/B test a short reservation/hold + one-tap in-app payment reminder for cash customers to measure lift."
+  },
+  {
+   "stage": "paid for the plan",
+   "evidence": [
+    "{\"segment\": \"no_consultation\", \"entered\": 4828, \"converted\": 684, \"rate\": 0.1417}",
+    "{\"segment\": \"with_consultation\", \"entered\": 2419, \"converted\": 244, \"rate\": 0.1009}"
+   ],
+   "segments": [
+    "plans that began with a doctor consultation (entered 2,419)"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Plans that began with a consultation convert worse (244 of 2,419, 10.09%) than plans created without a consultation (684 of 4,828, 14.17%), suggesting consultation-driven plans are more likely to fail before payment \u2014 plausibly because prescriptions (ERX) or treatment windows expire in the handoff between consultation and payment.",
+   "confirm_via": "Cross-tab initial_consultation x expiry_reason and initial_consultation x time-to-confirm to check whether consultations correlate with ERX expiry; instrument the consultation->plan handoff to record whether a valid ERX was attached and run an A/B test that forces immediate prescription attachment or gives an explicit countdown/prompt to pay."
+  },
+  {
+   "stage": "paid for the plan",
+   "evidence": [
+    "{\"user_reasons\": {\"abandoned\": 1312, \"due to treatment expiry\": 827, \"erx expired\": 361, \"no erx given\": 59, \"package group got cancelled and erx expired\": 44}, \"artifact_reasons\": {\"handle missing expired status record\": 2216}, \"user_total\": 2603, \"artifact_total\": 2216, \"artifact_share\": 0.4598}"
+   ],
+   "segments": [
+    "plans showing expiry / ERX artifact failures (artifact_total 2,216) and user-reported expiry (due to treatment expiry 827, erx expired 361)"
+   ],
+   "confidence": "medium",
+   "hypothesis": "A large share of created plans lapses because of time-related expiries and ERX/artifact problems: artifact expiries (2,216) plus user reasons like treatment expiry (827) and erx expired (361) point to expiry or missing/expired prescription records as a common mechanism causing creations to never be paid for.",
+   "confirm_via": "Drill a cross-tab of expiry_reason by service_type, payer and initial_consultation to quantify overlap; instrument timestamps to measure how often payment attempts occur after the ERX/treatment expiry window and run an experiment that extends or auto-renews expiry in a randomized subset to measure effect on confirmation."
+  },
+  {
+   "stage": "paid for the plan",
+   "evidence": [
+    "{\"segment\": \"free_consultation\", \"entered\": 4839, \"converted\": 692, \"rate\": 0.143}",
+    "{\"segment\": \"paid_consultation\", \"entered\": 2408, \"converted\": 236, \"rate\": 0.098}"
+   ],
+   "segments": [
+    "free vs paid consultations"
+   ],
+   "confidence": "medium",
+   "hypothesis": "Contrary to the initial hunch, free consultations convert at least as well (692 of 4,839, 14.3%) as paid consultations (236 of 2,408, 9.8%), so free consultations are not the primary driver of the created->paid leak; the leak is concentrated more in service_type and payer behaviors.",
+   "confirm_via": "Cross-tab consultation_fee x payer and consultation_fee x service_type to check whether paid consultations cluster in low-converting segments (e.g., paid consultation customers concentrated in Halofit or cash); run a targeted follow-up flow for paid-consultation customers (reminder + one-tap pay) to test lift."
+  }
+ ],
+ "growth_ideas": [
+  {
+   "title": "48\u2011hour ERX auto\u2011extension for Halofit",
+   "evidence": [
+    "{\"segment\": \"halofit\", \"entered\": 3171, \"converted\": 169, \"rate\": 0.0533}",
+    "{\"user_reasons\": {\"due to treatment expiry\": 827, \"erx expired\": 361}, \"artifact_reasons\": {\"handle missing expired status record\": 2216}}"
+   ],
+   "rationale": "Halofit shows a very low paid conversion (169 of 3,171, 5.33%) and expiry/ERX artifact counts are high, so giving Halofit prescriptions a short automatic extension should recover many confirmations lost to timing issues.",
+   "description": "When a Halofit plan is created with an ERX, set an automatic 48-hour extension that keeps the ERX valid for payment attempts; surface a visible countdown and a single-tap pay button in the push/SMS reminder during the extension window. Track confirmation uplift for the extended cohort versus control.",
+   "inspiration": "funnel_data",
+   "target_stage": "paid for the plan"
+  },
+  {
+   "title": "One\u2011tap payment reminder for cash customers",
+   "evidence": [
+    "{\"segment\": \"cash\", \"entered\": 3370, \"converted\": 235, \"rate\": 0.0697}"
+   ],
+   "rationale": "Cash-pay flows convert poorly (235 of 3,370, 6.97%), so reducing the effort to complete payment with a clear reminder and one-tap in-app payment option should raise confirmations.",
+   "description": "Send an immediate push+SMS when a cash-plan is created with a one-tap in-app payment link that pre-fills the order and payment destination; if unpaid after 6 hours, send a second reminder showing any ERX expiry time and a direct pay button. Measure uplift on cash confirmations.",
+   "inspiration": "funnel_data",
+   "target_stage": "paid for the plan"
+  },
+  {
+   "title": "Attach ERX at consultation close",
+   "evidence": [
+    "{\"segment\": \"with_consultation\", \"entered\": 2419, \"converted\": 244, \"rate\": 0.1009}",
+    "{\"segment\": \"free_consultation\", \"entered\": 4839, \"converted\": 692, \"rate\": 0.143}"
+   ],
+   "rationale": "Consultation-driven plans convert worse (244 of 2,419, 10.09%) and ERX expiry is a common reason for lapse, so ensuring prescriptions are attached before leaving the consultation reduces expiry risk and raises payment completion.",
+   "description": "Require or prompt doctors to attach/confirm ERX before ending consultations for plans that create on the consultation path; show an in-session button to 'Reserve plan and pay' that generates the plan with ERX attached and triggers the one-tap reminder if unpaid. Track confirmation lift for consultation-originated plans.",
+   "inspiration": "funnel_data",
+   "target_stage": "paid for the plan"
+  },
+  {
+   "title": "Targeted re\u2011engagement for created orders",
+   "evidence": [
+    "{\"from_stage\": \"created\", \"to_stage\": \"confirmed\", \"lost\": 6319, \"share_of_prev\": 0.8719}"
+   ],
+   "rationale": "A large absolute number of creations never converts (6,319 lost); a systematic, segmented re\u2011engagement program can recover many of them without changing existing journeys.",
+   "description": "Build a segmented recovery flow that sends tailored messages (ERX-expiry alert, one-tap pay, or phone support) within 1, 6 and 24 hours to users who reached 'had a treatment plan created' but not yet 'paid for the plan'; prioritize Halofit, cash payers and consultation-originated plans and measure recovered confirmations by segment.",
+   "inspiration": "funnel_data",
+   "target_stage": "paid for the plan"
+  }
+ ],
+ "next_question": null
+}

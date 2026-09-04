@@ -1,0 +1,139 @@
+# Journey #3 — Halolab homecare and lab visits (frozen fixture 2026-09-04; see fixtures/homecare/README.md)
+name: homecare
+description: Halolab homecare booking — from browsing a service to a confirmed, completed home visit or lab test
+
+# Words that mean "this journey" in a request (whole-word match; the resolver picks the journey with the most hits).
+journey_keywords: [homecare, halolab, lab, labs, "home care", nurse, nurses, visit, visits, "blood test", tes, perawat, kunjungan, "lab test", vaccine, vaccination]
+
+stages:            # ordered; names match Fetcher's SnapshotRow.stage
+  - created
+  - confirmed      # paid / slot chosen and confirmed
+  - completed      # the visit or test happened
+
+maturing_stages: [completed]   # a visit booked for a future date cannot complete inside the window
+
+drilldown_dimensions:
+  - lead_time
+  - interface_type
+  - transaction_source
+  - region
+  - target_market
+  - referral
+  - hour_of_day
+  - abandon_reason      # distribution only
+
+artifact_reasons:          # re-creation artifacts, excluded from user-abandonment rates
+  - "abandoned due to new booking request"
+  - "cs change payment method, new order will be created"
+reason_field: abandonment_reason
+
+event_stage:
+  homecare.view.service_homepage:        created
+  homecare.click.service_icon:           created
+  homecare.view.category_page:           created
+  homecare.view.search_result_page:      created
+  homecare.view.product_detail_page:     created
+  homecare.click.add_to_cart_button:     created
+  homecare.view.cart_review_page:        created
+  homecare.click.remove_cart_item_button: created
+  homecare.click.confirm_cart_button:    created
+  homecare.view.patient_selection_page:  created
+  homecare.click.confirm_patient_button: created
+  homecare.view.schedule_selection_page: created
+  homecare.view.coupon_redemption_page:  created
+  homecare.view.payment_page:            created
+  homecare.backend.transaction_confirmed: confirmed
+  homecare.backend.transaction_delivered: completed
+
+dimension_aliases:
+  lead_time:          [slot, slots, "time slot", schedule, scheduled, "same day", "same-day", "lead time", jadwal, "no slot", timing]
+  interface_type:     [ios, iphone, android, whatsapp, "wa ", platform, device, app]
+  transaction_source: [source, channel, b2b, concierge, "walk-in", "walk in", offline, "digital clinic referral"]
+  region:             [region, city, cities, jakarta, bandung, surabaya, "west java", "east java", sumatera, bodetabek, area, location, daerah, kota]
+  target_market:      [b2c, b2b, corporate, consumer, market]
+  referral:           [referral, referred, "from digital clinic", haloskin, halofit]
+  hour_of_day:        [hour, hourly, evening, night, morning, "time of day"]
+  abandon_reason:     [reason, reasons, abandon, abandoned, "went back", "payments page", "no action"]
+
+# Code Scout seeds — every term verified against GitLab blob search on 2026-09-04 (counts in fixtures/homecare/README.md)
+code_hints:
+  by_stage:
+    homecare:          [abandon, schedule, slot, timeout]          # halolab/oms 50 / 50 / 50 / 34
+    payments:          [paymentFailed, payment, expire]            # 9 / 50 / 50
+    re_engagement:     [notification, whatsapp]                    # 50 / 6
+  by_dimension:
+    lead_time:          [slot, schedule, reschedule]
+    region:             [insurance, slot]                          # coverage is a catalog concern: halolab/catalog slot 50, insurance 31
+    transaction_source: [whatsapp, nurse]
+    abandon_reason:     [abandon, timeout, paymentFailed]
+
+default_routing: homecare
+
+routing:
+  homecare:
+    - halolab/oms
+    - halolab/catalog
+  payments:
+    - scrooge/payment-service
+    - halolab/oms
+  re_engagement:
+    - transformers/garuda
+    - halolab/halolab-bff
+
+voc:
+  app_id: com.linkdokter.halodoc.android
+  lang: id
+  country: id
+  escalation_threshold: 20
+  themes:
+    - name: booking/schedule
+      routing_stage: homecare
+      search_terms: [slot, schedule, reschedule]
+      keywords: [jadwal, slot, "tidak ada jadwal", reschedule, "ganti jadwal", waktu, kunjungan]
+    - name: nurse/service
+      routing_stage: homecare
+      search_terms: [nurse, visit]
+      keywords: [perawat, nurse, petugas, "tidak datang", telat, terlambat, "datang terlambat"]
+    - name: results/report
+      routing_stage: homecare
+      search_terms: [result, report, erx]
+      keywords: [hasil, "hasil lab", laporan, "belum keluar", lama]
+    - name: payment/refund
+      routing_stage: payments
+      search_terms: [payment_failed, refund, abandon]
+      keywords: [refund, pembayaran, bayar, "dana tidak", uang, saldo, tagihan, "gagal bayar"]
+    - name: app/technical
+      routing_stage: homecare
+      search_terms: [error, crash, timeout]
+      keywords: [error, aplikasi, login, otp, loading, crash, bug, verifikasi, update]
+    - name: price
+      routing_stage: payments
+      search_terms: [pricing, fee]
+      keywords: [mahal, harga, biaya]
+  positive_themes:
+    - name: punctual_nurse
+      routing_stage: homecare
+      keywords: ["tepat waktu", ontime, ramah, profesional, sopan]
+    - name: fast_results
+      routing_stage: homecare
+      keywords: ["hasil cepat", cepat, "langsung keluar"]
+    - name: easy_booking
+      routing_stage: homecare
+      keywords: [mudah, praktis, simpel, gampang]
+    - name: good_value
+      routing_stage: payments
+      keywords: [murah, worth, terjangkau]
+
+stage_labels:
+  created:   "started a booking"
+  confirmed: "chose a slot and confirmed"
+  completed: "had the visit or test"
+dimension_labels:
+  lead_time:          "how far ahead the visit was booked"
+  interface_type:     "device or channel"
+  transaction_source: "where the booking came from"
+  region:             "region"
+  target_market:      "consumer or corporate"
+  referral:           "referred from a digital clinic or direct"
+  hour_of_day:        "hour of the day"
+  abandon_reason:     "reason recorded for leaving"

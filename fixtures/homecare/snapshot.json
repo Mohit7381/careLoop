@@ -1,0 +1,139 @@
+{
+ "stages": [
+  {
+   "stage": "created",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 5899,
+   "converted": 1095
+  },
+  {
+   "stage": "confirmed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 1095,
+   "converted": 460
+  },
+  {
+   "stage": "completed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 460,
+   "converted": 460
+  }
+ ],
+ "previous_stages": [
+  {
+   "stage": "created",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 5415,
+   "converted": 1081
+  },
+  {
+   "stage": "confirmed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 1081,
+   "converted": 494
+  },
+  {
+   "stage": "completed",
+   "dimension": "all",
+   "segment": "all",
+   "entered": 494,
+   "converted": 494
+  }
+ ],
+ "segments": [
+  "all"
+ ],
+ "reasons": [
+  {
+   "cancellation_reason": "customer went back from payments page",
+   "cancellation_reason_group": "customer_abandoned",
+   "count": 3520
+  },
+  {
+   "cancellation_reason": "order abandoned because no action",
+   "cancellation_reason_group": "system_cancelled",
+   "count": 908
+  },
+  {
+   "cancellation_reason": "abandoned due to new booking request",
+   "cancellation_reason_group": "re_creation",
+   "count": 373
+  },
+  {
+   "cancellation_reason": "cs change payment method, new order will be created",
+   "cancellation_reason_group": "re_creation",
+   "count": 3
+  }
+ ],
+ "ct_events": [
+  {
+   "event_name": "homecare.view.service_homepage",
+   "count": 14530
+  },
+  {
+   "event_name": "homecare.view.cart_review_page",
+   "count": 10981
+  },
+  {
+   "event_name": "homecare.view.category_page",
+   "count": 9086
+  },
+  {
+   "event_name": "homecare.view.search_result_page",
+   "count": 8783
+  },
+  {
+   "event_name": "homecare.click.service_icon",
+   "count": 7564
+  },
+  {
+   "event_name": "homecare.view.product_detail_page",
+   "count": 6270
+  },
+  {
+   "event_name": "homecare.view.schedule_selection_page",
+   "count": 3352
+  },
+  {
+   "event_name": "homecare.view.patient_selection_page",
+   "count": 2571
+  },
+  {
+   "event_name": "homecare.click.add_to_cart_button",
+   "count": 1998
+  },
+  {
+   "event_name": "homecare.click.confirm_patient_button",
+   "count": 1726
+  },
+  {
+   "event_name": "homecare.click.confirm_cart_button",
+   "count": 1603
+  },
+  {
+   "event_name": "homecare.view.payment_page",
+   "count": 961
+  },
+  {
+   "event_name": "homecare.backend.transaction_confirmed",
+   "count": 822
+  },
+  {
+   "event_name": "homecare.backend.transaction_delivered",
+   "count": 596
+  },
+  {
+   "event_name": "homecare.click.remove_cart_item_button",
+   "count": 586
+  },
+  {
+   "event_name": "homecare.view.coupon_redemption_page",
+   "count": 270
+  }
+ ]
+}

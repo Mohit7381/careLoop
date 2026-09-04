@@ -1,0 +1,10 @@
+{
+ "done": false,
+ "findings": null,
+ "growth_ideas": null,
+ "next_question": {
+  "dimension": "region",
+  "rationale": "Play Store reports and the cluster \"customer went back from payments page\" point to a payments or app problem that could be geographically local (payment providers, app rollout, or telco stability). I expect a small number of high-volume regions to show much lower conversion from \"started a booking\" to \"chose a slot and confirmed\" than the rest; if true, that will localise the UX/payment fix to specific markets and explain a large share of the 4,804 lost bookings.",
+  "also_dimension": "referral"
+ }
+}

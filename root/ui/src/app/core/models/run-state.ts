@@ -43,6 +43,7 @@ export type VerificationStatus = 'exists' | 'absent' | 'partial' | 'not_applicab
  *  from a future journey renders rather than failing to type-check. */
 export type RoutingStage =
   | 'consultation' | 'pharmacy_checkout' | 'payments'
+  | 'homecare' | 'digital_clinic'
   | 'delivery' | 'stock' | 're_engagement'
   | (string & {});
 export type NoMatchReason = 'no_results' | 'budget_exhausted' | 'ambiguous';

@@ -1,0 +1,10 @@
+{
+ "done": false,
+ "findings": null,
+ "growth_ideas": null,
+ "next_question": {
+  "dimension": "initial_consultation",
+  "rationale": "Play Store signals and the reason clusters point at consultation / prescription flows (treatment expiry, erx expired). Cutting by whether the plan began with a doctor consultation should reveal if consultation-driven plans are failing to reach \u201cpaid for the plan\u201d because prescriptions expire or doctors/community steps leak before payment; if so, this explains a large share of the 6,319 lost creations and points to fixes in the consultation->payment handoff.",
+  "also_dimension": "service_type"
+ }
+}

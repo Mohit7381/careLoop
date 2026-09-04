@@ -1,0 +1,10 @@
+{
+ "done": false,
+ "findings": null,
+ "growth_ideas": null,
+ "next_question": {
+  "dimension": "consultation_fee",
+  "rationale": "User and artifact reasons show many plans lapsed for 'treatment expiry' and 'erx expired', and Play Store signals highlight consultation issues; I expect orders where the consultation was free will convert to paid confirmation much less often than paid consultations and could explain a large share of the 6,319 lost creations. This cut will test whether free consultations are the big leak at the 'had a treatment plan created' -> 'paid for the plan' step.",
+  "also_dimension": "payer"
+ }
+}

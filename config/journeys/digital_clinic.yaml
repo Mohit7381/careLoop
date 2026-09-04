@@ -1,0 +1,153 @@
+# Journey #4 — Haloskin / Halofit treatment plans (frozen fixture 2026-09-04; see fixtures/digital_clinic/README.md)
+name: digital_clinic
+description: Digital clinic treatment plan — from a Haloskin or Halofit plan being created to the plan being paid for and activated
+
+journey_keywords: [haloskin, halofit, "digital clinic", "digital clinics", treatment, treatments, "treatment plan", skincare, skin, diet, "weight loss", clinic, klinik, kulit, perawatan]
+
+stages:
+  - created        # a treatment plan exists for the user
+  - confirmed      # the plan was paid for
+  - activated      # the plan started
+
+maturing_stages: [activated]   # a paid plan activates on its start date
+
+drilldown_dimensions:
+  - service_type
+  - payer
+  - initial_consultation
+  - consultation_fee
+  - hour_of_day
+  - plan_type          # distribution only
+  - expiry_reason      # distribution only
+
+artifact_reasons:
+  - "handle missing expired status record"     # data-pipeline placeholder, not a user outcome
+reason_field: expiration_reason
+
+event_stage:
+  haloskin.view.service_homepage:                 created
+  haloskin.click.service_icon:                    created
+  haloskin.view.category_page:                    created
+  haloskin.view.patient_selection_page:           created
+  haloskin.click.confirm_patient_button:          created
+  haloskin.click.start_pre_consultation_button:   created
+  haloskin.click.next_form_button:                created
+  haloskin.click.submit_form_button:              created
+  haloskin.view.treatment_recommendation_page:    created
+  haloskin.click.view_product_button:             created
+  haloskin.click.view_cart_button:                created
+  haloskin.click.view_delivery_option_button:     created
+  haloskin.click.view_faq_button:                 created
+  haloskin.click.redirect_button:                 created
+  halofit.view.service_homepage:                  created
+  halofit.click.service_icon:                     created
+  halofit.view.patient_selection_page:            created
+  halofit.click.confirm_patient_button:           created
+  halofit.click.start_pre_consultation_button:    created
+  halofit.view.consent_popup:                     created
+  halofit.click.agree_consent_button:             created
+  halofit.view.pre_consultation_form_goal:        created
+  halofit.view.pre_consultation_form_current_condition: created
+  halofit.view.pre_consultation_form_medical_hist: created
+  halofit.view.pre_consultation_form_personalization: created
+  halofit.click.next_form_button:                 created
+  halofit.click.submit_form_button:               created
+  halofit.click.view_delivery_option_button:      created
+  halofit.click.redirect_button:                  created
+  halofit.view.payment_page:                      created
+  halofit.backend.transaction_confirmed:          confirmed
+
+dimension_aliases:
+  service_type:         [haloskin, halofit, skin, skincare, diet, "weight loss", service, program]
+  payer:                [cash, free, paid, "paying", payer, "payment method", bayar, gratis]
+  initial_consultation: [consultation, consult, "initial consultation", "pre-consultation", doctor, dokter, konsultasi]
+  consultation_fee:     ["free consultation", "paid consultation", fee, "consultation fee"]
+  hour_of_day:          [hour, hourly, evening, night, morning, "time of day"]
+  plan_type:            [plan, "plan type", erx, prescription, pharmacy, medicine, obat, resep]
+  expiry_reason:        [expired, expiry, expire, reason, reasons, abandoned, lapsed]
+
+# Code Scout seeds — verified against GitLab blob search 2026-09-04 (counts in fixtures/digital_clinic/README.md)
+code_hints:
+  by_stage:
+    digital_clinic:    [expire, treatment, activate, abandon]      # digital-clinic/treatment 50 / 50 / 50 / 50
+    payments:          [payment, expiry]                            # 50 / 50
+    re_engagement:     [reminder, notification]                     # 50 / 48
+    consultation:      [consultation, erx]                          # 50 / 50
+  by_dimension:
+    payer:                [payment, expire]
+    initial_consultation: [consultation, erx]
+    consultation_fee:     [payment, consultation]
+    plan_type:            [erx, treatment]
+    expiry_reason:        [expire, expired, reminder]
+
+default_routing: digital_clinic
+
+routing:
+  digital_clinic:
+    - digital-clinic/treatment
+    - digital-clinic/digital-clinic-catalog
+  payments:
+    - scrooge/payment-service
+    - digital-clinic/treatment
+  re_engagement:
+    - transformers/garuda
+    - digital-clinic/treatment
+  consultation:
+    - bintan/consultation
+
+voc:
+  app_id: com.linkdokter.halodoc.android
+  lang: id
+  country: id
+  escalation_threshold: 20
+  themes:
+    - name: treatment/results
+      routing_stage: digital_clinic
+      search_terms: [treatment, activate]
+      keywords: [hasil, "tidak ada perubahan", "tidak cocok", efek, kulit, berat, diet, program]
+    - name: consultation/doctor
+      routing_stage: consultation
+      search_terms: [consultation, erx]
+      keywords: [dokter, konsul, konsultasi, "lama membalas", resep, halofit, haloskin]
+    - name: medicine/prescription
+      routing_stage: digital_clinic
+      search_terms: [erx, expire]
+      keywords: [obat, resep, "resep expired", kadaluarsa, apotek]
+    - name: payment/refund
+      routing_stage: payments
+      search_terms: [payment_failed, refund, abandon]
+      keywords: [refund, pembayaran, bayar, "dana tidak", uang, tagihan]
+    - name: app/technical
+      routing_stage: digital_clinic
+      search_terms: [error, crash, timeout]
+      keywords: [error, aplikasi, login, otp, loading, crash, bug, update]
+    - name: price
+      routing_stage: payments
+      search_terms: [pricing, fee]
+      keywords: [mahal, harga, biaya, langganan]
+  positive_themes:
+    - name: visible_results
+      routing_stage: digital_clinic
+      keywords: [membaik, "ada perubahan", cocok, ampuh, berhasil]
+    - name: great_doctor_experience
+      routing_stage: consultation
+      keywords: [ramah, membantu, jelas, sabar, profesional]
+    - name: easy_program
+      routing_stage: digital_clinic
+      keywords: [mudah, praktis, simpel, gampang]
+    - name: good_value
+      routing_stage: payments
+      keywords: [murah, worth, terjangkau]
+
+stage_labels:
+  created:   "had a treatment plan created"
+  confirmed: "paid for the plan"
+  activated: "started the plan"
+dimension_labels:
+  service_type:         "Haloskin or Halofit"
+  payer:                "how they pay (cash or free)"
+  initial_consultation: "whether the plan began with a doctor consultation"
+  consultation_fee:     "whether that consultation was free or paid"
+  hour_of_day:          "hour of the day"
+  plan_type:            "what the plan contains"
+  expiry_reason:        "why the plan lapsed"
