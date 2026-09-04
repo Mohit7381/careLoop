@@ -22,16 +22,6 @@ class AggregateTool:
         self.calls_made = 0
 
     @property
-    def rate_bearing_dimensions(self) -> list[str]:
-        """Dimensions that carry `converted` and can therefore show a
-        conversion GAP between segments. A distribution-only cut can only say
-        "most abandons look like X", never "X converts worse than Y" — so
-        these are the only dimensions capable of producing the kind of finding
-        the whole pipeline exists to surface."""
-        return sorted(d for d in (set(self.cuts) & self.whitelist)
-                      if not self.cuts[d].get("distribution_only"))
-
-    @property
     def dimensions_with_data(self) -> list[str]:
         return sorted(set(self.cuts) & self.whitelist)
 

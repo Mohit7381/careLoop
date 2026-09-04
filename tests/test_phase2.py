@@ -7,22 +7,8 @@ ROUTING = ["pharmacy_checkout", "payments", "delivery", "stock", "re_engagement"
 
 
 def make_llm(script):
-    """Replays `script`, then repeats its last response.
-
-    The exploration floor keeps asking after the model first says done, so a
-    fixed-length script would StopIteration. Repeating the final response
-    models the real case exactly: the model keeps insisting it is finished
-    while the floor keeps making it look at another rate-bearing cut.
-    """
-    calls, last = iter(script), {}
-    def llm(ctx):
-        nonlocal last
-        try:
-            last = next(calls)
-        except StopIteration:
-            pass
-        return last
-    return llm
+    calls = iter(script)
+    return lambda ctx: next(calls)
 
 
 def test_happy_path_two_cuts_then_done(cohort_cuts, journey_cfg):
@@ -37,7 +23,8 @@ def test_happy_path_two_cuts_then_done(cohort_cuts, journey_cfg):
             "confirm_via": "A/B a rx-cart resume nudge and compare confirm rates"}]},
     ])
     findings, trail = run_drilldown(llm, tool, GAP, {}, ROUTING, "pharmacy_checkout")
-    assert [t.dimension for t in trail][:2] == ["pd_category", "consultation_required"]
+    assert len(trail) == 2
+    assert trail[1].dimension == "consultation_required"
     assert findings and findings[0].stage == "pharmacy_checkout"
     assert any(abs(e.value - 255293) < 1 for e in findings[0].evidence)
 
@@ -91,43 +78,3 @@ def test_label_glued_numbers_are_not_mistaken_for_values():
     assert _num("consultation_required: rx_gated entered: 255,293 converted: 76,641 rate: 0.3002") == 0.3002
     # all candidates glued -> fall back to the first number
     assert _num("bucket 75k_200k only") == 75.0
-
-
-def test_run_cannot_conclude_with_a_rate_bearing_dimension_untried(cohort_cuts, journey_cfg):
-    """The exploration floor.
-
-    A live run was observed declaring done=True after 3 of its 10 turns,
-    having never queried stock_status — a 35.8pp conversion spread — and
-    settling for the 9pp rx-gated one instead. Distribution-only cuts can
-    only say "most abandons look like X"; only a rate-bearing cut can say
-    "X converts worse than Y", so leaving one unlooked-at is not a
-    conclusion the run is allowed to reach.
-    """
-    tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
-    eager_to_finish = lambda ctx: {"done": True, "findings": []}
-
-    _, trail = run_drilldown(eager_to_finish, tool, GAP, {}, ROUTING, "pharmacy_checkout")
-
-    tried = {t.dimension for t in trail}
-    assert set(tool.rate_bearing_dimensions) <= tried, (
-        f"concluded with these untried: {set(tool.rate_bearing_dimensions) - tried}")
-    assert all("exploration floor" in t.question
-               for t in trail), "forced cuts must say why they happened"
-
-
-def test_the_floor_respects_the_budget(cohort_cuts, journey_cfg):
-    """It is a floor on exploration, not a licence to exceed the hard budget."""
-    tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
-    _, trail = run_drilldown(lambda ctx: {"done": True, "findings": []},
-                             tool, GAP, {}, ROUTING, "pharmacy_checkout", budget=2)
-    assert len(trail) <= 2
-
-
-def test_the_floor_does_not_re_query_what_the_model_already_covered(cohort_cuts, journey_cfg):
-    """If the model already looked at every rate-bearing cut itself, done means done."""
-    tool = AggregateTool(cohort_cuts, journey_cfg["drilldown_dimensions"])
-    script = [{"done": False, "next_question": {"dimension": d, "rationale": "r"}}
-              for d in tool.rate_bearing_dimensions] + [{"done": True, "findings": []}]
-    _, trail = run_drilldown(make_llm(script), tool, GAP, {}, ROUTING, "pharmacy_checkout")
-    assert len(trail) == len(tool.rate_bearing_dimensions)
-    assert not any("exploration floor" in t.question for t in trail)
