@@ -167,3 +167,22 @@ voc:
     - name: helpful_support
       routing_stage: re_engagement
       keywords: ["customer service", "cs ", ramah, membantu, responsif]
+
+# Plain-language labels (2026-09-04). The Analyst writes for product and ops
+# readers, not analysts: it refers to stages and cuts by these words, never by
+# identifiers or arrows, and evidence chips are rendered with them too.
+stage_labels:
+  created:   "started an order"
+  confirmed: "paid and confirmed"
+  delivered: "received the delivery"
+dimension_labels:
+  pd_category:           "product category"
+  price_band:            "order value"
+  consultation_required: "whether a prescription was needed"
+  abandon_reason:        "reason recorded for leaving"
+  hour_of_day:           "hour of the day"
+  item_count:            "number of items in the cart"
+  stock_status:          "whether all items were in stock"
+  delivery_outcome:      "delivery outcome"
+  payment_method:        "how they paid"
+  payment_funnel:        "how far they got with payment"

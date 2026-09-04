@@ -137,3 +137,19 @@ voc:
     - name: good_value
       routing_stage: payments
       keywords: [murah, worth, terjangkau]
+
+# Plain-language labels (2026-09-04) — see pd_checkout.yaml.
+stage_labels:
+  created:   "requested a consultation"
+  confirmed: "paid and confirmed"
+  started:   "doctor joined the chat"
+  completed: "consultation completed"
+dimension_labels:
+  payer:                "how they pay (cash, insurance, free)"
+  interface_type:       "device or platform"
+  consultation_trigger: "how the consultation was started"
+  delivery_channel:     "online or clinic"
+  scheduling:           "booked ahead or walk-in"
+  hour_of_day:          "hour of the day"
+  payment_method:       "how they paid"
+  payment_funnel:       "how far they got with payment"

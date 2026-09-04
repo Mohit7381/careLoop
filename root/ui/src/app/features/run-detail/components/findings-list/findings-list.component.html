@@ -5,8 +5,8 @@
         <div class="fc-top">
           <div class="rank num">#{{ f.rank }}</div>
           <span class="sev" [class]="tone(f) === 'vocc' ? 'voc' : tone(f)">{{ sevLabel(f) }}</span>
-          <span class="route mono">routes to {{ f.stage }}</span>
-          <span class="origin" [class.voc]="f.origin === 'voc'">{{ f.origin === 'voc' ? 'USER-REPORTED' : 'WAREHOUSE' }}</span>
+          <span class="route mono">{{ teamLabel(f) }}</span>
+          <span class="origin" [class.voc]="f.origin === 'voc'">{{ f.origin === 'voc' ? 'FROM APP REVIEWS' : 'FROM TRANSACTION DATA' }}</span>
         </div>
         <div class="fc-title">{{ f.hypothesis }}</div>
         <div class="fc-mag mono">{{ magnitude(f) }}</div>
@@ -17,7 +17,7 @@
         </div>
         <div class="fc-bot">
           <div class="conf" [class.med]="confLabel(f) === 'MEDIUM'">CONFIDENCE {{ confLabel(f) }}</div>
-          <div class="confirm"><b>Confirm via</b>{{ f.confirm_via }}</div>
+          <div class="confirm"><b>How to confirm</b>{{ f.confirm_via }}</div>
         </div>
       </div>
     </div>

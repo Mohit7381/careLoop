@@ -61,21 +61,30 @@ export class FindingsListComponent {
     return f.origin === 'voc' ? 'vocc' : (SEV_BY_RANK[f.rank]?.tone ?? 'med');
   }
 
+  /** "routes to consultation" meant nothing to a product reader; say who owns it. */
+  teamLabel(f: Finding): string {
+    return `for the ${f.stage.replace(/_/g, ' ')} team`;
+  }
+
   magnitude(f: Finding): string {
     if (f.origin === 'voc') {
-      return `${f.review_count ?? 0} reviews · theme: ${f.theme ?? '—'} · routed to Code Scout`;
+      return `${f.review_count ?? 0} reviews on '${f.theme ?? '—'}'`;
     }
-    return (f.segments ?? []).map((s) => `${s.dimension}=${s.value}`).join(' · ') || 'all users';
+    const segs = (f.segments ?? []).map((s) => `${s.dimension.replace(/_/g, ' ')}: ${String(s.value).replace(/_/g, ' ')}`);
+    return segs.join(' · ') || 'all users';
   }
 
   chips(f: Finding): string[] {
     if (f.origin === 'voc') {
-      return [`review_count: ${f.review_count ?? 0}`, ...(f.theme_search_terms ?? []).slice(0, 3).map((t) => `term: ${t}`)];
+      return [`${f.review_count ?? 0} reviews`, ...(f.theme_search_terms ?? []).slice(0, 3).map((t) => `code search: ${t}`)];
     }
     return (f.evidence ?? []).map((e) => this.chipText(e));
   }
 
+  /** Prefer the backend's plain-words label; the raw row stays available as the
+   *  chip's title for anyone who wants to audit the exact number. */
   private chipText(e: EvidenceItem): string {
+    if (e.label && e.label !== e.metric) return e.label;
     const val = e.value % 1 === 0 ? e.value.toLocaleString('en-US') : e.value.toFixed(1);
     return `${e.metric}: ${val}`;
   }

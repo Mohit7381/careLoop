@@ -54,8 +54,9 @@ export interface SegmentFilter {
 
 export interface EvidenceItem {
   type: string; // e.g. "snapshot", "drilldown"
-  metric: string;
+  metric: string;    // the raw row the model cited — audit trail
   value: number;
+  label?: string;    // the same fact in plain words (backend plain_language.py); show this when present
 }
 
 /** Output of Agent 2 (Analyst). Consumed by Agent 3 (Code Scout).
