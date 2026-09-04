@@ -56,6 +56,7 @@ class RunDetailResponse(BaseModel):
     voc: dict[str, Any]
     scope: Optional[dict[str, Any]] = None
     drilldown_trail: list[dict[str, Any]]
+    findings_rejected: list[dict[str, Any]] = []
     artifacts: list[dict[str, Any]]
     report_markdown: Optional[str] = None
     prd_markdown: Optional[str] = None

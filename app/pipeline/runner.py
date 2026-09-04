@@ -116,6 +116,7 @@ def run_pipeline(
         run.code_gaps = final_state.get("code_gaps", [])
         run.voc = final_state.get("voc", {})
         run.drilldown_trail = final_state.get("drilldown_trail", [])
+        run.findings_rejected = final_state.get("findings_rejected", [])
         session.commit()
     except Exception:
         logger.exception("run %s failed", run_id)

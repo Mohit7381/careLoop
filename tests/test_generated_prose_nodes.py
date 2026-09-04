@@ -33,8 +33,8 @@ def test_narrative_uses_the_model_when_every_sentence_cites_a_row(reporter_state
     seen = {}
 
     def llm(ctx):
-        seen["rows"] = ctx["delta_rows"]
-        row = ctx["delta_rows"][0]
+        seen["rows"] = ctx["delta_table"]
+        row = ctx["delta_table"][0]
         return {"narrative_lines": [
             {"text": f"Conversion at '{row['stage']}' moved {row['delta_pp']}pp.",
              "delta_ref": row["id"]}]}
@@ -56,7 +56,7 @@ def test_a_sentence_citing_an_unknown_row_is_refused(reporter_state):
 
 def test_a_narrative_with_an_invented_number_is_refused(reporter_state):
     def llm(ctx):
-        row = ctx["delta_rows"][0]
+        row = ctx["delta_table"][0]
         return {"narrative_lines": [
             {"text": "That is roughly 91,428 orders a week.", "delta_ref": row["id"]}]}
     out = reporter_node(reporter_state, llm=llm)

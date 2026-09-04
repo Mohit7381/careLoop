@@ -28,6 +28,7 @@ class GraphState(TypedDict, total=False):
     snapshot: dict[str, Any]           # Agent 1 (Fetcher) — Alief
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
     drilldown_trail: list[dict[str, Any]]
+    findings_rejected: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]    # Agent 3 (Code Scout) — Harshit
     trend_report: dict[str, Any]       # Reporter — Mohit
     voc: dict[str, Any]
@@ -61,6 +62,7 @@ def initial_state(
         snapshot={},
         findings=[],
         drilldown_trail=[],
+        findings_rejected=[],
         code_gaps=[],
         trend_report={},
         voc={},

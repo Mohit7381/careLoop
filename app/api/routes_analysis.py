@@ -176,6 +176,7 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
         code_gaps=run.code_gaps,
         voc=run.voc,
         drilldown_trail=run.drilldown_trail,
+        findings_rejected=run.findings_rejected or [],
         artifacts=[{"kind": a.kind, "uri": a.uri} for a in run.artifacts],
         report_markdown=_read_artifact(run, "report_md"),
         prd_markdown=_read_artifact(run, "prd_md"),

@@ -204,7 +204,7 @@ def _narrative_llm(llm: LLMCall, rows: list[dict]) -> tuple[str, str]:
     if not rows:
         return "", "no_deltas"
     try:
-        out = llm({"delta_rows": rows})
+        out = llm({"delta_table": rows})   # template 21690 renders {delta_table}
     except Exception as exc:                       # first-ever caller of 21690
         logger.warning("trend-narrative call failed (%s) — deterministic narrative", exc)
         return "", f"llm_error:{type(exc).__name__}"

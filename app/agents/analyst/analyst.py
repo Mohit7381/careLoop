@@ -107,6 +107,7 @@ def run_analyst(state: RunState,
         state.voc = voc
 
     state.findings = kept + voc_findings
+    state.findings_rejected = rejected
     state.drilldown_trail = trail
     state.status = "scanning_code"
     return state

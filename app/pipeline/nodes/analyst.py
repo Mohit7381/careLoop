@@ -39,8 +39,11 @@ def _sphere_llm() -> Any:
     client = SphereClient(mode="sphere", service_type=settings.sphere_platform_service_type)
 
     def llm(ctx: dict) -> dict:
-        params = {k: (json.dumps(v) if isinstance(v, (dict, list)) else str(v)) for k, v in ctx.items()}
-        return client.call(settings.llm_use_case_funnel_dropoff, template_id, params)
+        # Template 21687 renders exactly one placeholder, {analysis_context}.
+        # Flattening ctx into per-key params rendered an EMPTY prompt on the
+        # first live API run; the model said so in its own reply.
+        return client.call(settings.llm_use_case_funnel_dropoff, template_id,
+                           {"analysis_context": json.dumps(ctx)})
 
     return llm
 

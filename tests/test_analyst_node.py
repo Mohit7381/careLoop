@@ -57,3 +57,21 @@ def test_golden_run(cohort_cuts, reviews):
     assert out.drilldown_trail and out.drilldown_trail[0].dimension == "consultation_required"
     assert out.status == "scanning_code"
     assert out.voc.reviews_meta["negatives"] == 92
+
+
+def test_rejected_findings_are_reported_not_swallowed(cohort_cuts, reviews):
+    """A live run once ended with zero warehouse findings and no explanation:
+    the model's only finding cited prose, the gate dropped it, nothing recorded
+    that. The rejection and its reason now travel with the run."""
+    import json
+    from app.schemas.contracts import RunState, Snapshot
+    state = RunState(run_id=1, journey="pd_checkout", window_start="a", window_end="b",
+                     status="analyzing",
+                     snapshot=Snapshot(**json.loads((FIX / "snapshot.json").read_text())))
+    llm = lambda ctx: {"done": True, "findings": [{
+        "hypothesis": "insufficient data", "stage": "insufficient-data", "confidence": "low",
+        "evidence": ["No funnel aggregates were provided."],
+        "confirm_via": "provide the aggregates and re-run the analysis"}]}
+    out = run_analyst(state, llm=llm, cohort_cuts=cohort_cuts, reviews=reviews)
+    assert not [f for f in out.findings if f.origin == "warehouse"]
+    assert out.findings_rejected and "no evidence" in out.findings_rejected[0]["reason"]

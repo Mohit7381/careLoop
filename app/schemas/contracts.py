@@ -362,6 +362,10 @@ class RunState(BaseModel):
 
     snapshot: Snapshot = Field(default_factory=Snapshot)
     findings: list[Finding] = Field(default_factory=list)
+    # Findings the evidence gate refused, with the reason. A run that ends with
+    # zero warehouse findings must be able to say why — a live run once dropped
+    # its only finding ("insufficient data", prose evidence) in total silence.
+    findings_rejected: list[dict[str, Any]] = Field(default_factory=list)
     drilldown_trail: list[DrilldownStep] = Field(default_factory=list)
     code_gaps: list[CodeGap] = Field(default_factory=list)
     suggestions: list[Suggestion] = Field(default_factory=list)  # decision #11

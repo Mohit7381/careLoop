@@ -11,6 +11,34 @@ from pathlib import Path
 from typing import Any, Optional
 
 SPHERE_BASE = os.environ.get("SPHERE_BASE_URL", "http://sphere-platform.stage-k8s.halodoc.com")
+# The single parameter each template's user_message renders. Sphere substitutes
+# only the placeholder the template names; every other key is silently ignored
+# and the prompt renders EMPTY. A live run went exactly that way — the model
+# replied "analysis_context is empty" and the run produced zero findings with
+# no error anywhere. call() now refuses a mismatched key instead.
+TEMPLATE_PARAM: dict[str, str] = {
+    "funnel-hypothesis-generation": "analysis_context",
+    "voc-theme-classification":     "reviews_batch",
+    "code-gap-assessment":          "code_context",
+    "trend-narrative":              "delta_table",
+    "prd-generation":               "prd_inputs",
+}
+
+
+class TemplateParamError(ValueError):
+    """The caller sent keys the template cannot render."""
+
+
+def _check_params(use_case: str, params: dict[str, Any]) -> None:
+    expected = TEMPLATE_PARAM.get(use_case)
+    if expected is None:
+        return
+    if set(params) != {expected}:
+        raise TemplateParamError(
+            f"{use_case}: template renders only {{{expected}}} but caller sent "
+            f"{sorted(params)} — the prompt would be empty")
+
+
 def _app_token() -> str:
     """Shell env wins; otherwise the .env-backed settings.
 
@@ -45,6 +73,7 @@ class SphereClient:
         return self._live(use_case, template_id, params)
 
     def _live(self, use_case: str, template_id: int, params: dict[str, str]) -> dict[str, Any]:
+        _check_params(use_case, params)
         body = {
             "service_type": self.service_type,
             "use_case": use_case,
@@ -104,8 +133,15 @@ def make_use_case_llm(use_case: str, demo_mode: bool):
         client = SphereClient(mode="replay")
 
     def llm(ctx: dict[str, Any]) -> dict[str, Any]:
-        params = {k: (json.dumps(v) if isinstance(v, (dict, list)) else str(v))
-                  for k, v in ctx.items()}
+        key = TEMPLATE_PARAM.get(use_case)
+        if key and set(ctx) == {key}:
+            value = ctx[key]
+            params = {key: json.dumps(value) if isinstance(value, (dict, list)) else str(value)}
+        elif key:
+            params = {key: json.dumps(ctx)}       # whole context under the one placeholder
+        else:
+            params = {k: (json.dumps(v) if isinstance(v, (dict, list)) else str(v))
+                      for k, v in ctx.items()}
         return client.call(use_case, template_id, params)
 
     return llm
