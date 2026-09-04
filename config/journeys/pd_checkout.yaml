@@ -13,15 +13,20 @@ maturing_stages:   # right-censored — Reporter labels, never raw-compares (App
   - delivered
 
 # Analyst phase-2 drill-down whitelist (aggregate() rejects anything else)
+# Every dimension listed here MUST have data in fixtures/{journey}/cohort_cuts.json.
+# `platform` was removed 2026-09-03: the only device columns live on the event
+# fact (device_manufacturer/os_version), which is the wrong grain to compute a
+# per-transaction conversion rate from — advertising a dimension the tool can
+# only answer with no_data wastes a drill-down turn.
 drilldown_dimensions:
   - pd_category
   - price_band
   - consultation_required
   - abandon_reason
-  - platform
   - hour_of_day
   - item_count
   - stock_status
+  - delivery_outcome
 
 # Recorded-reason handling (phase 1)
 artifact_reasons:          # re-creation artifacts, excluded from user-abandonment rates
