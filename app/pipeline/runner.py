@@ -47,6 +47,12 @@ def _persist_findings(session: Session, run_id: int, findings: list[dict]) -> No
                 evidence=f["evidence"],
                 confidence=f["confidence"],
                 confirm_via=f["confirm_via"],
+                journey_events=f.get("journey_events", []),
+                drilldown_ref=f.get("drilldown_ref"),
+                theme=f.get("theme"),
+                theme_search_terms=f.get("theme_search_terms", []),
+                review_count=f.get("review_count"),
+                top_quotes=f.get("top_quotes", []),
             )
         )
 
