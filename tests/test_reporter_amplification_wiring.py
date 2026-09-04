@@ -9,7 +9,7 @@ from app.schemas.contracts import CodeGap, Finding, Remedy, ShippedCommit, Shipp
 
 def _shipped_fix_dict() -> dict:
     return ShippedFix(
-        finding_rank=1, origin="warehouse", stage="created", repo="timor/oms",
+        finding_rank=1, origin="warehouse", stage="pharmacy_checkout", repo="timor/oms",
         remedy_proposal="Retention push before final abandon",
         evidence_file="Retention.java", evidence_line=42,
         commit=ShippedCommit(sha="abc123def456", short_sha="abc123de", author="jdoe",
@@ -20,6 +20,7 @@ def _shipped_fix_dict() -> dict:
 def _base_state() -> dict:
     state = initial_state(run_id=1, window_start="2026-08-01", window_end="2026-08-30", demo_mode=True)
     state["journey"] = "pd_checkout"
+    state["top_gap_to_stage"] = "created"
     state["snapshot"] = {
         "stages": [{"stage": "created", "dimension": "all", "segment": "all", "entered": 1000, "converted": 600, "suppressed": False}],
         "previous_stages": [{"stage": "created", "dimension": "all", "segment": "all", "entered": 1000, "converted": 500, "suppressed": False}],

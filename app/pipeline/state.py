@@ -30,6 +30,7 @@ class GraphState(TypedDict, total=False):
     reviews: list[dict[str, Any]]      # Agent 1 (Fetcher) — Alief; PII-scrubbed Play Store reviews
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
     growth_ideas: list[dict[str, Any]]  # Agent 2 (Analyst) — Nakul; phase 2's concluding-turn output
+    top_gap_to_stage: Optional[str]    # Agent 2 (Analyst) — Nakul; the funnel stage every finding this run is about
     drilldown_trail: list[dict[str, Any]]
     findings_rejected: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]    # Agent 3 (Code Scout) — Harshit
@@ -73,6 +74,7 @@ def initial_state(
         reviews=[],
         findings=[],
         growth_ideas=[],
+        top_gap_to_stage=None,
         drilldown_trail=[],
         findings_rejected=[],
         code_gaps=[],

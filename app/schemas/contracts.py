@@ -500,6 +500,14 @@ class RunState(BaseModel):
     findings_rejected: list[dict[str, Any]] = Field(default_factory=list)
     drilldown_trail: list[DrilldownStep] = Field(default_factory=list)
     growth_ideas: list[GrowthIdea] = Field(default_factory=list)  # phase 2's concluding-turn output
+    # PR #22 review (Nakul): the funnel stage (created/confirmed/delivered)
+    # phase1.largest_drop() actually investigated this run - every cohort
+    # cut in drilldown_trail is taken at this exact stage, so every finding
+    # in the run is about it, regardless of which routing category (a
+    # DIFFERENT vocabulary - see Finding.stage) it got filed under. Reporter
+    # needs the real funnel vocabulary to match a ShippedFix against a
+    # StageDelta; a routing category can never equal a funnel stage name.
+    top_gap_to_stage: Optional[str] = None
     code_gaps: list[CodeGap] = Field(default_factory=list)
     suggestions: list[Suggestion] = Field(default_factory=list)  # decision #11
     shipped_fixes: list[ShippedFix] = Field(default_factory=list)  # closed-loop impact (2026-09-04)

@@ -52,35 +52,44 @@ class LiveGitlabCommitHistoryClient:
     def __init__(self, host: str, token: str):
         self.host = host.rstrip("/")
         self.token = token
-        self._project_id_cache: dict[str, int] = {}
+        self._project_cache: dict[str, tuple[int, str]] = {}  # repo -> (id, default_branch)
 
     def _headers(self) -> dict[str, str]:
         return {"PRIVATE-TOKEN": self.token}
 
-    def _project_id(self, repo: str) -> Optional[int]:
-        if repo in self._project_id_cache:
-            return self._project_id_cache[repo]
+    def _project(self, repo: str) -> Optional[tuple[int, str]]:
+        """(project_id, default_branch) — PR #22 review (Nakul): blame_line()
+        used to hardcode ref="master", which happens to be correct for the
+        four repos routed today but silently 404s (blame_line degrades to
+        None, not a crash) the moment one defaults to main/develop. GitLab's
+        own project response already carries default_branch; cache it
+        alongside the id instead of a second call."""
+        if repo in self._project_cache:
+            return self._project_cache[repo]
         try:
             resp = requests.get(
                 f"{self.host}/api/v4/projects/{quote(repo, safe='')}",
                 headers=self._headers(), timeout=10,
             )
             resp.raise_for_status()
-            project_id = resp.json()["id"]
+            body = resp.json()
+            project_id = body["id"]
+            default_branch = body.get("default_branch") or "master"
         except (requests.RequestException, ValueError, KeyError) as exc:
             logger.warning("commit-history project lookup failed for %r: %s", repo, exc)
             return None
-        self._project_id_cache[repo] = project_id
-        return project_id
+        self._project_cache[repo] = (project_id, default_branch)
+        return project_id, default_branch
 
     def blame_line(self, repo: str, file: str, line: int) -> Optional[ShippedCommit]:
-        project_id = self._project_id(repo)
-        if project_id is None:
+        project = self._project(repo)
+        if project is None:
             return None
+        project_id, default_branch = project
         try:
             resp = requests.get(
                 f"{self.host}/api/v4/projects/{project_id}/repository/files/{quote(file, safe='')}/blame",
-                headers=self._headers(), params={"ref": "master"}, timeout=15,
+                headers=self._headers(), params={"ref": default_branch}, timeout=15,
             )
             resp.raise_for_status()
             hunks = resp.json()

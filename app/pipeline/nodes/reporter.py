@@ -140,7 +140,8 @@ def _voc_theme_deltas(themes: list[dict]) -> list[VocThemeDelta]:
 
 
 def _measure_shipped_impact(
-    fix: dict, deltas: list[StageDelta], adoption: list[AdoptionDelta], events_by_rank: dict[int, set]
+    fix: dict, deltas: list[StageDelta], adoption: list[AdoptionDelta], events_by_rank: dict[int, set],
+    top_gap_to_stage: Optional[str],
 ) -> dict:
     """Attaches a metric to a ShippedFix from a trend delta already computed
     above. Code Scout (app.agents.code_scout.impact) only ever supplies the
@@ -151,6 +152,17 @@ def _measure_shipped_impact(
     more literal "number of units" reading — e.g. a retention-push count)
     over the funnel stage's conversion rate; returns {} rather than pick an
     unrelated row when neither has a usable prior-window value.
+
+    PR #22 review (Nakul): the conversion-rate branch used to compare
+    `d.stage == fix["stage"]` — but StageDelta.stage is a FUNNEL stage
+    (created/confirmed/delivered, from Fetcher's snapshot rows) while
+    ShippedFix.stage is the finding's ROUTING CATEGORY (pharmacy_checkout/
+    payments/…, a different vocabulary entirely) — they can never be equal,
+    so this branch was dead code. Every finding in a run is about the same
+    funnel transition (every cohort cut in drilldown_trail is taken at
+    top_gap.to_stage — see phase2.run_drilldown), so that — not the
+    routing category — is the right funnel-vocabulary value to compare
+    a StageDelta against.
     """
     events = events_by_rank.get(fix["finding_rank"], set())
     for a in adoption:
@@ -161,14 +173,15 @@ def _measure_shipped_impact(
                 "previous_value": float(a.previous_count), "current_value": float(a.current_count),
                 "pct_change": pct, "metric_ref": f"adoption:{a.feature}",
             }
-    for d in deltas:
-        if d.stage == fix["stage"] and not d.maturing and d.previous_rate > 0:
-            pct = round((d.current_rate - d.previous_rate) / d.previous_rate * 100, 1)
-            return {
-                "metric_name": f"conversion rate at '{d.stage}'", "metric_unit": "%",
-                "previous_value": round(d.previous_rate * 100, 2), "current_value": round(d.current_rate * 100, 2),
-                "pct_change": pct, "metric_ref": f"stage:{d.stage}",
-            }
+    if top_gap_to_stage is not None:
+        for d in deltas:
+            if d.stage == top_gap_to_stage and not d.maturing and d.previous_rate > 0:
+                pct = round((d.current_rate - d.previous_rate) / d.previous_rate * 100, 1)
+                return {
+                    "metric_name": f"conversion rate at '{d.stage}'", "metric_unit": "%",
+                    "previous_value": round(d.previous_rate * 100, 2), "current_value": round(d.current_rate * 100, 2),
+                    "pct_change": pct, "metric_ref": f"stage:{d.stage}",
+                }
     return {}
 
 
@@ -296,8 +309,9 @@ def reporter_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> GraphS
     voc_deltas = _voc_theme_deltas(state["voc"].get("themes", []))
 
     events_by_rank = {f["rank"]: set(f.get("journey_events") or []) for f in state.get("findings", [])}
+    top_gap_to_stage = state.get("top_gap_to_stage")
     shipped_models = [
-        ShippedFix(**{**fix, **_measure_shipped_impact(fix, deltas, adoption, events_by_rank)})
+        ShippedFix(**{**fix, **_measure_shipped_impact(fix, deltas, adoption, events_by_rank, top_gap_to_stage)})
         for fix in state.get("shipped_fixes", [])
     ]
     shipped_fixes = [sf.model_dump() for sf in shipped_models]

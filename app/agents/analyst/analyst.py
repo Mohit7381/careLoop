@@ -6,6 +6,7 @@ writes state.findings / state.drilldown_trail / state.voc. Fails loudly:
 any exception marks the run failed with failed_stage="analyzing" upstream.
 """
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -16,12 +17,36 @@ from app.agents.analyst.journey_events import journey_events_for
 from app.agents.analyst.phase2 import run_drilldown
 from app.agents.analyst import phase3_voc
 from app.agents.analyst.phase3_voc import corroborate, correlate_with_llm, run_voc
-from app.agents.analyst.semantic_voc import classify_reviews
+from app.agents.analyst.semantic_voc import POSITIVE_MIN_SCORE, classify_reviews
 from app.agents.analyst.validator import collect_numbers, filter_findings
 from app.journeys import load_journey
 from app.schemas.contracts import RunState, validate_routing_stage
 
+logger = logging.getLogger(__name__)
+
 FIXTURES = Path("fixtures")
+
+# PR #22 review (Nakul): on the fixture corpus, 499 of 600 reviews score >= 4
+# - 25 batches at BATCH_SIZE=20, 5 sequential rounds at PARALLEL_BATCHES=5,
+# ~200s, dwarfing the ~40s (1 round) the complaint pass has always cost.
+# Running the two passes concurrently (below) stopped them ADDING, but the
+# positive pass's own 5-round cost was still the Analyst's new critical path.
+# Capping the sample to the most-recent reviews - plenty to ground a growth
+# idea - brings it to the same 1-round scale as the complaint pass.
+MAX_POSITIVE_SAMPLE = 60
+
+
+def _score(review: dict) -> int:
+    try:
+        return int(review.get("score", 5))
+    except (TypeError, ValueError):
+        return 5
+
+
+def _most_recent_positive(reviews: list[dict], limit: int = MAX_POSITIVE_SAMPLE) -> list[dict]:
+    positive = [r for r in reviews if _score(r) >= POSITIVE_MIN_SCORE]
+    positive.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
+    return positive[:limit]
 
 
 def _default_routing_for_gap(gap: dict, journey_cfg: dict) -> str:
@@ -86,33 +111,41 @@ def run_analyst(state: RunState,
     if reviews:
         reviews, window_meta = phase3_voc.filter_by_days(reviews, state.scope.review_days)
         positive_themes_cfg = cfg["voc"].get("positive_themes") or []
+        # Sampled, not the full positive set - see MAX_POSITIVE_SAMPLE above
+        # (PR #22 review: 499 of 600 reviews on the fixture score >= 4, which
+        # is 5x the complaint pass's own batch count for a signal that only
+        # grounds an optional growth idea, never a Finding).
+        positive_sample = _most_recent_positive(reviews) if positive_themes_cfg else []
 
         # Negative and positive classification are fully independent (different
-        # taxonomies, different score bands) - run them CONCURRENTLY. They used
-        # to be the only classification pass; running the new positive one
-        # sequentially after it would silently double this stage's worst-case
-        # live-LLM wall-clock time (each batch can take up to ~180s against
-        # real sphere-platform - see sphere.py's polling ceiling), which reads
-        # as "the analysing stage is running but nothing is happening" for
-        # however long the now-serialized second pass takes (2026-09-04 bug
-        # report). classify_reviews() already runs its own batches concurrently
-        # via a ThreadPoolExecutor internally - nesting one more level here is
-        # safe because sphere calls carry no shared mutable state in live mode.
+        # taxonomies, different score bands, and now different-sized inputs) -
+        # run them CONCURRENTLY rather than sequentially, so the optional pass
+        # never adds to the mandatory one's wall-clock time.
         def _classify_negative():
             return classify_reviews(voc_llm, reviews, cfg["voc"]["themes"], phase3_voc.classify_review,
                                     scope_hint=state.scope.prompt)
 
         def _classify_positive():
-            if not positive_themes_cfg:
+            if not positive_sample:
                 return [], {}
-            return classify_reviews(voc_llm, reviews, positive_themes_cfg, phase3_voc.classify_review,
+            return classify_reviews(voc_llm, positive_sample, positive_themes_cfg, phase3_voc.classify_review,
                                     scope_hint=state.scope.prompt, polarity="positive")
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             negative_future = pool.submit(_classify_negative)
             positive_future = pool.submit(_classify_positive)
             themes_per_review, voc_meta = negative_future.result()
-            positive_per_review, _positive_meta = positive_future.result()
+            # PR #22 review (Nakul): praise classification is grounding for
+            # growth_ideas, never load-bearing - it must never take the
+            # mandatory complaint pass and the whole funnel analysis down
+            # with it. classify_reviews() already guards each SPHERE BATCH
+            # internally; this guards everything else that can go wrong
+            # around it (a malformed positive_themes_cfg entry, for example).
+            try:
+                positive_per_review, _positive_meta = positive_future.result()
+            except Exception as exc:
+                logger.warning("positive VoC pass failed (%s) — continuing without praise signals", exc)
+                positive_per_review, _positive_meta = [], {}
 
         voc_findings, voc = run_voc(reviews, cfg["voc"], 1,
                                     themes_per_review=themes_per_review,
@@ -122,9 +155,9 @@ def run_analyst(state: RunState,
         # Never escalates into a Finding — see phase3_voc.run_positive_voc —
         # this exists purely as growth_ideas' second real grounding source
         # (what users already love), alongside top_strength.
-        if positive_themes_cfg:
+        if positive_sample:
             positive_voc_signals = phase3_voc.run_positive_voc(
-                reviews, positive_themes_cfg, themes_per_review=positive_per_review)
+                positive_sample, positive_themes_cfg, themes_per_review=positive_per_review)
     voc_signals = [{"theme": t["theme"], "count": t["count"], "escalated": t["escalated"]}
                    for t in (voc.themes if voc else []) if t["theme"] != "unmapped"]
 
@@ -176,5 +209,6 @@ def run_analyst(state: RunState,
     state.findings_rejected = rejected
     state.drilldown_trail = trail
     state.growth_ideas = growth_ideas
+    state.top_gap_to_stage = (gap or {}).get("to_stage")
     state.status = "scanning_code"
     return state
