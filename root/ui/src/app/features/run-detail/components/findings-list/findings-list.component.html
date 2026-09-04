@@ -1,5 +1,5 @@
 <div class="findings">
-  @for (f of sorted(); track f.rank) {
+  @for (f of cards(); track f.rank) {
     <div class="fcard" [class]="tone(f)">
       <div class="fc-in">
         <div class="fc-top">
@@ -30,5 +30,10 @@
     @if (hasQuotes(f.rank)) {
       <app-voc-panel [voc]="voc()" [findingRank]="f.rank" [theme]="f.theme ?? null" />
     }
+  }
+
+  <!-- Quotes belonging to USER-REPORTED findings, whose cards are hidden. -->
+  @for (f of quoteOnly(); track f.rank) {
+    <app-voc-panel [voc]="voc()" [findingRank]="f.rank" [theme]="f.theme ?? null" />
   }
 </div>
