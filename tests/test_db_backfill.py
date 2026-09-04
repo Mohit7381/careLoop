@@ -31,17 +31,31 @@ def test_old_run_artifacts_shape_is_upgraded(tmp_path, monkeypatch):
     base.init_db()                                     # idempotent
 
 
-def test_legacy_prd_artifact_without_rank_is_served_as_rank_1(tmp_path):
+def test_legacy_prd_artifact_without_rank_is_served_as_rank_1(tmp_path, monkeypatch):
     """A prd_md artifact row from before #6 (finding_rank NULL) must not make
-    GET /runs/{id} fail validation; it is the #1 finding's PRD."""
+    GET /runs/{id} fail validation; it is the #1 finding's PRD.
+
+    Runs against a throwaway SQLite file: the engine and every module-level
+    SessionLocal are swapped for the test, so nothing is written to the
+    developer's careloop.db (an earlier version of this test left a
+    completed 0-finding run behind on every pytest invocation)."""
+    import sys
     from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
     from app.db import models
-    from app.db.base import SessionLocal, init_db
     from app.main import app
 
-    init_db()
+    engine = create_engine(f"sqlite:///{tmp_path / 'api.db'}", connect_args={"check_same_thread": False}, future=True)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    monkeypatch.setattr(base, "engine", engine)
+    for name, mod in list(sys.modules.items()):
+        if name.startswith("app") and getattr(mod, "SessionLocal", None) is base.SessionLocal:
+            monkeypatch.setattr(mod, "SessionLocal", Session)
+    base.init_db()
+
     prd = tmp_path / "prd.md"; prd.write_text("# legacy prd")
-    with SessionLocal() as s:
+    with Session() as s:
         run = models.AnalysisRun(journey="pd_checkout", window_start="2026-08-01", window_end="2026-08-07",
                                  status="completed")
         s.add(run); s.flush()
