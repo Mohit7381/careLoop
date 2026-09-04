@@ -53,7 +53,10 @@ export class PrdDrawerComponent {
     const summary = this.run().prds.find((p) => p.finding_rank === rank);
     if (summary?.title) return summary.title;
     const finding = this.run().findings.find((f) => f.rank === rank);
-    if (finding) return finding.hypothesis.split('.')[0].slice(0, 90);
+    // Split on a sentence boundary, not on '.': hypotheses are full of
+    // decimals ("converts at 0.3002 versus 0.3904"), and a bare split left
+    // the card reading "…converts at 0".
+    if (finding) return finding.hypothesis.split(/(?<=[.!?])\s+(?=[A-Z])/)[0].slice(0, 90);
     return `Finding #${rank}`;
   }
 

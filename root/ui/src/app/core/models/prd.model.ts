@@ -106,38 +106,135 @@ function buildRequirements(run: RunState, rank?: number): [string, string][] {
 }
 
 /**
- * Minimal markdown -> HTML for rendering the PRD Generator's real markdown
- * artifact (prd_generator.py's `_render_prd_llm_stub`, via templates/
- * prd_template.md) in the drawer instead of only ever reconstructing a
- * structured view from findings/code_gaps. Escapes first so this is safe to
- * bind with [innerHTML] even though the source is server-generated text
- * that itself interpolates finding hypotheses and VoC quotes. Only covers
- * what that template actually emits — headings, bold, inline code,
- * blockquotes, bullet lists, and paragraphs — not general-purpose markdown.
+ * Markdown -> HTML for the PRD Generator's real artifact, rendered in the
+ * drawer's section bodies.
+ *
+ * Escapes first, so this is safe to bind with [innerHTML] even though the
+ * source is server-generated text that interpolates finding hypotheses and
+ * VoC quotes.
+ *
+ * Scope is what the PRDs actually contain. That grew: the deterministic
+ * template only ever emitted headings, bold, inline code, blockquotes and
+ * flat bullets, but prompts/prd-generation.system.md asks the model for
+ * "a short table" in Section 2, "acceptance criteria as checkboxes" in
+ * Section 3, "a table of every unverified assumption" in Section 8 and
+ * says to "prefer a table row over a paragraph". Rendered by the old
+ * paragraph-splitting version, those came out as literal pipes, bracketed
+ * boxes and flattened lists — exactly the broken-markup look this renderer
+ * exists to prevent. It is line-scanning now rather than a chain of
+ * regexes, because tables and nesting need to consume several lines.
  */
 export function renderPrdMarkdown(md: string): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  let html = esc(md);
+  const inline = (s: string) =>
+    esc(s)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
 
-  html = html
-    .replace(/^#### (.*)$/gm, '<h5>$1</h5>')
-    .replace(/^### (.*)$/gm, '<h4>$1</h4>')
-    .replace(/^## (.*)$/gm, '<h3>$1</h3>')
-    .replace(/^# (.*)$/gm, '<h2>$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/^&gt; (.*)$/gm, '<blockquote>$1</blockquote>');
+  const isRow = (l: string) => /^\s*\|.*\|\s*$/.test(l);
+  const isRule = (l: string) => /^\s*\|[\s:|-]+\|\s*$/.test(l);
+  const cells = (l: string) =>
+    l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
 
-  html = html.replace(/^- (.*)$/gm, '<li>$1</li>');
-  html = html.replace(/(?:<li>.*<\/li>\n?)+/g, (block) => `<ul>${block}</ul>`);
+  const lines = (md ?? '').split('\n');
+  const out: string[] = [];
+  let i = 0;
 
-  return html
-    .split(/\n{2,}/)
-    .map((block) => {
-      const trimmed = block.trim();
-      if (!trimmed) return '';
-      if (/^<(h\d|ul|blockquote)/.test(trimmed)) return trimmed;
-      return `<p>${trimmed.replace(/\n/g, '<br>')}</p>`;
-    })
-    .join('\n');
+  while (i < lines.length) {
+    const line = lines[i];
+
+    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (heading) {
+      const level = Math.min(heading[1].length + 1, 5);
+      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    /* A table needs its header rule on the next line; a lone piped line is
+       prose and stays prose. */
+    if (isRow(line) && i + 1 < lines.length && isRule(lines[i + 1])) {
+      const head = cells(line);
+      i += 2;
+      const body: string[][] = [];
+      while (i < lines.length && isRow(lines[i])) {
+        body.push(cells(lines[i]));
+        i++;
+      }
+      out.push(
+        '<table><thead><tr>' +
+          head.map((c) => `<th>${inline(c)}</th>`).join('') +
+          '</tr></thead><tbody>' +
+          body.map((r) => '<tr>' + r.map((c) => `<td>${inline(c)}</td>`).join('') + '</tr>').join('') +
+          '</tbody></table>'
+      );
+      continue;
+    }
+
+    if (/^\s*&gt;|^\s*>/.test(esc(line))) {
+      const quoted: string[] = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) {
+        quoted.push(inline(lines[i].replace(/^\s*>\s?/, '')));
+        i++;
+      }
+      out.push(`<blockquote>${quoted.join('<br>')}</blockquote>`);
+      continue;
+    }
+
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items: { depth: number; html: string }[] = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        const m = /^(\s*)[-*]\s+(.*)$/.exec(lines[i]);
+        if (!m) break;
+        const depth = Math.min(Math.floor(m[1].length / 2), 4);
+        const task = /^\[([ xX])\]\s*(.*)$/.exec(m[2]);
+        const text = task ? task[2] : m[2];
+        const box = task ? `<span class="task">${task[1].trim() ? '\u2611' : '\u2610'}</span> ` : '';
+        items.push({ depth, html: box + inline(text) });
+        i++;
+      }
+      out.push(renderList(items).html);
+      continue;
+    }
+
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
+
+    const para: string[] = [];
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^(#{1,4}\s|\s*[-*]\s|\s*>|\s*\|)/.test(lines[i])
+    ) {
+      para.push(inline(lines[i]));
+      i++;
+    }
+    out.push(`<p>${para.join('<br>')}</p>`);
+  }
+
+  return out.join('\n');
+}
+
+/** Indentation-aware nesting. Two spaces per level, matching what the model
+ *  emits; deeper indents are clamped so a stray tab cannot run away.
+ *
+ *  A sub-list is nested INSIDE its parent <li>, not emitted as a sibling of
+ *  it — `<ul><li>a</li><ul>…</ul></ul>` is invalid and leaves the sanitiser
+ *  to decide what it means. */
+function renderList(items: { depth: number; html: string }[], start = 0, depth = 0): { html: string; next: number } {
+  let html = '<ul>';
+  let i = start;
+  while (i < items.length && items[i].depth >= depth) {
+    if (items[i].depth > depth) {
+      const sub = renderList(items, i, items[i].depth);
+      html = html.replace(/<\/li>$/, `${sub.html}</li>`);
+      i = sub.next;
+      continue;
+    }
+    html += `<li>${items[i].html}</li>`;
+    i++;
+  }
+  return { html: html + '</ul>', next: i };
 }
