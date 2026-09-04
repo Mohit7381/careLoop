@@ -29,3 +29,25 @@ def test_old_run_artifacts_shape_is_upgraded(tmp_path, monkeypatch):
         row = conn.exec_driver_sql("SELECT run_id, kind, edited FROM run_artifacts").fetchone()
     assert tuple(row) == (1, "report_md", 0)          # old rows survive, default applied
     base.init_db()                                     # idempotent
+
+
+def test_legacy_prd_artifact_without_rank_is_served_as_rank_1(tmp_path):
+    """A prd_md artifact row from before #6 (finding_rank NULL) must not make
+    GET /runs/{id} fail validation; it is the #1 finding's PRD."""
+    from fastapi.testclient import TestClient
+    from app.db import models
+    from app.db.base import SessionLocal, init_db
+    from app.main import app
+
+    init_db()
+    prd = tmp_path / "prd.md"; prd.write_text("# legacy prd")
+    with SessionLocal() as s:
+        run = models.AnalysisRun(journey="pd_checkout", window_start="2026-08-01", window_end="2026-08-07",
+                                 status="completed")
+        s.add(run); s.flush()
+        s.add(models.RunArtifact(run_id=run.id, kind="prd_md", uri=str(prd), finding_rank=None, title=None))
+        s.commit(); run_id = run.id
+
+    r = TestClient(app).get(f"/v1/analysis/runs/{run_id}")
+    assert r.status_code == 200, r.text
+    assert [(p["finding_rank"], p["markdown"]) for p in r.json()["prds"]] == [(1, "# legacy prd")]

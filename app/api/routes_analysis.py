@@ -285,8 +285,12 @@ async def get_run(run_id: int, session: Session = Depends(get_session)) -> RunDe
         report_markdown=_read_artifact(run, "report_md"),
         prd_markdown=_rank1_prd_markdown(run),
         prds=[
-            PrdSummary(finding_rank=a.finding_rank, title=a.title, markdown=Path(a.uri).read_text(), edited=a.edited)
-            for a in sorted((a for a in run.artifacts if a.kind == "prd_md"), key=lambda a: a.finding_rank or 0)
+            # prd_md rows written before #6 have no finding_rank; they were always
+            # the #1 finding's PRD, so read them back as rank 1 instead of 500-ing
+            # every GET for an older run.
+            PrdSummary(finding_rank=a.finding_rank if a.finding_rank is not None else 1,
+                       title=a.title, markdown=Path(a.uri).read_text(), edited=bool(a.edited))
+            for a in sorted((a for a in run.artifacts if a.kind == "prd_md"), key=lambda a: a.finding_rank or 1)
         ],
     )
 
