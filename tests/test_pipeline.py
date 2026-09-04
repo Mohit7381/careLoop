@@ -6,6 +6,8 @@ three teams' pieces actually compose, not just pass in isolation.
 """
 from app.pipeline.graph import compiled_graph
 from app.pipeline.state import initial_state
+from app.pipeline.nodes.analyst import analyst_node
+from app.pipeline.nodes.fetcher import fetcher_node
 
 
 def _run():
@@ -89,3 +91,45 @@ def test_confirmed_stage_is_marked_maturing_not_delivered():
     assert deltas["confirmed"]["maturing"] is True
     assert deltas["delivered"]["maturing"] is False
     assert deltas["created"]["maturing"] is False
+
+
+# ---- Reviews flow through GraphState, not run_analyst()'s internal fallback ----
+# (2026-09-04) fetcher_node now fetches reviews itself and puts them in
+# state["reviews"]; analyst_node reads that instead of letting run_analyst()
+# quietly re-read reviews_scrubbed.json on its own. These prove the real
+# Fetcher -> Analyst wiring, not just that the old fallback still masks it.
+
+def test_fetcher_node_populates_reviews_in_state():
+    state = initial_state(
+        run_id=1, window_start="2026-08-27", window_end="2026-09-02",
+        demo_mode=True, journey="pd_checkout",
+    )
+    out = fetcher_node(state)
+    assert out["reviews"], "fetcher_node should load the journey's review fixture"
+    assert isinstance(out["reviews"], list)
+    assert "score" in out["reviews"][0]
+
+
+def test_analyst_node_uses_states_reviews_not_its_own_fallback():
+    """A small hand-crafted review set in state must actually change the
+    outcome (no theme clears the 20-review escalation threshold) - if
+    analyst_node were still silently falling back to the real 600-review
+    fixture, the two real escalations (payment/refund, consultation/doctor)
+    would appear regardless of what's in state["reviews"]."""
+    state = initial_state(
+        run_id=1, window_start="2026-08-27", window_end="2026-09-02",
+        demo_mode=True, journey="pd_checkout",
+    )
+    state = fetcher_node(state)
+    state["reviews"] = [
+        {"score": 1, "at": "2026-08-28", "text": "gagal bayar terus", "thumbs": 0}
+        for _ in range(3)
+    ]  # 3 reviews - real fixture has 600; far below the escalation threshold (20)
+
+    out = analyst_node(state)
+
+    voc_findings = [f for f in out["findings"] if f["origin"] == "voc"]
+    assert voc_findings == [], (
+        "3 reviews must not escalate - if this fires, analyst_node is still "
+        "reading the real 600-review fixture instead of state['reviews']"
+    )

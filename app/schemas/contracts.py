@@ -128,6 +128,14 @@ class Finding(BaseModel):
     review_count: Optional[int] = None
     top_quotes: list[str] = Field(default_factory=list)
 
+    # PROPOSED (2026-09-04, needs Nakul's sign-off - same additive treatment
+    # journey_events got before confirmation). Set only when `theme` was
+    # attached by phase3_voc.correlate_with_llm()'s reasoned match rather
+    # than corroborate()'s stage-equality lookup - the evidence-discipline
+    # this whole system runs on means a reasoned claim needs to show its
+    # work, not just silently populate theme/review_count.
+    correlation_rationale: Optional[str] = None
+
     def has_citable_evidence(self) -> bool:
         if self.origin == "voc":
             return self.review_count is not None and self.review_count > 0

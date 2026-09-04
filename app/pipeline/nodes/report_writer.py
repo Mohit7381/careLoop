@@ -299,7 +299,7 @@ def _suggestions_section(suggestions: list[Suggestion]) -> str:
 # ------------------------------------------------------------------ node ---
 
 def report_writer_node(state: GraphState) -> GraphState:
-    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
+    run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     warehouse_findings = [f for f in run_state.findings if f.origin == "warehouse"]
     voc_findings = [f for f in run_state.findings if f.origin == "voc"]
 

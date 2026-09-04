@@ -381,7 +381,8 @@ def prd_generator_node(state: GraphState, *, llm: Optional[LLMCall] = None) -> G
     if llm is None:
         llm = make_use_case_llm(get_settings().llm_use_case_prd_generation,
                                 bool(state.get("demo_mode", True)), journey=state.get("journey"))
-    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
+    # "reviews" is pipeline-level input (like cohort_cuts), not a RunState field.
+    run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     findings = sorted(run_state.findings, key=lambda f: f.rank)[:MAX_PRDS_PER_RUN]
 
     if not findings:

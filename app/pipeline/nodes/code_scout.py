@@ -189,7 +189,7 @@ def _run_remedies(run_state: RunState, gaps: list[CodeGap]) -> list[CodeGap]:
 
 
 def code_scout_node(state: GraphState) -> GraphState:
-    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
+    run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     settings = get_settings()
 
     from app.integrations.sphere import _live_llm_wanted

@@ -14,7 +14,7 @@ from app.agents.analyst.aggregate_tool import AggregateTool
 from app.agents.analyst.journey_events import journey_events_for
 from app.agents.analyst.phase2 import run_drilldown
 from app.agents.analyst import phase3_voc
-from app.agents.analyst.phase3_voc import corroborate, run_voc
+from app.agents.analyst.phase3_voc import corroborate, correlate_with_llm, run_voc
 from app.agents.analyst.semantic_voc import classify_reviews
 from app.agents.analyst.validator import collect_numbers, filter_findings
 from app.journeys import load_journey
@@ -44,7 +44,8 @@ def run_analyst(state: RunState,
                 llm: Callable[[dict[str, Any]], dict[str, Any]],
                 cohort_cuts: Optional[dict] = None,
                 reviews: Optional[list[dict]] = None,
-                voc_llm: Optional[Callable[[dict[str, Any]], dict[str, Any]]] = None
+                voc_llm: Optional[Callable[[dict[str, Any]], dict[str, Any]]] = None,
+                correlation_llm: Optional[Callable[[dict[str, Any]], dict[str, Any]]] = None,
                 ) -> RunState:
     cfg = load_journey(state.journey)
     routing_keys = list(cfg["routing"].keys())
@@ -124,6 +125,12 @@ def run_analyst(state: RunState,
             f.rank = next_rank + i
             validate_routing_stage(f.stage, routing_keys)
         corroborate(kept, voc, cfg["voc"])
+        # Phase 3.5 - optional (backward-compatible: existing callers that
+        # don't pass correlation_llm just skip this and keep today's
+        # behavior). Generalizes corroborate()'s stage-equality lookup with
+        # LLM reasoning over content - see phase3_voc.correlate_with_llm.
+        if correlation_llm is not None:
+            correlate_with_llm(kept, voc, correlation_llm)
         state.voc = voc
 
     state.findings = kept + voc_findings

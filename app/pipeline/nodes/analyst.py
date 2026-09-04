@@ -18,7 +18,7 @@ from typing import Any
 
 from app.agents.analyst.analyst import run_analyst
 from app.config import get_settings
-from app.integrations.sphere import SphereClient, make_use_case_llm, replay_root_for
+from app.integrations.sphere import SphereClient, _live_llm_wanted, make_use_case_llm, replay_root_for
 from app.pipeline.state import GraphState
 from app.schemas.contracts import RunState
 
@@ -48,14 +48,85 @@ def _sphere_llm() -> Any:
     return llm
 
 
+# Scripted correlation reasoning - NOT a live LLM call (PR #12 review point 2,
+# Nakul). fixtures/llm_replay/ is a recorded-session guarantee everywhere else
+# in this tree (see this module's own docstring above); voc-funnel-correlation
+# has never been provisioned, so nothing under llm_replay/ can honestly be a
+# recording for it. Matches app.pipeline.nodes.code_scout's _DEMO_REMEDIES
+# pattern: hand-authored data lives in code, clearly labeled, not disguised
+# as a replay fixture.
+_DEMO_CORRELATIONS = [
+    {
+        "correlated": True,
+        "theme": "cs/support",
+        "rationale": (
+            "The finding describes users stalling mid-flow after an unresolved issue "
+            "with no path forward. The 'cs/support' theme's sample quotes independently "
+            "describe slow or unreachable customer service at that same point in the "
+            "journey - both plausibly describe the same missing real-time-support "
+            "capability, even though this finding's own stage was never pre-mapped to "
+            "cs/support in the journey config."
+        ),
+    },
+    {
+        "correlated": False,
+        "theme": None,
+        "rationale": (
+            "No theme's sample quotes describe a problem consistent with this finding's "
+            "hypothesis - the closest cluster (stock/medicine) is about inventory "
+            "availability, unrelated to this finding's drop point."
+        ),
+    },
+]
+
+
+def _demo_correlation_llm() -> Any:
+    """Phase 3.5 (2026-09-04) - scripted, not live. Sequential, like
+    SphereClient's own replay mode: call N returns _DEMO_CORRELATIONS[N],
+    repeating the last entry once exhausted."""
+    calls = {"n": 0}
+
+    def llm(ctx: dict) -> dict:
+        i = min(calls["n"], len(_DEMO_CORRELATIONS) - 1)
+        calls["n"] += 1
+        return _DEMO_CORRELATIONS[i]
+
+    return llm
+
+
 def analyst_node(state: GraphState) -> GraphState:
-    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
-    from app.integrations.sphere import _live_llm_wanted
-    llm = _sphere_llm() if _live_llm_wanted(state.get("demo_mode", True)) else _demo_llm(state.get("journey", "pd_checkout"))
+    # "reviews" is pipeline-level input (like cohort_cuts), not a RunState
+    # field - it's threaded to run_analyst() as its own argument below, same
+    # as "error" was already excluded for being pipeline-only, not agent state.
+    run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
+
+    demo_mode = bool(state.get("demo_mode", True))
+    journey = state.get("journey", "pd_checkout")
+    live_wanted = _live_llm_wanted(demo_mode)
+    llm = _sphere_llm() if live_wanted else _demo_llm(journey)
 
     voc_llm = make_use_case_llm(get_settings().llm_use_case_voc_theme_classification,
-                                bool(state.get("demo_mode", True)), journey=state.get("journey"))
-    out = run_analyst(run_state, llm=llm, voc_llm=voc_llm)
+                                demo_mode, journey=journey)
+
+    # Phase 3.5 (PR #12): demo mode uses the scripted _DEMO_CORRELATIONS above;
+    # live mode uses the shared factory, which returns None (not a raise) until
+    # voc-funnel-correlation is actually provisioned - run_analyst treats a
+    # None correlation_llm as "skip this pass", never a crash. This replaces
+    # an earlier hand-rolled _sphere_correlation_llm, which duplicated what
+    # make_use_case_llm already does more safely and consistently.
+    correlation_llm = (
+        _demo_correlation_llm() if not live_wanted
+        else make_use_case_llm(get_settings().llm_use_case_voc_correlation, demo_mode, journey=journey)
+    )
+
+    # 2026-09-04: reviews now come from the Fetcher via GraphState, not from
+    # run_analyst()'s own demo-mode fixture fallback - the fetcher_node is
+    # what actually owns fetching/scrubbing them. `or None` preserves that
+    # fallback as a safety net for any caller whose state doesn't have this
+    # key yet (e.g. an older checkpoint), not as the intended path.
+    reviews = state.get("reviews") or None
+
+    out = run_analyst(run_state, llm=llm, reviews=reviews, voc_llm=voc_llm, correlation_llm=correlation_llm)
     out = _apply_scope(out)
 
     return {**state, **out.model_dump()}

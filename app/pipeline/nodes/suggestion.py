@@ -26,7 +26,7 @@ FIXTURES_DIR = Path("fixtures/code_scout_suggestions")
 
 
 def suggestion_node(state: GraphState) -> GraphState:
-    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
+    run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     settings = get_settings()
 
     if state.get("demo_mode", True):

@@ -27,6 +27,7 @@ class GraphState(TypedDict, total=False):
     requested_dimensions: list[str]    # prompt-scoped analysis — decision #13 (routing-category filter)
 
     snapshot: dict[str, Any]           # Agent 1 (Fetcher) — Alief
+    reviews: list[dict[str, Any]]      # Agent 1 (Fetcher) — Alief; PII-scrubbed Play Store reviews
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
     drilldown_trail: list[dict[str, Any]]
     findings_rejected: list[dict[str, Any]]
@@ -66,6 +67,7 @@ def initial_state(
         scope=scope or {},
         requested_dimensions=requested_dimensions or [],
         snapshot={},
+        reviews=[],
         findings=[],
         drilldown_trail=[],
         findings_rejected=[],
