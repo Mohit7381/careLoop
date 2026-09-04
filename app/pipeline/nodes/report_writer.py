@@ -41,7 +41,7 @@ def _findings_section(findings: list[Finding]) -> str:
 
 
 def report_writer_node(state: GraphState) -> GraphState:
-    run_state = RunState(**{k: v for k, v in state.items() if k != "error"})
+    run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
     snapshot = run_state.snapshot
 
     report = f"""# CareLoop Analysis Report — run {run_state.run_id}

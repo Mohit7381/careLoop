@@ -26,6 +26,7 @@ class GraphState(TypedDict, total=False):
     scope: dict[str, Any]
 
     snapshot: dict[str, Any]           # Agent 1 (Fetcher) — Alief
+    reviews: list[dict[str, Any]]      # Agent 1 (Fetcher) — Alief; PII-scrubbed Play Store reviews
     findings: list[dict[str, Any]]     # Agent 2 (Analyst) — Nakul
     drilldown_trail: list[dict[str, Any]]
     findings_rejected: list[dict[str, Any]]
@@ -62,6 +63,7 @@ def initial_state(
         failed_stage=None,
         scope=scope or {},
         snapshot={},
+        reviews=[],
         findings=[],
         drilldown_trail=[],
         findings_rejected=[],
