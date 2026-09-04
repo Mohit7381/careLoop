@@ -24,6 +24,7 @@ class GraphState(TypedDict, total=False):
     demo_mode: bool
     failed_stage: Optional[str]
     scope: dict[str, Any]
+    requested_dimensions: list[str]    # prompt-scoped analysis — decision #13 (routing-category filter)
 
     snapshot: dict[str, Any]           # Agent 1 (Fetcher) — Alief
     reviews: list[dict[str, Any]]      # Agent 1 (Fetcher) — Alief; PII-scrubbed Play Store reviews
@@ -31,6 +32,7 @@ class GraphState(TypedDict, total=False):
     drilldown_trail: list[dict[str, Any]]
     findings_rejected: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]    # Agent 3 (Code Scout) — Harshit
+    suggestions: list[dict[str, Any]]  # Agent 3 alt flow (Code Scout) — Harshit
     trend_report: dict[str, Any]       # Reporter — Mohit
     voc: dict[str, Any]
     prd_draft: Optional[str]           # PRD Generator — Mohit; #1 finding's PRD only, kept for back-compat
@@ -50,6 +52,7 @@ def initial_state(
     prev_window_start: Optional[str] = None,
     prev_window_end: Optional[str] = None,
     scope: Optional[dict[str, Any]] = None,
+    requested_dimensions: Optional[list[str]] = None,
 ) -> GraphState:
     return GraphState(
         run_id=run_id,
@@ -62,12 +65,14 @@ def initial_state(
         demo_mode=demo_mode,
         failed_stage=None,
         scope=scope or {},
+        requested_dimensions=requested_dimensions or [],
         snapshot={},
         reviews=[],
         findings=[],
         drilldown_trail=[],
         findings_rejected=[],
         code_gaps=[],
+        suggestions=[],
         trend_report={},
         voc={},
         prd_draft=None,

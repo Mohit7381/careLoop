@@ -62,6 +62,7 @@ class RunDetailResponse(BaseModel):
     snapshots: list[dict[str, Any]]
     findings: list[dict[str, Any]]
     code_gaps: list[dict[str, Any]]
+    suggestions: list[dict[str, Any]]
     voc: dict[str, Any]
     scope: Optional[dict[str, Any]] = None
     drilldown_trail: list[dict[str, Any]]
@@ -87,3 +88,14 @@ class PrdChatResponse(BaseModel):
     reply: str
     markdown: str
     applied: bool
+
+
+class ScopeChatRequest(BaseModel):
+    message: str
+    journey: str = "pd_checkout"
+
+
+class ScopeChatResponse(BaseModel):
+    dimensions: list[str]
+    reply: str
+    resolved: bool

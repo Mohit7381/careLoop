@@ -1,0 +1,41 @@
+"""
+Suggestion node wrapper. OWNER: Harshit (logic) / Mohit (wiring).
+
+Wires Code Scout's alternate Rev 3 flow (explore -> suggest -> verify,
+app/agents/code_scout/suggestion_node.py) into the graph, alongside the
+existing find_gap()-based code_scout_node rather than replacing it: a
+Suggestion is a generative improvement idea (tech, business, or process —
+contracts.py decision #11) and a CodeGap is a diagnosed bug with a cited
+mechanism. A finding can produce either, both, or neither.
+
+This was previously built and fully tested but deliberately left out of
+app/pipeline/graph.py pending a three-way call (Nakul/Mohit/Harshit) on
+whether it ships — Harshit asked for it explicitly (2026-09-04 hackathon
+chat), so it's wired in here.
+"""
+from pathlib import Path
+
+from app.agents.code_scout.explore_search_client import FixtureExploreSearchClient, LiveGitlabExploreSearchClient
+from app.agents.code_scout.suggestion_assessor import SpherePlatformFeatureSuggestionAssessor, StubFeatureSuggestionAssessor
+from app.agents.code_scout.suggestion_node import suggestion_code_scout_node as _suggestion_code_scout_node
+from app.config import get_settings
+from app.pipeline.state import GraphState
+from app.schemas.contracts import RunState
+
+FIXTURES_DIR = Path("fixtures/code_scout_suggestions")
+
+
+def suggestion_node(state: GraphState) -> GraphState:
+    run_state = RunState(**{k: v for k, v in state.items() if k not in ("error", "reviews")})
+    settings = get_settings()
+
+    if state.get("demo_mode", True):
+        search_client = FixtureExploreSearchClient(FIXTURES_DIR)
+        assessor = StubFeatureSuggestionAssessor()
+    else:
+        search_client = LiveGitlabExploreSearchClient(host=settings.gitlab_base_url, token=settings.gitlab_read_token)
+        assessor = SpherePlatformFeatureSuggestionAssessor()
+
+    result = _suggestion_code_scout_node(run_state, search_client=search_client, assessor=assessor)
+
+    return {**state, "suggestions": [s.model_dump() for s in result["suggestions"]]}

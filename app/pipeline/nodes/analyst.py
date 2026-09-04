@@ -127,5 +127,31 @@ def analyst_node(state: GraphState) -> GraphState:
     reviews = state.get("reviews") or None
 
     out = run_analyst(run_state, llm=llm, reviews=reviews, voc_llm=voc_llm, correlation_llm=correlation_llm)
+    out = _apply_scope(out)
 
     return {**state, **out.model_dump()}
+
+
+def _apply_scope(run_state: RunState) -> RunState:
+    """
+    Prompt-scoped analysis (decision #13): POST /runs {"dimensions":
+    ["payments"]} narrows what surfaces to just that routing category
+    instead of the full journey. Applied here, after run_analyst() returns,
+    rather than inside it: it's a presentation-time filter on findings that
+    already exist, not a change to how the Analyst explores — the drill-down
+    budget and agentic search are unaffected, so scoping never costs search
+    budget on categories it then discards.
+
+    Ranks are left untouched on purpose (no renumbering to 1..N): a scoped
+    finding keeps the severity rank it actually earned across the whole
+    funnel, so "#3" stays visibly the third-worst drop-off even when
+    everything else is filtered out — renumbering it to "#1" would overstate
+    it. An empty result after filtering is a valid, honest outcome (nothing
+    in the requested scope cleared the evidence gate) — downstream nodes
+    already handle zero findings without erroring.
+    """
+    if not run_state.requested_dimensions:
+        return run_state
+    scope = set(run_state.requested_dimensions)
+    run_state.findings = [f for f in run_state.findings if f.stage in scope]
+    return run_state
