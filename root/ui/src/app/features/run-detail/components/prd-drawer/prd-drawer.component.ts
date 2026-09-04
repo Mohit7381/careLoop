@@ -1,6 +1,11 @@
 import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 import { buildPrdView, renderPrdMarkdown } from '../../../../core/models/prd.model';
+import {
+  PrdDoc, PrdSection, humanSectionCount, isEdited as isSectionDirty,
+  newSection, parsePrd, serialisePrd,
+} from '../../../../core/models/prd-doc';
 import { PrdSummary, RunState } from '../../../../core/models/run-state';
 import { DocxExportService } from '../../../../core/services/docx-export.service';
 import { RunService } from '../../../../core/services/run.service';
@@ -12,6 +17,7 @@ interface ChatMessage {
 
 @Component({
   selector: 'app-prd-drawer',
+  imports: [FormsModule],
   templateUrl: './prd-drawer.component.html',
   styleUrl: './prd-drawer.component.scss',
 })
@@ -65,6 +71,24 @@ export class PrdDrawerComponent {
   readonly chatInput = signal('');
   readonly chatBusy = signal(false);
 
+  /**
+   * Two edit modes, deliberately kept side by side rather than one replacing
+   * the other:
+   *
+   *  - CHAT asks the backend to make a change and re-verify it
+   *    (POST /runs/{id}/prd/{rank}/chat). Live runs only.
+   *  - SECTION editing is direct manipulation of the markdown, in place.
+   *    Works offline and on the fixture, but nothing verifies it.
+   *
+   * They complement each other: chat is better at "is this already built?",
+   * section editing is better at "reword this and drop that". What they must
+   * never do is look alike — a chat edit came back through the Remedy Loop,
+   * a typed one did not, so typed sections stay badged as unverified.
+   */
+  readonly doc = signal<PrdDoc | null>(null);
+  readonly editing = signal(false);
+  readonly editedCount = computed(() => { const d = this.doc(); return d ? humanSectionCount(d) : 0; });
+
   constructor() {
     // Keep the selection valid as the run/prds change (e.g. fixture -> live).
     effect(() => {
@@ -73,6 +97,84 @@ export class PrdDrawerComponent {
         this.selectedRank.set(ranks[0]);
       }
     });
+
+    // Re-parse whenever the selected PRD changes — switching rank or a chat
+    // edit landing means the sections on screen belong to a different
+    // document, so in-progress local edits are dropped rather than silently
+    // re-attached to other content.
+    effect(() => {
+      const md = this.activeSummary()?.markdown ?? this.run().prd_draft;
+      this.doc.set(md?.trim() ? parsePrd(md) : null);
+      this.editing.set(false);
+    });
+  }
+
+  toggleEdit(): void { this.editing.set(!this.editing()); }
+
+  onSectionInput(section: PrdSection, body: string): void {
+    this.doc.update((d) => d && ({
+      ...d,
+      sections: d.sections.map((s) =>
+        s.id === section.id
+          ? { ...s, body, origin: s.origin === 'agent' && body !== s.original ? ('human-edited' as const) : s.origin }
+          : s),
+    }));
+  }
+
+  onHeadingInput(section: PrdSection, heading: string): void {
+    this.doc.update((d) => d && ({
+      ...d,
+      sections: d.sections.map((s) =>
+        s.id === section.id ? { ...s, heading, origin: s.origin === 'agent' ? ('human-edited' as const) : s.origin } : s),
+    }));
+  }
+
+  addSection(): void {
+    this.doc.update((d) => d && ({ ...d, sections: [...d.sections, newSection()] }));
+    this.editing.set(true);
+  }
+
+  removeSection(id: string): void {
+    this.doc.update((d) => d && ({ ...d, sections: d.sections.filter((s) => s.id !== id) }));
+  }
+
+  move(id: string, delta: -1 | 1): void {
+    this.doc.update((d) => {
+      if (!d) return d;
+      const i = d.sections.findIndex((s) => s.id === id);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= d.sections.length) return d;
+      const sections = [...d.sections];
+      [sections[i], sections[j]] = [sections[j], sections[i]];
+      return { ...d, sections };
+    });
+  }
+
+  revertSection(id: string): void {
+    this.doc.update((d) => d && ({
+      ...d,
+      sections: d.sections.map((s) =>
+        s.id === id && s.original !== undefined ? { ...s, body: s.original, origin: 'agent' as const } : s),
+    }));
+  }
+
+  revertAll(): void {
+    const md = this.activeSummary()?.markdown ?? this.run().prd_draft;
+    this.doc.set(md?.trim() ? parsePrd(md) : null);
+    this.toast('Reverted to the generated PRD');
+  }
+
+  isSectionEdited(s: PrdSection): boolean { return isSectionDirty(s); }
+
+  originLabel(s: PrdSection): string {
+    return s.origin === 'human-added' ? 'ADDED BY YOU · UNVERIFIED' : 'EDITED BY YOU · UNVERIFIED';
+  }
+
+  /** The document as it stands, local edits included — what the .docx
+   *  export writes and what a future POST /prd/revisions would send. */
+  currentMarkdown(): string {
+    const d = this.doc();
+    return d ? serialisePrd(d) : (this.activeSummary()?.markdown ?? this.run().prd_draft ?? '');
   }
 
   selectRank(rank: number): void {
@@ -88,7 +190,7 @@ export class PrdDrawerComponent {
   }
 
   async downloadDocx(): Promise<void> {
-    await this.docx.download(this.run(), this.prd());
+    await this.docx.download(this.run(), this.prd(), this.doc() ? this.currentMarkdown() : undefined);
     this.toast('Downloading ' + this.docxFilename());
   }
 
@@ -96,25 +198,7 @@ export class PrdDrawerComponent {
     return `CareLoop_PRD_run${this.run().run_id}_${this.prd().title.replace(/\W+/g, '_')}.docx`;
   }
 
-  /**
-   * Optimistic by design — the toast fires before the network call
-   * resolves, so a slow or dead Garuda/GChat integration (no verified
-   * GChat channel type exists yet — see README "Known gaps") can never
-   * produce a dead moment on stage. It then upgrades or quietly downgrades
-   * once the (currently unimplemented) deliver endpoint responds.
-   */
-  async approve(): Promise<void> {
-    const channel = this.prd().channel;
-    this.close();
-    this.toast('Sent to ' + channel);
-    const res = await this.runService.deliver(this.run().run_id);
-    this.toast(res.delivered ? 'Delivered to ' + channel : 'Draft approved · delivery unavailable');
-  }
 
-  requestChanges(): void {
-    this.close();
-    this.toast('Sent back for changes');
-  }
 
   async sendChat(): Promise<void> {
     const message = this.chatInput().trim();
