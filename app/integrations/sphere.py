@@ -6,6 +6,8 @@ Project/template ids: fixtures/pd_checkout/funnel_analysis_ids.json.
 """
 import json
 import os
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, Optional
@@ -27,6 +29,28 @@ TEMPLATE_PARAM: dict[str, str] = {
 
 class TemplateParamError(ValueError):
     """The caller sent keys the template cannot render."""
+
+
+class SphereRequestFailed(RuntimeError):
+    """Sphere returned a terminal failure status, or the HTTP call itself failed."""
+
+
+class SphereRequestTimedOut(RuntimeError):
+    """Sphere never reached a terminal status within MAX_POLL_SECONDS."""
+
+
+# Sphere's own recognised terminal-failure statuses. Not confirmed against
+# live sphere-platform docs (no working SPHERE_APP_TOKEN in this dev
+# environment) — anything NOT in this set and NOT "SUCCESS" is treated as
+# "still in progress, keep polling" rather than guessed at, so an unlisted
+# real failure status just means we poll it to the MAX_POLL_SECONDS deadline
+# instead of failing fast. Worth confirming against a real run.
+_TERMINAL_FAILURE_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
+
+CREATE_TIMEOUT_S = 15    # just enqueuing the job — should return almost immediately
+POLL_TIMEOUT_S = 15      # one status check — comfortably inside any ~60s ingress cutoff
+POLL_INTERVAL_S = 2.0
+MAX_POLL_SECONDS = 180.0  # generous: real calls have been observed taking 45-75s+
 
 
 def _check_params(use_case: str, params: dict[str, Any]) -> None:
@@ -73,6 +97,32 @@ class SphereClient:
         return self._live(use_case, template_id, params)
 
     def _live(self, use_case: str, template_id: int, params: dict[str, str]) -> dict[str, Any]:
+        """
+        Create the request, then poll for it instead of holding one long
+        connection open. Real calls have been observed taking 45-75s+
+        (semantic_voc.py: a 40-review batch ran 50-75s), and there is an
+        ingress gateway in front of sphere that cuts a held-open connection
+        at ~60s (HTTP 504 — even though sphere itself went on to return
+        SUCCESS at 74s in that observed case; org-wide pattern, not unique
+        to this call: agent-platform/Mercia hit the identical ~60s cutoff
+        against sphere's own /v2/chat-ai/requests). Polling on a short
+        interval means no single HTTP call is ever held open long enough to
+        hit that cutoff, even though the overall wait can still legitimately
+        stretch past it.
+
+        Endpoint split (POST create / GET poll) confirmed via a live probe
+        against sphere-platform's own routes — see every other real caller
+        (concierge-agent, agent-platform) hitting POST /v1|v2/chat-ai/requests
+        + GET /v1/chat-ai/requests/{request_id}, never the single blocking
+        call the old code here made. ASSUMPTION NOT YET LIVE-VERIFIED for
+        THIS project's own sphere deployment specifically (no working
+        SPHERE_APP_TOKEN in this environment to test against) and flagged
+        for Nakul, who verified the previous endpoint live: sphere's exact
+        pending/in-progress status string is unknown, so _poll() below
+        treats anything that isn't a recognised terminal status as "keep
+        polling" and leans on the overall MAX_POLL_SECONDS deadline as the
+        real backstop, rather than guessing at sphere's full status enum.
+        """
         _check_params(use_case, params)
         body = {
             "service_type": self.service_type,
@@ -80,17 +130,53 @@ class SphereClient:
             "template_id": template_id,  # required — output_schema is not applied without it
             "params": params,
         }
+        created = self._request("POST", "/v1/chat-ai/requests", body=body, timeout=CREATE_TIMEOUT_S)
+        data = self._data_or_poll(use_case, created)
+        return data
+
+    def _data_or_poll(self, use_case: str, resp: dict[str, Any]) -> dict[str, Any]:
+        status = resp.get("status")
+        if status == "SUCCESS":  # fast enough to finish inline on the create call itself
+            return resp.get("data") or {}
+        if status in _TERMINAL_FAILURE_STATUSES:
+            raise SphereRequestFailed(f"sphere call failed for {use_case}: {str(resp)[:300]}")
+
+        request_id = resp.get("request_id") or resp.get("id")
+        if not request_id:
+            raise SphereRequestFailed(
+                f"sphere create-request for {use_case} returned neither a terminal status nor "
+                f"a request_id to poll against: {str(resp)[:300]}"
+            )
+        return self._poll(use_case, request_id)
+
+    def _poll(self, use_case: str, request_id: str) -> dict[str, Any]:
+        deadline = time.monotonic() + MAX_POLL_SECONDS
+        while True:
+            resp = self._request("GET", f"/v1/chat-ai/requests/{request_id}", timeout=POLL_TIMEOUT_S)
+            status = resp.get("status")
+            if status == "SUCCESS":
+                return resp.get("data") or {}
+            if status in _TERMINAL_FAILURE_STATUSES:
+                raise SphereRequestFailed(f"sphere request {request_id} ({use_case}) failed: {str(resp)[:300]}")
+            if time.monotonic() >= deadline:
+                raise SphereRequestTimedOut(
+                    f"sphere request {request_id} ({use_case}) still {status!r} after "
+                    f"{MAX_POLL_SECONDS:.0f}s — giving up"
+                )
+            time.sleep(POLL_INTERVAL_S)
+
+    def _request(self, method: str, path: str, *, timeout: float, body: Optional[dict] = None) -> dict[str, Any]:
         req = urllib.request.Request(
-            f"{SPHERE_BASE}/v1/chat-ai/requests/validation",
-            method="POST",
+            f"{SPHERE_BASE}{path}",
+            method=method,
             headers={"X-APP-TOKEN": _app_token(), "Content-Type": "application/json"},
-            data=json.dumps(body).encode(),
+            data=json.dumps(body).encode() if body is not None else None,
         )
-        with urllib.request.urlopen(req, timeout=90) as r:
-            resp = json.loads(r.read())
-        if resp.get("status") != "SUCCESS":
-            raise RuntimeError(f"sphere call failed for {use_case}: {str(resp)[:300]}")
-        return resp.get("data") or {}
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.URLError as exc:
+            raise SphereRequestFailed(f"sphere {method} {path} failed: {exc}") from exc
 
     def _replay(self, use_case: str) -> dict[str, Any]:
         """Sequential replay: fixtures/llm_replay/<use_case>/<n>.json per call."""
