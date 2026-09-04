@@ -1,4 +1,5 @@
 """The Remedy Loop — proposer<->verifier iteration, budgets, honest verdicts."""
+import json
 from app.agents.code_scout.remedy_loop import (
     MAX_ITERATIONS, SEARCH_BUDGET, run_remedy_loop)
 from app.schemas.contracts import CodeGap
@@ -233,3 +234,20 @@ def test_negation_beats_the_word_it_negates():
 
     # Negation with nothing to negate is still not a verdict.
     assert normalise_status("no idea") is None
+
+
+def test_java_generics_never_reach_the_verifier_unescaped():
+    """Four live Remedy Loop calls died with 'Response contains HTML tags':
+    the model echoed List<Order> from the snippets we sent it."""
+    seen = []
+    def llm(ctx):
+        seen.append(ctx)
+        if ctx["mode"] == "remedy_proposal":
+            return {"remedies": [{"proposal": "p", "signature": "sig", "search_terms": ["x"]}]}
+        return {"status": "absent", "refined_search_terms": []}
+    gap = GAP.model_copy(deep=True)
+    gap.snippet = "List<Order> orders = repo.find(Optional<String>.empty());"
+    hits = {"x": [{"path": "A.java", "line": 1, "snippet": "Map<String, List<Order>> m;"}]}
+    run_remedy_loop(llm, lambda repo, t: hits.get(t, []), gap, "summary", REPOS)
+    for ctx in seen:
+        assert "<" not in json.dumps(ctx) and ">" not in json.dumps(ctx), ctx["mode"]

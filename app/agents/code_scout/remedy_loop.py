@@ -22,6 +22,7 @@ Injected callables keep this testable without network:
 """
 from typing import Any, Callable, Optional
 
+from app.agents.code_scout.assessor import bracket_safe
 from app.schemas.contracts import CodeGap, Remedy
 
 MAX_REMEDIES = 3
@@ -87,9 +88,13 @@ def propose_remedies(llm: LLMCall, gap: CodeGap, finding_summary: str) -> list[R
     out = llm({
         "mode": "remedy_proposal",
         "finding": finding_summary,
-        "mechanism": {"gap_statement": gap.gap_statement, "file": gap.file,
-                      "line": gap.line, "snippet": gap.snippet,
+        # Java snippets carry List<Order> generics; the model echoes them and
+        # sphere rejects any output that looks like an HTML tag. Four Remedy
+        # Loop calls in one live run died that way. Nothing bracketed goes in.
+        "mechanism": {"gap_statement": bracket_safe(gap.gap_statement), "file": gap.file,
+                      "line": gap.line, "snippet": bracket_safe(gap.snippet or ""),
                       "gap_class": gap.gap_class},
+        "rules": ["Never emit angle-bracket characters (the less-than or greater-than signs) anywhere in the output."],
     })
     remedies = []
     for r in (out.get("remedies") or [])[:MAX_REMEDIES]:
@@ -139,8 +144,10 @@ def verify_remedy(llm: LLMCall, search_fn: SearchFn, remedy: Remedy,
         verdict = llm({
             "mode": "remedy_verification",
             "remedy": {"proposal": remedy.proposal, "signature": remedy.signature},
-            "search_hits": hits[:10],
+            "search_hits": [{**h, "snippet": bracket_safe(str(h.get("snippet", "")))}
+                            for h in hits[:10]],
             "budget_left": budget_left,
+            "rules": ["Never emit angle-bracket characters (the less-than or greater-than signs) anywhere in the output."],
         })
         status = normalise_status(verdict.get("status"))
         evidence_file = verdict.get("evidence_file") or None

@@ -50,6 +50,22 @@ def _run_pipeline_in_new_session(
         session.close()
 
 
+def find_duplicate_run(in_flight, prompt: str | None):
+    """The run already in flight that asks the SAME question, or None.
+
+    Runs are prompt-scoped, so the duplicate key is (journey, window, prompt),
+    not (journey, window). Keying on the window alone returned 409 for a user
+    asking a different question about the same week while another run was
+    still going — three times in one session.
+    """
+    wanted = (prompt or "").strip().lower()
+    for run in in_flight:
+        theirs = (((run.config or {}).get("scope") or {}).get("prompt") or "").strip().lower()
+        if theirs == wanted:
+            return run
+    return None
+
+
 def _resolve(journey: str, prompt: str | None) -> RunScope:
     """Resolve a prompt against the journey's own vocabulary.
 
@@ -76,7 +92,8 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
     if not window_start or not window_end:
         window_start, window_end = _default_window()
 
-    existing = session.execute(
+    scope = _resolve(body.journey, body.prompt)
+    in_flight = session.execute(
         select(AnalysisRun).where(
             AnalysisRun.journey == body.journey,
             AnalysisRun.window_start == window_start,
@@ -85,14 +102,15 @@ async def create_run(body: CreateRunRequest, session: Session = Depends(get_sess
                 ["queued", "fetching", "analyzing", "scanning_code", "reporting", "drafting_prd"]
             ),
         )
-    ).scalar_one_or_none()
+    ).scalars().all()
+    existing = find_duplicate_run(in_flight, scope.prompt)
     if existing is not None:
         raise HTTPException(
             status_code=409,
-            detail={"message": "a run for this window is already in progress", "run_id": existing.id},
+            detail={"message": "the same question is already running for this window",
+                    "run_id": existing.id},
         )
 
-    scope = _resolve(body.journey, body.prompt)
     run = AnalysisRun(
         journey=body.journey,
         window_start=window_start,

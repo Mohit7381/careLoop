@@ -196,7 +196,7 @@ class SpherePlatformCodeGapAssessor:
             "snippet": bracket_safe(snippet),
             "allowed_gap_classes": sorted(c for c in _GAP_CLASSES if c != "unclassified"),
             "rules": ["gap_class MUST be one of allowed_gap_classes, verbatim.",
-                      "Never emit the characters < or > anywhere in the output."],
+                      "Never emit angle-bracket characters (the less-than or greater-than signs) anywhere in the output."],
         })
         raw = data.get("gap_class")
         gap_class, exact = normalise_gap_class(raw)
