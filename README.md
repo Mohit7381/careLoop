@@ -2,110 +2,69 @@
 
 **An autonomous engine that identifies and validates healthcare user journeys, then turns what it finds into evidence-backed, human-reviewed product recommendations.**
 
-Built in a 2-day hackathon. Scope for this build is deliberately narrow: **PD / pharmacy delivery / pharmacy / health store** flows, start-to-payment and everything in between. No other verticals.
-
-## Core insight
-
-CareLoop automates a workflow the team already did by hand. Before writing any code, the team ran 12 warehouse queries manually, verified 3 gap findings, and traced one of them to a specific line of source code (`ConsultationDao.java:146`). This hackathon encodes that proven manual process into four cooperating agents — it does not invent a new analysis method, it automates one that was already validated.
-
-Every output is a **proposal for human review**. Findings, code gaps, and PRDs are never auto-filed, auto-merged, or auto-shipped.
-
-## Architecture — sequential pipeline
+## High-level architectural workflow
 
 ```
-Fetcher  ──▶  Analyst  ──▶  Code Scout  ──▶  Reporter + Feature Generator ──▶  Delivery
-
+Fetcher ─▶ Analyst ─▶ Code Scout ─▶ Suggestion ─▶ Reporter ─▶ PRD Generator ─▶ Report Writer ─▶ Delivery
 ```
 
-Orchestrated as a **LangGraph `StateGraph`**, run sequentially, with a single shared state object (`RunState`) threaded through every node.
+- **Fetcher** — data aggregation layer, brings data from various sources.
+- **Analyst** — funnel-gap detection → agentic drill-down → VoC classification/escalation/corroboration → LLM correlation pass.
+- **Code Scout** — routes a finding to its repo, locates the mechanism, runs the Remedy Loop (verifies ≤3 proposed fixes against source). Read-only.
+- **Suggestion** — Code Scout's generative sibling: proposes business/tech/process improvements per finding.
+- **Reporter** — period-over-period deltas + narrative.
+- **Feature Generator** — one draft PRD per finding from findings + gaps + suggestions + trend + quotes. Always stamped `DRAFT`.
+- **Report Writer** — renders the Markdown report.
+- **Delivery** — sends to Garuda, only after a human clicks Approve.
 
-### Agent 1 — Fetcher (deterministic, no LLM)
-Runs a versioned pack of read-only Metabase queries against Redshift (funnel counts, cancellation reasons, CT events) and ingests PII-scrubbed Play Store reviews. Ships a `demo_mode` that loads frozen, k-anonymized fixture data so the demo never depends on live warehouse latency.
+## Steps to host the changes locally
 
-### Agent 2 — Analyst (rules + agentic loop)
-Three phases:
-1. **Deterministic** — stage-to-stage conversion rates per segment, normalized cancellation-reason clustering, k-anonymity floor (n < 25 suppressed).
-2. **Agentic drill-down** — for the top drop point, an LLM drives a whitelisted `aggregate()` tool (max 10 queries) to find a correlated pattern, explicitly labeled *correlation, never cause*.
-3. **VoC corroboration + escalation** — each negative Play Store review gets one primary theme; a theme with >20 negative reviews becomes a VoC-originated finding in its own right, routed onward with pre-derived search terms.
+### Prerequisites
 
-An evidence validator rejects any finding without a citable number — "insufficient data" is a valid output; guessing is not.
+- Python ≥3.10
+- Node — Angular CLI 22 wants ≥22.22.3/24.15.0/26.0.0. In practice it also boots (with a version warning) on Node 20, verified locally; if `npm start` fails outright rather than just warning, upgrade Node.
 
-### Agent 3 — Code Scout (novel; read-only)
-The one step in the pipeline with no manual precedent — it connects a funnel finding to the exact line of code responsible for it.
-
-- Routes each finding to its owning repo via a static table (`RoutingStage → repo`):
-  - `consultation` → `bintan/consultation`
-  - `pharmacy_checkout` → `timor/oms`, `timor/fulfilment`
-  - `payments` → `scrooge/payment-service`
-  - `re_engagement` → `transformers/garuda`
-- Proposes 3–5 search terms per finding (the `code-gap-assessment` sphere-platform use case), searches GitLab, fetches the matching file, and pins the exact line.
-- Classifies every resolved gap as one of `logic_flaw | missing_retention_hook | ux_gap` — this classification is what makes the generated PRD's proposed fix specific instead of generic.
-- `mechanism_found=False` is a first-class, schema-validated outcome, not an error — a search that finds nothing is reported honestly, never papered over with a fabricated location.
-- Hard constraint: read-only PAT everywhere. Names `file:line`. Never writes a diff, never opens an MR.
-
-**Status: implemented and test-verified**, including a live reproduction of the proven example (`bintan/consultation` → `ConsultationDao.java:146`, constant `GET_ABANDON_CONSULTATION`) against the real GitLab instance. Currently lives at `~/dev/halodoc/careloop-service` pending merge into the shared repo — see [Current status](#current-status) below.
-
-### Reporter + Feature Generator + delivery
-Computes period-over-period deltas (funnel, feature adoption, VoC theme trends), turns them into a short business narrative, then fills an 8-section PRD template from findings + code gaps + trends + VoC quotes (≤2 quotes, always labeled anecdotal). Stamped `DRAFT — needs human review`. Delivered to the UI and a GChat channel via Garuda; a human clicking Approve is what makes it real.
-
-### UI
-An Angular app wired to `GET /v1/analysis/runs/{id}`, showing the pipeline stages lighting up in sequence, the drill-down trail playing live, the code-location "money moment" with the Remedy Loop's verdicts, and the VoC "human moment" — plus a PRD drawer with a client-side `.docx` export.
-
-Lives at [`root/ui`](root/ui). Integrated against the API in this repo and verified end-to-end against it; its frozen fixture is a verbatim dump of a real `LLM_MODE=replay` run, so fixture and live render identical numbers through the same adapter. See [`root/ui/README.md`](root/ui/README.md) for how to run it and the open contract gaps.
-
-## Current status
-
-Mohit's workstream (**Orchestrator + Reporter + PRD + delivery + API**) lives in this PR: the LangGraph wiring, FastAPI service, DB models, the 3 API endpoints, the Reporter, the PRD generator, the Markdown report renderer, and a Garuda delivery client are fully implemented and test-verified end-to-end against fixture data.
-
-Fetcher (Alief), Analyst's LLM drill-down (Nakul), and Code Scout's GitLab search (Harshit) are stubbed with fixture data / hardcoded demo output in this PR so the whole pipeline runs end-to-end **today**, with clearly marked `TODO(<owner>)` seams for each to swap in real calls. Harshit's own Code Scout (described above as already verified against the real GitLab instance) supersedes the stub in this PR once merged. The contract each node produces/consumes is in `app/schemas/contracts.py` — don't change field names there without syncing with the team.
-
-**Known gap as of this PR:** the fixtures here are still the earlier CD/consultation scenario (`ConsultationDao.java:146`, 51,321/wk payment-timeout). The plan has since moved the golden-run target to the **PD journey** (`timor/oms` `OrderAbandonConfiguration`, 413,973 timer-abandons) — fixtures and the contract (`RunStatus`, `Finding.confidence` as high/medium/low, config-driven journey stages) need a follow-up pass to match.
-
-### Setup
+### Backend
 
 ```bash
-python3.11 -m venv .venv
+git clone <this repo> && cd careLoop
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # demo_mode works with zero env vars filled in
+cp .env.example .env        # demo mode needs zero real credentials filled in
 ```
 
-### Run
+Run it on **port 8000** — the UI's committed proxy config expects the backend there:
 
 ```bash
-uvicorn app.main:app --reload --port 8077
+uvicorn app.main:app --reload --port 8000
 ```
 
+A local `careloop.db` (SQLite) is created automatically on first startup and auto-migrated on every subsequent startup as new columns get added upstream (`init_db()`'s `_ensure_column` backfill) — you don't need to delete it after a `git pull`. If something ever gets into a state `_ensure_column` can't fix, just `rm careloop.db` and restart; it's rebuilt from scratch.
+
+### Trigger a run and read its output
+
 ```bash
-# trigger a run (demo_mode=true reads app/fixtures/*.json)
-curl -s -X POST localhost:8077/v1/analysis/runs \
+# trigger a run (journey defaults to pd_checkout; demo mode reads fixtures/pd_checkout/*.json)
+curl -s -X POST localhost:8000/v1/analysis/runs \
   -H "Authorization: Bearer dev-local-token" -H "Content-Type: application/json" \
-  -d '{"window_start":"2026-08-01","window_end":"2026-08-30"}'
+  -d '{"window_start":"2026-08-27","window_end":"2026-09-02"}'
+# -> {"run_id": 1, "status": "queued", "journey": "pd_checkout", "scope": {...}, ...}
 
-# poll it
-curl -s localhost:8077/v1/analysis/runs/1
+# poll it (no auth needed on GETs) until status is "completed"
+curl -s localhost:8000/v1/analysis/runs/1
 
-# get the rendered markdown report
-curl -s localhost:8077/v1/analysis/runs/1/report
+# get the rendered Markdown report / PRD for that specific run id
+curl -s localhost:8000/v1/analysis/runs/1/report
+curl -s localhost:8000/v1/analysis/runs/1/prd
 ```
 
-### Test
+### UI
 
 ```bash
-pytest tests/ -q
+cd root/ui
+npm install
+npm start                                        # ng serve, fixture mode - http://localhost:4200/runs/47
+# or, against your local backend from step 1:
+npm start -- --proxy-config proxy.conf.json      # then open http://localhost:4200/runs/1?live=1
 ```
-
-`tests/test_pipeline.py` is the Day-1 gate: the whole graph runs on fixtures with no network calls and reproduces the known-good demo finding.
-
-### Where to plug in real calls
-
-| File | Owner | Replace |
-|---|---|---|
-| `app/pipeline/nodes/fetcher.py` + `app/integrations/metabase_client.py` | Alief | fixture loads -> real Metabase query pack |
-| `app/pipeline/nodes/analyst.py` (`_call_analyst_llm_stub`) | Nakul | rule-based hypothesis -> sphere-platform LLM call + `aggregate()` drill-down loop |
-| `app/pipeline/nodes/code_scout.py` + `app/integrations/gitlab_client.py` | Harshit | hardcoded gap -> real GitLab blob search |
-| Everything else (orchestrator, Reporter, PRD generator, report writer, Garuda delivery, API) | Mohit | already real, not a stub |
-
-### Config
-
-See `.env.example`. Nothing beyond `APP_TOKEN` is required while `DEMO_MODE=true`.
